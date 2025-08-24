@@ -84,7 +84,12 @@ fn test_stack_operations() {
     
     engine.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0).unwrap();
     
-    assert_eq!(engine.reg_read(Register::RBX).unwrap(), 0xDEADBEEF);
+    let rax = engine.reg_read(Register::RAX).unwrap();
+    let rbx = engine.reg_read(Register::RBX).unwrap();
+    eprintln!("test_stack_operations: RAX={:#x}, RBX={:#x}", rax, rbx);
+    // The correct behavior is for 0xC7 with REX.W to sign-extend imm32
+    // So 0xDEADBEEF becomes 0xFFFFFFFFDEADBEEF
+    assert_eq!(rbx, 0xFFFFFFFFDEADBEEF);
     assert_eq!(engine.reg_read(Register::RSP).unwrap(), 0x7800);
 }
 
