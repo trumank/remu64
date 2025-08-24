@@ -1,7 +1,7 @@
 use crate::cpu::{CpuState, Register, Flags};
 use crate::memory::{Memory, Permission};
 use crate::decoder::{Decoder, DecoderMode, Instruction, Opcode, Operand, OperandSize};
-use crate::hooks::{HookManager, HookType, HookCallback, HookId};
+use crate::hooks::{HookManager, HookType, HookId};
 use crate::error::{EmulatorError, Result};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -18,7 +18,7 @@ pub struct Engine {
     memory: Memory,
     decoder: Decoder,
     hooks: HookManager,
-    mode: EngineMode,
+    _mode: EngineMode,
     stop_requested: Arc<AtomicBool>,
     instruction_count: u64,
     trace_enabled: bool,
@@ -37,7 +37,7 @@ impl Engine {
             memory: Memory::new(),
             decoder: Decoder::new(decoder_mode),
             hooks: HookManager::new(),
-            mode,
+            _mode: mode,
             stop_requested: Arc::new(AtomicBool::new(false)),
             instruction_count: 0,
             trace_enabled: false,

@@ -156,7 +156,7 @@ impl Decoder {
             return Err(EmulatorError::InvalidInstruction(address));
         }
         
-        let opcode_byte = bytes[offset];
+        let _opcode_byte = bytes[offset];
         offset += 1;
         
         let (opcode, operands, consumed) = self.decode_instruction(
@@ -334,7 +334,7 @@ impl Decoder {
         mod_bits: u8,
         rm_bits: u8,
         _bytes: &[u8],
-        prefix: &InstructionPrefix,
+        _prefix: &InstructionPrefix,
     ) -> Result<(Option<Register>, Option<Register>, u8, usize)> {
         let base = match rm_bits {
             0 => Some(Register::RAX),

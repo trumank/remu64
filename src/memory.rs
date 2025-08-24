@@ -1,7 +1,6 @@
 use crate::error::{EmulatorError, Result};
 use bitflags::bitflags;
 use std::collections::BTreeMap;
-use std::ops::Range;
 
 bitflags! {
     #[derive(Debug, Clone, Copy)]
