@@ -211,6 +211,15 @@ impl Engine {
             Opcode::LOOP => self.execute_loop(inst),
             Opcode::LOOPE => self.execute_loope(inst),
             Opcode::LOOPNE => self.execute_loopne(inst),
+            Opcode::MOVS => self.execute_movs(inst),
+            Opcode::CMPS => self.execute_cmps(inst),
+            Opcode::SCAS => self.execute_scas(inst),
+            Opcode::STOS => self.execute_stos(inst),
+            Opcode::LODS => self.execute_lods(inst),
+            Opcode::REP | Opcode::REPZ | Opcode::REPNZ => {
+                // REP prefixes are handled within the string instructions
+                Err(EmulatorError::InvalidInstruction(inst.address))
+            }
             Opcode::NOP => Ok(()),
             Opcode::HLT => {
                 self.stop_requested.store(true, Ordering::SeqCst);
@@ -873,6 +882,373 @@ impl Engine {
                 }
                 _ => return Err(EmulatorError::InvalidInstruction(inst.address)),
             }
+        }
+        
+        Ok(())
+    }
+    
+    fn execute_movs(&mut self, inst: &Instruction) -> Result<()> {
+        // Determine operand size from instruction encoding
+        let size = if inst.address & 0xFF == 0xA4 {
+            OperandSize::Byte
+        } else if inst.prefix.operand_size_override {
+            OperandSize::Word
+        } else if inst.prefix.rex.as_ref().map_or(false, |r| r.w) {
+            OperandSize::QWord
+        } else {
+            OperandSize::DWord
+        };
+        
+        // Check if there's a REP prefix
+        let has_rep = inst.prefix.rep.is_some();
+        
+        if has_rep {
+            let count = self.cpu.read_reg(Register::RCX);
+            if count == 0 {
+                return Ok(());
+            }
+            
+            for _ in 0..count {
+                self.movs_single(size)?;
+            }
+            self.cpu.write_reg(Register::RCX, 0);
+        } else {
+            self.movs_single(size)?;
+        }
+        
+        Ok(())
+    }
+    
+    fn movs_single(&mut self, size: OperandSize) -> Result<()> {
+        let rsi = self.cpu.read_reg(Register::RSI);
+        let rdi = self.cpu.read_reg(Register::RDI);
+        
+        // Read from [RSI]
+        let value = match size {
+            OperandSize::Byte => self.memory.read_u8(rsi)? as u64,
+            OperandSize::Word => self.memory.read_u16(rsi)? as u64,
+            OperandSize::DWord => self.memory.read_u32(rsi)? as u64,
+            OperandSize::QWord => self.memory.read_u64(rsi)?,
+        };
+        
+        // Write to [RDI]
+        match size {
+            OperandSize::Byte => self.memory.write_u8(rdi, value as u8)?,
+            OperandSize::Word => self.memory.write_u16(rdi, value as u16)?,
+            OperandSize::DWord => self.memory.write_u32(rdi, value as u32)?,
+            OperandSize::QWord => self.memory.write_u64(rdi, value)?,
+        };
+        
+        // Update RSI and RDI based on direction flag
+        let increment = size.bytes() as u64;
+        if self.cpu.rflags.contains(Flags::DF) {
+            self.cpu.write_reg(Register::RSI, rsi.wrapping_sub(increment));
+            self.cpu.write_reg(Register::RDI, rdi.wrapping_sub(increment));
+        } else {
+            self.cpu.write_reg(Register::RSI, rsi.wrapping_add(increment));
+            self.cpu.write_reg(Register::RDI, rdi.wrapping_add(increment));
+        }
+        
+        Ok(())
+    }
+    
+    fn execute_cmps(&mut self, inst: &Instruction) -> Result<()> {
+        // Determine operand size from instruction encoding
+        let size = if inst.address & 0xFF == 0xA6 {
+            OperandSize::Byte
+        } else if inst.prefix.operand_size_override {
+            OperandSize::Word
+        } else if inst.prefix.rex.as_ref().map_or(false, |r| r.w) {
+            OperandSize::QWord
+        } else {
+            OperandSize::DWord
+        };
+        
+        // Check if there's a REP prefix
+        match inst.prefix.rep {
+            Some(crate::decoder::RepPrefix::RepZ) => {
+                let count = self.cpu.read_reg(Register::RCX);
+                if count == 0 {
+                    return Ok(());
+                }
+                
+                for i in 0..count {
+                    self.cmps_single(size)?;
+                    let new_count = count - i - 1;
+                    self.cpu.write_reg(Register::RCX, new_count);
+                    
+                    // Continue while ZF=1 (equal)
+                    if !self.cpu.rflags.contains(Flags::ZF) {
+                        break;
+                    }
+                }
+            }
+            Some(crate::decoder::RepPrefix::RepNZ) => {
+                let count = self.cpu.read_reg(Register::RCX);
+                if count == 0 {
+                    return Ok(());
+                }
+                
+                for i in 0..count {
+                    self.cmps_single(size)?;
+                    let new_count = count - i - 1;
+                    self.cpu.write_reg(Register::RCX, new_count);
+                    
+                    // Continue while ZF=0 (not equal)
+                    if self.cpu.rflags.contains(Flags::ZF) {
+                        break;
+                    }
+                }
+            }
+            _ => self.cmps_single(size)?,
+        }
+        
+        Ok(())
+    }
+    
+    fn cmps_single(&mut self, size: OperandSize) -> Result<()> {
+        let rsi = self.cpu.read_reg(Register::RSI);
+        let rdi = self.cpu.read_reg(Register::RDI);
+        
+        // Read from [RSI] and [RDI]
+        let src1 = match size {
+            OperandSize::Byte => self.memory.read_u8(rsi)? as u64,
+            OperandSize::Word => self.memory.read_u16(rsi)? as u64,
+            OperandSize::DWord => self.memory.read_u32(rsi)? as u64,
+            OperandSize::QWord => self.memory.read_u64(rsi)?,
+        };
+        
+        let src2 = match size {
+            OperandSize::Byte => self.memory.read_u8(rdi)? as u64,
+            OperandSize::Word => self.memory.read_u16(rdi)? as u64,
+            OperandSize::DWord => self.memory.read_u32(rdi)? as u64,
+            OperandSize::QWord => self.memory.read_u64(rdi)?,
+        };
+        
+        // Compare src1 - src2
+        let result = src1.wrapping_sub(src2);
+        self.update_flags_arithmetic(src1, src2, result, true);
+        
+        // Update RSI and RDI based on direction flag
+        let increment = size.bytes() as u64;
+        if self.cpu.rflags.contains(Flags::DF) {
+            self.cpu.write_reg(Register::RSI, rsi.wrapping_sub(increment));
+            self.cpu.write_reg(Register::RDI, rdi.wrapping_sub(increment));
+        } else {
+            self.cpu.write_reg(Register::RSI, rsi.wrapping_add(increment));
+            self.cpu.write_reg(Register::RDI, rdi.wrapping_add(increment));
+        }
+        
+        Ok(())
+    }
+    
+    fn execute_scas(&mut self, inst: &Instruction) -> Result<()> {
+        // Determine operand size from instruction encoding
+        let size = if inst.address & 0xFF == 0xAE {
+            OperandSize::Byte
+        } else if inst.prefix.operand_size_override {
+            OperandSize::Word
+        } else if inst.prefix.rex.as_ref().map_or(false, |r| r.w) {
+            OperandSize::QWord
+        } else {
+            OperandSize::DWord
+        };
+        
+        // Check if there's a REP prefix
+        match inst.prefix.rep {
+            Some(crate::decoder::RepPrefix::RepZ) => {
+                let count = self.cpu.read_reg(Register::RCX);
+                if count == 0 {
+                    return Ok(());
+                }
+                
+                for i in 0..count {
+                    self.scas_single(size)?;
+                    let new_count = count - i - 1;
+                    self.cpu.write_reg(Register::RCX, new_count);
+                    
+                    // Continue while ZF=1 (equal)
+                    if !self.cpu.rflags.contains(Flags::ZF) {
+                        break;
+                    }
+                }
+            }
+            Some(crate::decoder::RepPrefix::RepNZ) => {
+                let count = self.cpu.read_reg(Register::RCX);
+                if count == 0 {
+                    return Ok(());
+                }
+                
+                for i in 0..count {
+                    self.scas_single(size)?;
+                    let new_count = count - i - 1;
+                    self.cpu.write_reg(Register::RCX, new_count);
+                    
+                    // Continue while ZF=0 (not equal)
+                    if self.cpu.rflags.contains(Flags::ZF) {
+                        break;
+                    }
+                }
+            }
+            _ => self.scas_single(size)?,
+        }
+        
+        Ok(())
+    }
+    
+    fn scas_single(&mut self, size: OperandSize) -> Result<()> {
+        let rdi = self.cpu.read_reg(Register::RDI);
+        
+        // Get accumulator value
+        let acc = match size {
+            OperandSize::Byte => self.cpu.read_reg(Register::AL),
+            OperandSize::Word => self.cpu.read_reg(Register::AX),
+            OperandSize::DWord => self.cpu.read_reg(Register::EAX),
+            OperandSize::QWord => self.cpu.read_reg(Register::RAX),
+        };
+        
+        // Read from [RDI]
+        let mem_value = match size {
+            OperandSize::Byte => self.memory.read_u8(rdi)? as u64,
+            OperandSize::Word => self.memory.read_u16(rdi)? as u64,
+            OperandSize::DWord => self.memory.read_u32(rdi)? as u64,
+            OperandSize::QWord => self.memory.read_u64(rdi)?,
+        };
+        
+        // Compare accumulator - memory
+        let result = acc.wrapping_sub(mem_value);
+        self.update_flags_arithmetic(acc, mem_value, result, true);
+        
+        // Update RDI based on direction flag
+        let increment = size.bytes() as u64;
+        if self.cpu.rflags.contains(Flags::DF) {
+            self.cpu.write_reg(Register::RDI, rdi.wrapping_sub(increment));
+        } else {
+            self.cpu.write_reg(Register::RDI, rdi.wrapping_add(increment));
+        }
+        
+        Ok(())
+    }
+    
+    fn execute_stos(&mut self, inst: &Instruction) -> Result<()> {
+        // Determine operand size from instruction encoding
+        let size = if inst.address & 0xFF == 0xAA {
+            OperandSize::Byte
+        } else if inst.prefix.operand_size_override {
+            OperandSize::Word
+        } else if inst.prefix.rex.as_ref().map_or(false, |r| r.w) {
+            OperandSize::QWord
+        } else {
+            OperandSize::DWord
+        };
+        
+        // Check if there's a REP prefix
+        let has_rep = inst.prefix.rep.is_some();
+        
+        if has_rep {
+            let count = self.cpu.read_reg(Register::RCX);
+            if count == 0 {
+                return Ok(());
+            }
+            
+            for _ in 0..count {
+                self.stos_single(size)?;
+            }
+            self.cpu.write_reg(Register::RCX, 0);
+        } else {
+            self.stos_single(size)?;
+        }
+        
+        Ok(())
+    }
+    
+    fn stos_single(&mut self, size: OperandSize) -> Result<()> {
+        let rdi = self.cpu.read_reg(Register::RDI);
+        
+        // Get accumulator value
+        let acc = match size {
+            OperandSize::Byte => self.cpu.read_reg(Register::AL),
+            OperandSize::Word => self.cpu.read_reg(Register::AX),
+            OperandSize::DWord => self.cpu.read_reg(Register::EAX),
+            OperandSize::QWord => self.cpu.read_reg(Register::RAX),
+        };
+        
+        // Write to [RDI]
+        match size {
+            OperandSize::Byte => self.memory.write_u8(rdi, acc as u8)?,
+            OperandSize::Word => self.memory.write_u16(rdi, acc as u16)?,
+            OperandSize::DWord => self.memory.write_u32(rdi, acc as u32)?,
+            OperandSize::QWord => self.memory.write_u64(rdi, acc)?,
+        };
+        
+        // Update RDI based on direction flag
+        let increment = size.bytes() as u64;
+        if self.cpu.rflags.contains(Flags::DF) {
+            self.cpu.write_reg(Register::RDI, rdi.wrapping_sub(increment));
+        } else {
+            self.cpu.write_reg(Register::RDI, rdi.wrapping_add(increment));
+        }
+        
+        Ok(())
+    }
+    
+    fn execute_lods(&mut self, inst: &Instruction) -> Result<()> {
+        // Determine operand size from instruction encoding
+        let size = if inst.address & 0xFF == 0xAC {
+            OperandSize::Byte
+        } else if inst.prefix.operand_size_override {
+            OperandSize::Word
+        } else if inst.prefix.rex.as_ref().map_or(false, |r| r.w) {
+            OperandSize::QWord
+        } else {
+            OperandSize::DWord
+        };
+        
+        // Check if there's a REP prefix (rarely used with LODS)
+        let has_rep = inst.prefix.rep.is_some();
+        
+        if has_rep {
+            let count = self.cpu.read_reg(Register::RCX);
+            if count == 0 {
+                return Ok(());
+            }
+            
+            for _ in 0..count {
+                self.lods_single(size)?;
+            }
+            self.cpu.write_reg(Register::RCX, 0);
+        } else {
+            self.lods_single(size)?;
+        }
+        
+        Ok(())
+    }
+    
+    fn lods_single(&mut self, size: OperandSize) -> Result<()> {
+        let rsi = self.cpu.read_reg(Register::RSI);
+        
+        // Read from [RSI]
+        let value = match size {
+            OperandSize::Byte => self.memory.read_u8(rsi)? as u64,
+            OperandSize::Word => self.memory.read_u16(rsi)? as u64,
+            OperandSize::DWord => self.memory.read_u32(rsi)? as u64,
+            OperandSize::QWord => self.memory.read_u64(rsi)?,
+        };
+        
+        // Store in accumulator
+        match size {
+            OperandSize::Byte => self.cpu.write_reg(Register::AL, value),
+            OperandSize::Word => self.cpu.write_reg(Register::AX, value),
+            OperandSize::DWord => self.cpu.write_reg(Register::EAX, value),
+            OperandSize::QWord => self.cpu.write_reg(Register::RAX, value),
+        };
+        
+        // Update RSI based on direction flag
+        let increment = size.bytes() as u64;
+        if self.cpu.rflags.contains(Flags::DF) {
+            self.cpu.write_reg(Register::RSI, rsi.wrapping_sub(increment));
+        } else {
+            self.cpu.write_reg(Register::RSI, rsi.wrapping_add(increment));
         }
         
         Ok(())
