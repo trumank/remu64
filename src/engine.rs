@@ -814,12 +814,12 @@ impl Engine {
             return Err(EmulatorError::InvalidInstruction(inst.address));
         }
         
-        // Decrement RCX/ECX/CX based on address size
+        // Decrement RCX (treating it as unsigned)
         let count = self.cpu.read_reg(Register::RCX);
         let new_count = count.wrapping_sub(1);
         self.cpu.write_reg(Register::RCX, new_count);
         
-        // Jump if count != 0
+        // Jump if new_count != 0 (after decrement)
         if new_count != 0 {
             match &inst.operands[0] {
                 Operand::Relative(offset) => {
@@ -837,12 +837,12 @@ impl Engine {
             return Err(EmulatorError::InvalidInstruction(inst.address));
         }
         
-        // Decrement RCX/ECX/CX based on address size
+        // Decrement RCX (treating it as unsigned)
         let count = self.cpu.read_reg(Register::RCX);
         let new_count = count.wrapping_sub(1);
         self.cpu.write_reg(Register::RCX, new_count);
         
-        // Jump if count != 0 AND ZF = 1
+        // Jump if new_count != 0 AND ZF = 1
         if new_count != 0 && self.cpu.rflags.contains(Flags::ZF) {
             match &inst.operands[0] {
                 Operand::Relative(offset) => {
@@ -860,12 +860,12 @@ impl Engine {
             return Err(EmulatorError::InvalidInstruction(inst.address));
         }
         
-        // Decrement RCX/ECX/CX based on address size
+        // Decrement RCX (treating it as unsigned)
         let count = self.cpu.read_reg(Register::RCX);
         let new_count = count.wrapping_sub(1);
         self.cpu.write_reg(Register::RCX, new_count);
         
-        // Jump if count != 0 AND ZF = 0
+        // Jump if new_count != 0 AND ZF = 0
         if new_count != 0 && !self.cpu.rflags.contains(Flags::ZF) {
             match &inst.operands[0] {
                 Operand::Relative(offset) => {
