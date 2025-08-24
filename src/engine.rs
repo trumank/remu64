@@ -203,6 +203,7 @@ impl Engine {
             Opcode::LEA => self.execute_lea(inst),
             Opcode::ROL => self.execute_rol(inst),
             Opcode::ROR => self.execute_ror(inst),
+            Opcode::XCHG => self.execute_xchg(inst),
             Opcode::NOP => Ok(()),
             Opcode::HLT => {
                 self.stop_requested.store(true, Ordering::SeqCst);
@@ -583,6 +584,23 @@ impl Engine {
         }
         
         self.write_operand(&inst.operands[0], result)?;
+        Ok(())
+    }
+    
+    fn execute_xchg(&mut self, inst: &Instruction) -> Result<()> {
+        if inst.operands.len() < 2 {
+            return Err(EmulatorError::InvalidInstruction(inst.address));
+        }
+        
+        // Read both values
+        let value1 = self.read_operand(&inst.operands[0])?;
+        let value2 = self.read_operand(&inst.operands[1])?;
+        
+        // Exchange them
+        self.write_operand(&inst.operands[0], value2)?;
+        self.write_operand(&inst.operands[1], value1)?;
+        
+        // XCHG doesn't affect any flags
         Ok(())
     }
     
