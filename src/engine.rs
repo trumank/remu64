@@ -809,6 +809,75 @@ impl Engine {
         Ok(())
     }
     
+    fn execute_loop(&mut self, inst: &Instruction) -> Result<()> {
+        if inst.operands.is_empty() {
+            return Err(EmulatorError::InvalidInstruction(inst.address));
+        }
+        
+        // Decrement RCX/ECX/CX based on address size
+        let count = self.cpu.read_reg(Register::RCX);
+        let new_count = count.wrapping_sub(1);
+        self.cpu.write_reg(Register::RCX, new_count);
+        
+        // Jump if count != 0
+        if new_count != 0 {
+            match &inst.operands[0] {
+                Operand::Relative(offset) => {
+                    self.cpu.rip = (self.cpu.rip as i64 + offset) as u64;
+                }
+                _ => return Err(EmulatorError::InvalidInstruction(inst.address)),
+            }
+        }
+        
+        Ok(())
+    }
+    
+    fn execute_loope(&mut self, inst: &Instruction) -> Result<()> {
+        if inst.operands.is_empty() {
+            return Err(EmulatorError::InvalidInstruction(inst.address));
+        }
+        
+        // Decrement RCX/ECX/CX based on address size
+        let count = self.cpu.read_reg(Register::RCX);
+        let new_count = count.wrapping_sub(1);
+        self.cpu.write_reg(Register::RCX, new_count);
+        
+        // Jump if count != 0 AND ZF = 1
+        if new_count != 0 && self.cpu.rflags.contains(Flags::ZF) {
+            match &inst.operands[0] {
+                Operand::Relative(offset) => {
+                    self.cpu.rip = (self.cpu.rip as i64 + offset) as u64;
+                }
+                _ => return Err(EmulatorError::InvalidInstruction(inst.address)),
+            }
+        }
+        
+        Ok(())
+    }
+    
+    fn execute_loopne(&mut self, inst: &Instruction) -> Result<()> {
+        if inst.operands.is_empty() {
+            return Err(EmulatorError::InvalidInstruction(inst.address));
+        }
+        
+        // Decrement RCX/ECX/CX based on address size
+        let count = self.cpu.read_reg(Register::RCX);
+        let new_count = count.wrapping_sub(1);
+        self.cpu.write_reg(Register::RCX, new_count);
+        
+        // Jump if count != 0 AND ZF = 0
+        if new_count != 0 && !self.cpu.rflags.contains(Flags::ZF) {
+            match &inst.operands[0] {
+                Operand::Relative(offset) => {
+                    self.cpu.rip = (self.cpu.rip as i64 + offset) as u64;
+                }
+                _ => return Err(EmulatorError::InvalidInstruction(inst.address)),
+            }
+        }
+        
+        Ok(())
+    }
+    
     fn read_operand(&mut self, operand: &Operand) -> Result<u64> {
         match operand {
             Operand::Register(reg) => Ok(self.cpu.read_reg(*reg)),
