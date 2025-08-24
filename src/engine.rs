@@ -201,6 +201,8 @@ impl Engine {
             Opcode::SHR => self.execute_shr(inst),
             Opcode::SAR => self.execute_sar(inst),
             Opcode::LEA => self.execute_lea(inst),
+            Opcode::ROL => self.execute_rol(inst),
+            Opcode::ROR => self.execute_ror(inst),
             Opcode::NOP => Ok(()),
             Opcode::HLT => {
                 self.stop_requested.store(true, Ordering::SeqCst);
@@ -522,6 +524,65 @@ impl Engine {
         
         // LEA doesn't affect any flags
         self.cpu.write_register(dest, address);
+        Ok(())
+    }
+    
+    fn execute_rol(&mut self, inst: &Instruction) -> Result<()> {
+        if inst.operands.len() < 2 {
+            return Err(EmulatorError::InvalidInstruction(inst.address));
+        }
+        
+        let value = self.read_operand(&inst.operands[0])?;
+        let count = (self.read_operand(&inst.operands[1])? & 0x3F) as u32;
+        
+        if count == 0 {
+            return Ok(());
+        }
+        
+        // Rotate left: bits shifted out on the left are rotated back in on the right
+        let actual_count = count % 64;
+        let result = value.rotate_left(actual_count);
+        
+        // CF gets the last bit rotated out (which is now the LSB)
+        self.cpu.rflags.set(Flags::CF, result & 1 != 0);
+        
+        // OF is set if sign bit changed (only for count == 1)
+        if count == 1 {
+            let sign_changed = ((value >> 63) & 1) != ((result >> 63) & 1);
+            self.cpu.rflags.set(Flags::OF, sign_changed);
+        }
+        
+        self.write_operand(&inst.operands[0], result)?;
+        Ok(())
+    }
+    
+    fn execute_ror(&mut self, inst: &Instruction) -> Result<()> {
+        if inst.operands.len() < 2 {
+            return Err(EmulatorError::InvalidInstruction(inst.address));
+        }
+        
+        let value = self.read_operand(&inst.operands[0])?;
+        let count = (self.read_operand(&inst.operands[1])? & 0x3F) as u32;
+        
+        if count == 0 {
+            return Ok(());
+        }
+        
+        // Rotate right: bits shifted out on the right are rotated back in on the left
+        let actual_count = count % 64;
+        let result = value.rotate_right(actual_count);
+        
+        // CF gets the last bit rotated out (which is now the MSB)
+        self.cpu.rflags.set(Flags::CF, (result >> 63) & 1 != 0);
+        
+        // OF is set based on the two most significant bits (only for count == 1)
+        if count == 1 {
+            let msb = (result >> 63) & 1;
+            let next_msb = (result >> 62) & 1;
+            self.cpu.rflags.set(Flags::OF, msb != next_msb);
+        }
+        
+        self.write_operand(&inst.operands[0], result)?;
         Ok(())
     }
     
