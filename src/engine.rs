@@ -200,6 +200,7 @@ impl Engine {
             Opcode::SHL => self.execute_shl(inst),
             Opcode::SHR => self.execute_shr(inst),
             Opcode::SAR => self.execute_sar(inst),
+            Opcode::LEA => self.execute_lea(inst),
             Opcode::NOP => Ok(()),
             Opcode::HLT => {
                 self.stop_requested.store(true, Ordering::SeqCst);
@@ -486,6 +487,41 @@ impl Engine {
         self.update_flags_logic(result);
         
         self.write_operand(&inst.operands[0], result)?;
+        Ok(())
+    }
+    
+    fn execute_lea(&mut self, inst: &Instruction) -> Result<()> {
+        if inst.operands.len() < 2 {
+            return Err(EmulatorError::InvalidInstruction(inst.address));
+        }
+        
+        // LEA loads the effective address, not the value at that address
+        // First operand must be a register, second must be memory
+        let dest = match &inst.operands[0] {
+            Operand::Register(reg) => *reg,
+            _ => return Err(EmulatorError::InvalidInstruction(inst.address)),
+        };
+        
+        let address = match &inst.operands[1] {
+            Operand::Memory { base, index, scale, displacement, .. } => {
+                let mut addr = *displacement as u64;
+                
+                if let Some(base_reg) = base {
+                    addr = addr.wrapping_add(self.cpu.read_register(*base_reg));
+                }
+                
+                if let Some(index_reg) = index {
+                    let index_val = self.cpu.read_register(*index_reg);
+                    addr = addr.wrapping_add(index_val.wrapping_mul(*scale as u64));
+                }
+                
+                addr
+            }
+            _ => return Err(EmulatorError::InvalidInstruction(inst.address)),
+        };
+        
+        // LEA doesn't affect any flags
+        self.cpu.write_register(dest, address);
         Ok(())
     }
     
