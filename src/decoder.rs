@@ -370,6 +370,24 @@ impl Decoder {
                 offset += 4;
                 (Opcode::MOV, vec![rm_op, Operand::Immediate(imm)])
             }
+            0xE0 => {
+                // LOOPNE/LOOPNZ rel8
+                let rel = bytes.get(offset).copied().ok_or(EmulatorError::InvalidInstruction(0))? as i8;
+                offset += 1;
+                (Opcode::LOOPNE, vec![Operand::Relative(rel as i64)])
+            }
+            0xE1 => {
+                // LOOPE/LOOPZ rel8
+                let rel = bytes.get(offset).copied().ok_or(EmulatorError::InvalidInstruction(0))? as i8;
+                offset += 1;
+                (Opcode::LOOPE, vec![Operand::Relative(rel as i64)])
+            }
+            0xE2 => {
+                // LOOP rel8
+                let rel = bytes.get(offset).copied().ok_or(EmulatorError::InvalidInstruction(0))? as i8;
+                offset += 1;
+                (Opcode::LOOP, vec![Operand::Relative(rel as i64)])
+            }
             0xE8 => {
                 let rel = self.decode_immediate(&bytes[offset..], OperandSize::DWord)?;
                 offset += 4;
