@@ -510,11 +510,11 @@ impl Engine {
                 let mut addr = *displacement as u64;
                 
                 if let Some(base_reg) = base {
-                    addr = addr.wrapping_add(self.cpu.read_register(*base_reg));
+                    addr = addr.wrapping_add(self.cpu.read_reg(*base_reg));
                 }
                 
                 if let Some(index_reg) = index {
-                    let index_val = self.cpu.read_register(*index_reg);
+                    let index_val = self.cpu.read_reg(*index_reg);
                     addr = addr.wrapping_add(index_val.wrapping_mul(*scale as u64));
                 }
                 
@@ -524,7 +524,7 @@ impl Engine {
         };
         
         // LEA doesn't affect any flags
-        self.cpu.write_register(dest, address);
+        self.cpu.write_reg(dest, address);
         Ok(())
     }
     
