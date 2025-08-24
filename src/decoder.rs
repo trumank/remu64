@@ -74,6 +74,14 @@ pub enum Opcode {
     HLT,
     INT,
     SYSCALL,
+    MOVS,
+    CMPS,
+    SCAS,
+    STOS,
+    LODS,
+    REP,
+    REPZ,
+    REPNZ,
 }
 
 #[derive(Debug, Clone)]
