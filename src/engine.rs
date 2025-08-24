@@ -197,6 +197,9 @@ impl Engine {
             Opcode::DEC => self.execute_dec(inst),
             Opcode::NEG => self.execute_neg(inst),
             Opcode::NOT => self.execute_not(inst),
+            Opcode::SHL => self.execute_shl(inst),
+            Opcode::SHR => self.execute_shr(inst),
+            Opcode::SAR => self.execute_sar(inst),
             Opcode::NOP => Ok(()),
             Opcode::HLT => {
                 self.stop_requested.store(true, Ordering::SeqCst);
@@ -377,6 +380,110 @@ impl Engine {
         let result = !value;
         
         // NOT doesn't affect any flags
+        
+        self.write_operand(&inst.operands[0], result)?;
+        Ok(())
+    }
+    
+    fn execute_shl(&mut self, inst: &Instruction) -> Result<()> {
+        if inst.operands.len() < 2 {
+            return Err(EmulatorError::InvalidInstruction(inst.address));
+        }
+        
+        let value = self.read_operand(&inst.operands[0])?;
+        let count = (self.read_operand(&inst.operands[1])? & 0x3F) as u32; // Mask to 6 bits for 64-bit mode
+        
+        if count == 0 {
+            return Ok(());
+        }
+        
+        let result = value.wrapping_shl(count);
+        
+        // Set CF to the last bit shifted out
+        let last_bit_out = if count <= 64 {
+            (value >> (64 - count)) & 1 != 0
+        } else {
+            false
+        };
+        self.cpu.rflags.set(Flags::CF, last_bit_out);
+        
+        // OF is set if the sign bit changed (only for count == 1)
+        if count == 1 {
+            let sign_changed = ((value >> 63) & 1) != ((result >> 63) & 1);
+            self.cpu.rflags.set(Flags::OF, sign_changed);
+        }
+        
+        // Update SF, ZF, PF based on result
+        self.update_flags_logic(result);
+        
+        self.write_operand(&inst.operands[0], result)?;
+        Ok(())
+    }
+    
+    fn execute_shr(&mut self, inst: &Instruction) -> Result<()> {
+        if inst.operands.len() < 2 {
+            return Err(EmulatorError::InvalidInstruction(inst.address));
+        }
+        
+        let value = self.read_operand(&inst.operands[0])?;
+        let count = (self.read_operand(&inst.operands[1])? & 0x3F) as u32;
+        
+        if count == 0 {
+            return Ok(());
+        }
+        
+        let result = value.wrapping_shr(count);
+        
+        // Set CF to the last bit shifted out
+        let last_bit_out = if count <= 64 {
+            (value >> (count - 1)) & 1 != 0
+        } else {
+            false
+        };
+        self.cpu.rflags.set(Flags::CF, last_bit_out);
+        
+        // OF is set to the sign bit of the original value (only for count == 1)
+        if count == 1 {
+            self.cpu.rflags.set(Flags::OF, (value >> 63) & 1 != 0);
+        }
+        
+        // Update SF, ZF, PF based on result
+        self.update_flags_logic(result);
+        
+        self.write_operand(&inst.operands[0], result)?;
+        Ok(())
+    }
+    
+    fn execute_sar(&mut self, inst: &Instruction) -> Result<()> {
+        if inst.operands.len() < 2 {
+            return Err(EmulatorError::InvalidInstruction(inst.address));
+        }
+        
+        let value = self.read_operand(&inst.operands[0])? as i64;
+        let count = (self.read_operand(&inst.operands[1])? & 0x3F) as u32;
+        
+        if count == 0 {
+            return Ok(());
+        }
+        
+        let result = value.wrapping_shr(count) as u64;
+        
+        // Set CF to the last bit shifted out
+        let last_bit_out = if count <= 64 {
+            (value >> (count - 1)) & 1 != 0
+        } else {
+            // For SAR, if shifting more than 63, CF = sign bit
+            value < 0
+        };
+        self.cpu.rflags.set(Flags::CF, last_bit_out);
+        
+        // OF is cleared for SAR with count == 1
+        if count == 1 {
+            self.cpu.rflags.set(Flags::OF, false);
+        }
+        
+        // Update SF, ZF, PF based on result
+        self.update_flags_logic(result);
         
         self.write_operand(&inst.operands[0], result)?;
         Ok(())
