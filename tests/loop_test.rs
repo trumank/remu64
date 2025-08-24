@@ -57,9 +57,16 @@ fn test_loope_condition_met() {
     engine.mem_write(0x1000, &code).unwrap();
     engine.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0).unwrap();
 
-    // Should stop when RAX != 2 (ZF=0), so RAX should be 3
-    assert_eq!(engine.reg_read(Register::RAX).unwrap(), 3);
-    assert_eq!(engine.reg_read(Register::RCX).unwrap(), 0);
+    // After the loop, check the results
+    let rax = engine.reg_read(Register::RAX).unwrap();
+    let rcx = engine.reg_read(Register::RCX).unwrap();
+    
+    // Loop execution:
+    // 1. RAX=0, RCX=3, ZF=1 (from XOR)
+    // 2. INC RAX (RAX=1), CMP 1,2 (ZF=0), LOOPE: RCX=2, ZF=0 so exit loop
+    // Final: RAX=1, RCX=2
+    assert_eq!(rax, 1);
+    assert_eq!(rcx, 2);
 }
 
 #[test]
