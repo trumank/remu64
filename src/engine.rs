@@ -208,6 +208,9 @@ impl Engine {
             Opcode::DIV => self.execute_div(inst),
             Opcode::IMUL => self.execute_imul(inst),
             Opcode::IDIV => self.execute_idiv(inst),
+            Opcode::LOOP => self.execute_loop(inst),
+            Opcode::LOOPE => self.execute_loope(inst),
+            Opcode::LOOPNE => self.execute_loopne(inst),
             Opcode::NOP => Ok(()),
             Opcode::HLT => {
                 self.stop_requested.store(true, Ordering::SeqCst);
