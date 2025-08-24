@@ -204,6 +204,10 @@ impl Engine {
             Opcode::ROL => self.execute_rol(inst),
             Opcode::ROR => self.execute_ror(inst),
             Opcode::XCHG => self.execute_xchg(inst),
+            Opcode::MUL => self.execute_mul(inst),
+            Opcode::DIV => self.execute_div(inst),
+            Opcode::IMUL => self.execute_imul(inst),
+            Opcode::IDIV => self.execute_idiv(inst),
             Opcode::NOP => Ok(()),
             Opcode::HLT => {
                 self.stop_requested.store(true, Ordering::SeqCst);
@@ -601,6 +605,120 @@ impl Engine {
         self.write_operand(&inst.operands[1], value1)?;
         
         // XCHG doesn't affect any flags
+        Ok(())
+    }
+    
+    fn execute_mul(&mut self, inst: &Instruction) -> Result<()> {
+        if inst.operands.is_empty() {
+            return Err(EmulatorError::InvalidInstruction(inst.address));
+        }
+        
+        // MUL performs unsigned multiplication
+        // For 64-bit operand: RDX:RAX = RAX * operand
+        let multiplicand = self.cpu.read_reg(Register::RAX);
+        let multiplier = self.read_operand(&inst.operands[0])?;
+        
+        let result = (multiplicand as u128) * (multiplier as u128);
+        
+        // Store low 64 bits in RAX, high 64 bits in RDX
+        self.cpu.write_reg(Register::RAX, result as u64);
+        self.cpu.write_reg(Register::RDX, (result >> 64) as u64);
+        
+        // Set CF and OF if upper half is non-zero
+        let overflow = (result >> 64) != 0;
+        self.cpu.rflags.set(Flags::CF, overflow);
+        self.cpu.rflags.set(Flags::OF, overflow);
+        
+        // SF, ZF, AF, and PF are undefined after MUL
+        
+        Ok(())
+    }
+    
+    fn execute_div(&mut self, inst: &Instruction) -> Result<()> {
+        if inst.operands.is_empty() {
+            return Err(EmulatorError::InvalidInstruction(inst.address));
+        }
+        
+        // DIV performs unsigned division
+        // For 64-bit operand: Quotient = RDX:RAX / operand -> RAX
+        //                     Remainder = RDX:RAX % operand -> RDX
+        let dividend_low = self.cpu.read_reg(Register::RAX);
+        let dividend_high = self.cpu.read_reg(Register::RDX);
+        let dividend = ((dividend_high as u128) << 64) | (dividend_low as u128);
+        let divisor = self.read_operand(&inst.operands[0])? as u128;
+        
+        if divisor == 0 {
+            // Division by zero - should trigger exception
+            return Err(EmulatorError::DivisionByZero);
+        }
+        
+        let quotient = dividend / divisor;
+        let remainder = dividend % divisor;
+        
+        // Check for quotient overflow
+        if quotient > u64::MAX as u128 {
+            return Err(EmulatorError::DivisionOverflow);
+        }
+        
+        self.cpu.write_reg(Register::RAX, quotient as u64);
+        self.cpu.write_reg(Register::RDX, remainder as u64);
+        
+        // All flags are undefined after DIV
+        
+        Ok(())
+    }
+    
+    fn execute_imul(&mut self, inst: &Instruction) -> Result<()> {
+        // IMUL has multiple forms, for now implement single operand form
+        if inst.operands.is_empty() {
+            return Err(EmulatorError::InvalidInstruction(inst.address));
+        }
+        
+        // Single operand form: RDX:RAX = RAX * operand (signed)
+        let multiplicand = self.cpu.read_reg(Register::RAX) as i64;
+        let multiplier = self.read_operand(&inst.operands[0])? as i64;
+        
+        let result = (multiplicand as i128) * (multiplier as i128);
+        
+        // Store low 64 bits in RAX, high 64 bits in RDX
+        self.cpu.write_reg(Register::RAX, result as u64);
+        self.cpu.write_reg(Register::RDX, (result >> 64) as u64);
+        
+        // Set CF and OF if result doesn't fit in 64 bits (signed)
+        let sign_extended = (result as i64) as i128;
+        let overflow = result != sign_extended;
+        self.cpu.rflags.set(Flags::CF, overflow);
+        self.cpu.rflags.set(Flags::OF, overflow);
+        
+        Ok(())
+    }
+    
+    fn execute_idiv(&mut self, inst: &Instruction) -> Result<()> {
+        if inst.operands.is_empty() {
+            return Err(EmulatorError::InvalidInstruction(inst.address));
+        }
+        
+        // IDIV performs signed division
+        let dividend_low = self.cpu.read_reg(Register::RAX) as i64;
+        let dividend_high = self.cpu.read_reg(Register::RDX) as i64;
+        let dividend = ((dividend_high as i128) << 64) | (dividend_low as u64 as i128);
+        let divisor = self.read_operand(&inst.operands[0])? as i64 as i128;
+        
+        if divisor == 0 {
+            return Err(EmulatorError::DivisionByZero);
+        }
+        
+        let quotient = dividend / divisor;
+        let remainder = dividend % divisor;
+        
+        // Check for quotient overflow
+        if quotient > i64::MAX as i128 || quotient < i64::MIN as i128 {
+            return Err(EmulatorError::DivisionOverflow);
+        }
+        
+        self.cpu.write_reg(Register::RAX, quotient as u64);
+        self.cpu.write_reg(Register::RDX, remainder as u64);
+        
         Ok(())
     }
     

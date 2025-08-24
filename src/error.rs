@@ -32,6 +32,12 @@ pub enum EmulatorError {
     #[error("Out of memory")]
     OutOfMemory,
     
+    #[error("Division by zero")]
+    DivisionByZero,
+    
+    #[error("Division overflow")]
+    DivisionOverflow,
+    
     #[error("Internal error: {0}")]
     InternalError(String),
 }
