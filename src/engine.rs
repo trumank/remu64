@@ -195,6 +195,7 @@ impl Engine {
             Opcode::JAE => self.execute_jcc(inst, !self.cpu.rflags.contains(Flags::CF)),
             Opcode::INC => self.execute_inc(inst),
             Opcode::DEC => self.execute_dec(inst),
+            Opcode::NEG => self.execute_neg(inst),
             Opcode::NOP => Ok(()),
             Opcode::HLT => {
                 self.stop_requested.store(true, Ordering::SeqCst);
@@ -343,6 +344,24 @@ impl Engine {
         let cf = self.cpu.rflags.contains(Flags::CF);
         self.update_flags_arithmetic(value, 1, result, true);
         self.cpu.rflags.set(Flags::CF, cf);
+        
+        self.write_operand(&inst.operands[0], result)?;
+        Ok(())
+    }
+    
+    fn execute_neg(&mut self, inst: &Instruction) -> Result<()> {
+        if inst.operands.is_empty() {
+            return Err(EmulatorError::InvalidInstruction(inst.address));
+        }
+        
+        let value = self.read_operand(&inst.operands[0])?;
+        let result = 0u64.wrapping_sub(value);
+        
+        // NEG sets CF to 0 if operand is 0, otherwise 1
+        self.cpu.rflags.set(Flags::CF, value != 0);
+        
+        // Update other arithmetic flags
+        self.update_flags_arithmetic(0, value, result, true);
         
         self.write_operand(&inst.operands[0], result)?;
         Ok(())
