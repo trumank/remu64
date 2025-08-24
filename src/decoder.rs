@@ -251,8 +251,9 @@ impl Decoder {
             0xC7 => {
                 let (rm_op, _reg_op, consumed) = self.decode_modrm_operands(&bytes[offset..], prefix)?;
                 offset += consumed;
-                let imm = self.decode_immediate(&bytes[offset..], self.operand_size(prefix))?;
-                offset += self.operand_size(prefix).bytes();
+                // 0xC7 always uses imm32 even with REX.W
+                let imm = self.decode_immediate(&bytes[offset..], OperandSize::DWord)?;
+                offset += 4;
                 (Opcode::MOV, vec![rm_op, Operand::Immediate(imm)])
             }
             0xE8 => {
