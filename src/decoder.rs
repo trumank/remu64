@@ -188,25 +188,91 @@ impl Decoder {
         let mut offset = 1;
         
         let (opcode, operands) = match opcode_byte {
-            0x00..=0x05 => {
-                let (op1, op2, consumed) = self.decode_modrm_operands(&bytes[offset..], prefix)?;
+            0x00 | 0x01 => {
+                // ADD r/m, r - memory/rm is destination
+                let (rm_op, reg_op, consumed) = self.decode_modrm_operands(&bytes[offset..], prefix)?;
                 offset += consumed;
-                (Opcode::ADD, vec![op1, op2])
+                (Opcode::ADD, vec![rm_op, reg_op])
             }
-            0x28..=0x2D => {
-                let (op1, op2, consumed) = self.decode_modrm_operands(&bytes[offset..], prefix)?;
+            0x02 | 0x03 => {
+                // ADD r, r/m - register is destination
+                let (rm_op, reg_op, consumed) = self.decode_modrm_operands(&bytes[offset..], prefix)?;
                 offset += consumed;
-                (Opcode::SUB, vec![op1, op2])
+                (Opcode::ADD, vec![reg_op, rm_op])
             }
-            0x30..=0x35 => {
-                let (op1, op2, consumed) = self.decode_modrm_operands(&bytes[offset..], prefix)?;
-                offset += consumed;
-                (Opcode::XOR, vec![op1, op2])
+            0x04 => {
+                // ADD AL, imm8
+                let imm = bytes.get(offset).copied().ok_or(EmulatorError::InvalidInstruction(0))?;
+                offset += 1;
+                (Opcode::ADD, vec![Operand::Register(Register::AL), Operand::Immediate(imm as i64)])
             }
-            0x38..=0x3D => {
-                let (op1, op2, consumed) = self.decode_modrm_operands(&bytes[offset..], prefix)?;
+            0x05 => {
+                // ADD rAX, imm
+                let imm = self.decode_immediate(&bytes[offset..], self.operand_size(prefix))?;
+                offset += self.operand_size(prefix).bytes();
+                let reg = if prefix.rex.as_ref().map_or(false, |r| r.w) {
+                    Register::RAX
+                } else if prefix.operand_size_override {
+                    Register::AX
+                } else {
+                    Register::EAX
+                };
+                (Opcode::ADD, vec![Operand::Register(reg), Operand::Immediate(imm)])
+            }
+            0x28 | 0x29 => {
+                // SUB r/m, r - memory/rm is destination
+                let (rm_op, reg_op, consumed) = self.decode_modrm_operands(&bytes[offset..], prefix)?;
                 offset += consumed;
-                (Opcode::CMP, vec![op1, op2])
+                (Opcode::SUB, vec![rm_op, reg_op])
+            }
+            0x2A | 0x2B => {
+                // SUB r, r/m - register is destination
+                let (rm_op, reg_op, consumed) = self.decode_modrm_operands(&bytes[offset..], prefix)?;
+                offset += consumed;
+                (Opcode::SUB, vec![reg_op, rm_op])
+            }
+            0x2C => {
+                // SUB AL, imm8
+                let imm = bytes.get(offset).copied().ok_or(EmulatorError::InvalidInstruction(0))?;
+                offset += 1;
+                (Opcode::SUB, vec![Operand::Register(Register::AL), Operand::Immediate(imm as i64)])
+            }
+            0x2D => {
+                // SUB rAX, imm
+                let imm = self.decode_immediate(&bytes[offset..], self.operand_size(prefix))?;
+                offset += self.operand_size(prefix).bytes();
+                let reg = if prefix.rex.as_ref().map_or(false, |r| r.w) {
+                    Register::RAX
+                } else if prefix.operand_size_override {
+                    Register::AX
+                } else {
+                    Register::EAX
+                };
+                (Opcode::SUB, vec![Operand::Register(reg), Operand::Immediate(imm)])
+            }
+            0x30 | 0x31 => {
+                // XOR r/m, r
+                let (rm_op, reg_op, consumed) = self.decode_modrm_operands(&bytes[offset..], prefix)?;
+                offset += consumed;
+                (Opcode::XOR, vec![rm_op, reg_op])
+            }
+            0x32 | 0x33 => {
+                // XOR r, r/m
+                let (rm_op, reg_op, consumed) = self.decode_modrm_operands(&bytes[offset..], prefix)?;
+                offset += consumed;
+                (Opcode::XOR, vec![reg_op, rm_op])
+            }
+            0x38 | 0x39 => {
+                // CMP r/m, r
+                let (rm_op, reg_op, consumed) = self.decode_modrm_operands(&bytes[offset..], prefix)?;
+                offset += consumed;
+                (Opcode::CMP, vec![rm_op, reg_op])
+            }
+            0x3A | 0x3B => {
+                // CMP r, r/m
+                let (rm_op, reg_op, consumed) = self.decode_modrm_operands(&bytes[offset..], prefix)?;
+                offset += consumed;
+                (Opcode::CMP, vec![reg_op, rm_op])
             }
             0x50..=0x57 => {
                 let reg = self.decode_register_from_opcode(opcode_byte - 0x50, prefix, OperandSize::QWord);
