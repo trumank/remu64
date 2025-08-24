@@ -192,6 +192,8 @@ impl Engine {
             Opcode::JNO => self.execute_jcc(inst, !self.cpu.rflags.contains(Flags::OF)),
             Opcode::JB => self.execute_jcc(inst, self.cpu.rflags.contains(Flags::CF)),
             Opcode::JAE => self.execute_jcc(inst, !self.cpu.rflags.contains(Flags::CF)),
+            Opcode::INC => self.execute_inc(inst),
+            Opcode::DEC => self.execute_dec(inst),
             Opcode::NOP => Ok(()),
             Opcode::HLT => {
                 self.stop_requested.store(true, Ordering::SeqCst);
@@ -308,6 +310,40 @@ impl Engine {
         let result = dst & src;
         
         self.update_flags_logical(result);
+        Ok(())
+    }
+    
+    fn execute_inc(&mut self, inst: &Instruction) -> Result<()> {
+        if inst.operands.is_empty() {
+            return Err(EmulatorError::InvalidInstruction(inst.address));
+        }
+        
+        let value = self.read_operand(&inst.operands[0])?;
+        let result = value.wrapping_add(1);
+        
+        // INC doesn't affect CF flag, only other arithmetic flags
+        let cf = self.cpu.rflags.contains(Flags::CF);
+        self.update_flags_arithmetic(value, 1, result, false);
+        self.cpu.rflags.set(Flags::CF, cf);
+        
+        self.write_operand(&inst.operands[0], result)?;
+        Ok(())
+    }
+    
+    fn execute_dec(&mut self, inst: &Instruction) -> Result<()> {
+        if inst.operands.is_empty() {
+            return Err(EmulatorError::InvalidInstruction(inst.address));
+        }
+        
+        let value = self.read_operand(&inst.operands[0])?;
+        let result = value.wrapping_sub(1);
+        
+        // DEC doesn't affect CF flag, only other arithmetic flags
+        let cf = self.cpu.rflags.contains(Flags::CF);
+        self.update_flags_arithmetic(value, 1, result, true);
+        self.cpu.rflags.set(Flags::CF, cf);
+        
+        self.write_operand(&inst.operands[0], result)?;
         Ok(())
     }
     
