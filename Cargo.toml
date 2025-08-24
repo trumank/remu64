@@ -19,9 +19,6 @@ env_logger = "0.11"
 criterion = "0.5"
 proptest = "1.4"
 
-[[bench]]
-name = "decoder_bench"
-harness = false
 
 [profile.release]
 opt-level = 3
