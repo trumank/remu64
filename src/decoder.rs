@@ -341,12 +341,22 @@ impl Decoder {
                 Operand::Register(rm_reg)
             }
             _ => {
-                let (base, index, scale, disp_size) = self.decode_sib_and_displacement(
+                let (base, index, scale, consumed_and_disp_size) = self.decode_sib_and_displacement(
                     mod_bits,
                     rm_bits,
                     &bytes[offset..],
                     prefix,
                 )?;
+                
+                // Extract SIB byte consumption (1 if SIB was present, 0 otherwise)
+                let sib_consumed = if rm_bits == 4 { 1 } else { 0 };
+                let disp_size = if rm_bits == 4 {
+                    consumed_and_disp_size - 1  // Subtract the SIB byte
+                } else {
+                    consumed_and_disp_size
+                };
+                
+                offset += sib_consumed;
                 
                 let displacement = if disp_size > 0 {
                     let disp = self.decode_displacement(&bytes[offset..], disp_size)?;
@@ -373,15 +383,50 @@ impl Decoder {
         &self,
         mod_bits: u8,
         rm_bits: u8,
-        _bytes: &[u8],
-        _prefix: &InstructionPrefix,
+        bytes: &[u8],
+        prefix: &InstructionPrefix,
     ) -> Result<(Option<Register>, Option<Register>, u8, usize)> {
+        // Handle SIB byte case (rm_bits == 4)
+        if rm_bits == 4 {
+            if bytes.is_empty() {
+                return Err(EmulatorError::InvalidInstruction(0));
+            }
+            
+            let sib = bytes[0];
+            let scale = 1 << ((sib >> 6) & 0x03);
+            let index_bits = (sib >> 3) & 0x07;
+            let base_bits = sib & 0x07;
+            
+            let base = if base_bits == 5 && mod_bits == 0 {
+                None // [disp32] or [index*scale + disp32]
+            } else {
+                Some(self.decode_register(base_bits, prefix, OperandSize::QWord))
+            };
+            
+            let index = if index_bits == 4 {
+                None // No index register (RSP can't be index)
+            } else {
+                Some(self.decode_register(index_bits, prefix, OperandSize::QWord))
+            };
+            
+            let disp_size = match mod_bits {
+                0 if base_bits == 5 => 4,  // [disp32] or [index*scale + disp32]
+                1 => 1,  // [base + disp8]
+                2 => 4,  // [base + disp32]
+                _ => 0,  // [base]
+            };
+            
+            // Return 1 to indicate we consumed the SIB byte
+            return Ok((base, index, scale, disp_size + 1));
+        }
+        
+        // Non-SIB cases
         let base = match rm_bits {
             0 => Some(Register::RAX),
             1 => Some(Register::RCX),
             2 => Some(Register::RDX),
             3 => Some(Register::RBX),
-            5 if mod_bits == 0 => None,
+            5 if mod_bits == 0 => None,  // RIP-relative or absolute
             5 => Some(Register::RBP),
             6 => Some(Register::RSI),
             7 => Some(Register::RDI),
@@ -389,10 +434,10 @@ impl Decoder {
         };
         
         let disp_size = match mod_bits {
-            0 if rm_bits == 5 => 4,
-            1 => 1,
-            2 => 4,
-            _ => 0,
+            0 if rm_bits == 5 => 4,  // RIP-relative or absolute
+            1 => 1,  // [reg + disp8]
+            2 => 4,  // [reg + disp32]
+            _ => 0,  // [reg]
         };
         
         Ok((base, None, 1, disp_size))
