@@ -418,7 +418,7 @@ impl Engine {
         }
         
         // Update SF, ZF, PF based on result
-        self.update_flags_logic(result);
+        self.update_flags_logical(result);
         
         self.write_operand(&inst.operands[0], result)?;
         Ok(())
@@ -452,7 +452,7 @@ impl Engine {
         }
         
         // Update SF, ZF, PF based on result
-        self.update_flags_logic(result);
+        self.update_flags_logical(result);
         
         self.write_operand(&inst.operands[0], result)?;
         Ok(())
@@ -487,7 +487,7 @@ impl Engine {
         }
         
         // Update SF, ZF, PF based on result
-        self.update_flags_logic(result);
+        self.update_flags_logical(result);
         
         self.write_operand(&inst.operands[0], result)?;
         Ok(())
