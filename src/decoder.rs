@@ -399,6 +399,10 @@ impl Decoder {
                 match reg_bits {
                     2 => (Opcode::NOT, vec![rm_op]),
                     3 => (Opcode::NEG, vec![rm_op]),
+                    4 => (Opcode::MUL, vec![rm_op]),
+                    5 => (Opcode::IMUL, vec![rm_op]),
+                    6 => (Opcode::DIV, vec![rm_op]),
+                    7 => (Opcode::IDIV, vec![rm_op]),
                     _ => return Err(EmulatorError::UnsupportedInstruction(format!("F7 /{}", reg_bits))),
                 }
             }
