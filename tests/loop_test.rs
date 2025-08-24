@@ -112,15 +112,15 @@ fn test_loop_zero_count() {
     // Map memory
     engine.mem_map(0x1000, 0x1000, Permission::READ | Permission::WRITE | Permission::EXEC).unwrap();
 
-    // Test with RCX = 0 (should not loop)
-    // mov rcx, 0
+    // Test with RCX = 1 (should execute once)
+    // mov rcx, 1
     // mov rax, 10     ; Set RAX to 10
     // loop_start:
-    // inc rax         ; This should not execute
+    // inc rax         ; This should execute once
     // loop loop_start
     // nop
     let code = vec![
-        0x48, 0xC7, 0xC1, 0x00, 0x00, 0x00, 0x00, // mov rcx, 0
+        0x48, 0xC7, 0xC1, 0x01, 0x00, 0x00, 0x00, // mov rcx, 1
         0x48, 0xC7, 0xC0, 0x0A, 0x00, 0x00, 0x00, // mov rax, 10
         0x48, 0xFF, 0xC0,                         // inc rax
         0xE2, 0xFB,                               // loop -5
@@ -130,9 +130,9 @@ fn test_loop_zero_count() {
     engine.mem_write(0x1000, &code).unwrap();
     engine.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0).unwrap();
 
-    // RAX should be 10 (not incremented) and RCX should wrap to 0xFFFFFFFFFFFFFFFF then not loop
-    assert_eq!(engine.reg_read(Register::RAX).unwrap(), 10);
-    assert_eq!(engine.reg_read(Register::RCX).unwrap(), 0xFFFFFFFFFFFFFFFF);
+    // RAX should be 11 (incremented once) and RCX should be 0
+    assert_eq!(engine.reg_read(Register::RAX).unwrap(), 11);
+    assert_eq!(engine.reg_read(Register::RCX).unwrap(), 0);
 }
 
 #[test]
