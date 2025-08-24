@@ -58,7 +58,8 @@ impl Engine {
     
     pub fn mem_write(&mut self, address: u64, data: &[u8]) -> Result<()> {
         self.hooks.run_mem_write_hooks(&mut self.cpu, address, data.len())?;
-        self.memory.write(address, data)
+        // For code loading, bypass permission checks and write directly
+        self.memory.write_bytes(address, data)
     }
     
     pub fn mem_read(&mut self, address: u64, buf: &mut [u8]) -> Result<()> {

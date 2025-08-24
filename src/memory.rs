@@ -192,6 +192,29 @@ impl Memory {
         Ok(())
     }
     
+    // Write bytes without permission checks - used for loading code
+    pub fn write_bytes(&mut self, addr: u64, data: &[u8]) -> Result<()> {
+        let mut offset = 0;
+        let mut current_addr = addr;
+        
+        while offset < data.len() {
+            let region = self.find_region_mut(current_addr)
+                .ok_or(EmulatorError::UnmappedMemory(current_addr))?;
+            
+            let region_offset = region.offset(current_addr).unwrap();
+            let available = region.size() - region_offset;
+            let to_copy = std::cmp::min(available, data.len() - offset);
+            
+            region.data[region_offset..region_offset + to_copy]
+                .copy_from_slice(&data[offset..offset + to_copy]);
+            
+            offset += to_copy;
+            current_addr += to_copy as u64;
+        }
+        
+        Ok(())
+    }
+    
     pub fn read_u8(&self, addr: u64) -> Result<u8> {
         let mut buf = [0u8; 1];
         self.read(addr, &mut buf)?;
