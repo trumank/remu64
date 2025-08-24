@@ -1,4 +1,4 @@
-use emu::{Engine, EngineMode, Permission, Register};
+use amd64_emu::{Engine, EngineMode, Permission, Register};
 
 #[test]
 fn test_loop_basic() {
