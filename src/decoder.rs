@@ -337,6 +337,46 @@ impl Decoder {
                 (Opcode::MOV, vec![reg_op, rm_op])
             }
             0x90 => (Opcode::NOP, vec![]),
+            0xA4 => {
+                // MOVS BYTE PTR [RDI], [RSI]
+                (Opcode::MOVS, vec![])
+            }
+            0xA5 => {
+                // MOVS WORD/DWORD/QWORD PTR [RDI], [RSI]
+                (Opcode::MOVS, vec![])
+            }
+            0xA6 => {
+                // CMPS BYTE PTR [RSI], [RDI]
+                (Opcode::CMPS, vec![])
+            }
+            0xA7 => {
+                // CMPS WORD/DWORD/QWORD PTR [RSI], [RDI]
+                (Opcode::CMPS, vec![])
+            }
+            0xAA => {
+                // STOS BYTE PTR [RDI], AL
+                (Opcode::STOS, vec![])
+            }
+            0xAB => {
+                // STOS WORD/DWORD/QWORD PTR [RDI], AX/EAX/RAX
+                (Opcode::STOS, vec![])
+            }
+            0xAC => {
+                // LODS AL, BYTE PTR [RSI]
+                (Opcode::LODS, vec![])
+            }
+            0xAD => {
+                // LODS AX/EAX/RAX, WORD/DWORD/QWORD PTR [RSI]
+                (Opcode::LODS, vec![])
+            }
+            0xAE => {
+                // SCAS AL, BYTE PTR [RDI]
+                (Opcode::SCAS, vec![])
+            }
+            0xAF => {
+                // SCAS AX/EAX/RAX, WORD/DWORD/QWORD PTR [RDI]
+                (Opcode::SCAS, vec![])
+            }
             0xB0..=0xB7 => {
                 let reg = self.decode_register_from_opcode(opcode_byte - 0xB0, prefix, OperandSize::Byte);
                 let imm = bytes.get(offset).copied().ok_or(EmulatorError::InvalidInstruction(0))?;
