@@ -40,16 +40,18 @@ fn test_loope_condition_met() {
     // LOOPE test - loop while ZF is set
     // mov rcx, 3
     // xor rax, rax    ; Clear RAX and set ZF
+    // mov rbx, 2      ; Value to compare against
     // loop_start:
     // inc rax         ; Increment RAX
-    // cmp rax, 2      ; Compare RAX with 2
+    // cmp rax, rbx    ; Compare RAX with RBX
     // loope loop_start; Loop while equal (ZF=1)
     // nop
     let code = vec![
         0x48, 0xC7, 0xC1, 0x03, 0x00, 0x00, 0x00, // mov rcx, 3
         0x48, 0x31, 0xC0,                         // xor rax, rax (sets ZF)
+        0x48, 0xC7, 0xC3, 0x02, 0x00, 0x00, 0x00, // mov rbx, 2
         0x48, 0xFF, 0xC0,                         // inc rax
-        0x48, 0x83, 0xF8, 0x02,                   // cmp rax, 2
+        0x48, 0x39, 0xD8,                         // cmp rax, rbx
         0xE1, 0xF8,                               // loope -8 (back to inc rax)
         0x90,                                     // nop
     ];
@@ -79,16 +81,18 @@ fn test_loopne_condition_met() {
     // LOOPNE test - loop while ZF is not set
     // mov rcx, 5
     // xor rax, rax    ; Clear RAX
+    // mov rbx, 3      ; Value to compare against
     // loop_start:
     // inc rax         ; Increment RAX
-    // cmp rax, 3      ; Compare RAX with 3
+    // cmp rax, rbx    ; Compare RAX with RBX
     // loopne loop_start; Loop while not equal (ZF=0)
     // nop
     let code = vec![
         0x48, 0xC7, 0xC1, 0x05, 0x00, 0x00, 0x00, // mov rcx, 5
         0x48, 0x31, 0xC0,                         // xor rax, rax
+        0x48, 0xC7, 0xC3, 0x03, 0x00, 0x00, 0x00, // mov rbx, 3
         0x48, 0xFF, 0xC0,                         // inc rax
-        0x48, 0x83, 0xF8, 0x03,                   // cmp rax, 3
+        0x48, 0x39, 0xD8,                         // cmp rax, rbx
         0xE0, 0xF8,                               // loopne -8 (back to inc rax)
         0x90,                                     // nop
     ];
