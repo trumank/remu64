@@ -91,6 +91,7 @@ pub struct Instruction {
     pub operands: Vec<Operand>,
     pub size: usize,
     pub prefix: InstructionPrefix,
+    pub operand_size: OperandSize,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -187,6 +188,7 @@ impl Decoder {
             operands,
             size: total_size,
             prefix,
+            operand_size: self.operand_size(&prefix),
         })
     }
     
@@ -339,43 +341,43 @@ impl Decoder {
             0x90 => (Opcode::NOP, vec![]),
             0xA4 => {
                 // MOVS BYTE PTR [RDI], [RSI]
-                (Opcode::MOVS, vec![])
+                (Opcode::MOVS, vec![Operand::Immediate(1)]) // Size indicator: 1 = byte
             }
             0xA5 => {
                 // MOVS WORD/DWORD/QWORD PTR [RDI], [RSI]
-                (Opcode::MOVS, vec![])
+                (Opcode::MOVS, vec![Operand::Immediate(0)]) // Size indicator: 0 = use operand_size
             }
             0xA6 => {
                 // CMPS BYTE PTR [RSI], [RDI]
-                (Opcode::CMPS, vec![])
+                (Opcode::CMPS, vec![Operand::Immediate(1)]) // Size indicator: 1 = byte
             }
             0xA7 => {
                 // CMPS WORD/DWORD/QWORD PTR [RSI], [RDI]
-                (Opcode::CMPS, vec![])
+                (Opcode::CMPS, vec![Operand::Immediate(0)]) // Size indicator: 0 = use operand_size
             }
             0xAA => {
                 // STOS BYTE PTR [RDI], AL
-                (Opcode::STOS, vec![])
+                (Opcode::STOS, vec![Operand::Immediate(1)]) // Size indicator: 1 = byte
             }
             0xAB => {
                 // STOS WORD/DWORD/QWORD PTR [RDI], AX/EAX/RAX
-                (Opcode::STOS, vec![])
+                (Opcode::STOS, vec![Operand::Immediate(0)]) // Size indicator: 0 = use operand_size
             }
             0xAC => {
                 // LODS AL, BYTE PTR [RSI]
-                (Opcode::LODS, vec![])
+                (Opcode::LODS, vec![Operand::Immediate(1)]) // Size indicator: 1 = byte
             }
             0xAD => {
                 // LODS AX/EAX/RAX, WORD/DWORD/QWORD PTR [RSI]
-                (Opcode::LODS, vec![])
+                (Opcode::LODS, vec![Operand::Immediate(0)]) // Size indicator: 0 = use operand_size
             }
             0xAE => {
                 // SCAS AL, BYTE PTR [RDI]
-                (Opcode::SCAS, vec![])
+                (Opcode::SCAS, vec![Operand::Immediate(1)]) // Size indicator: 1 = byte
             }
             0xAF => {
                 // SCAS AX/EAX/RAX, WORD/DWORD/QWORD PTR [RDI]
-                (Opcode::SCAS, vec![])
+                (Opcode::SCAS, vec![Operand::Immediate(0)]) // Size indicator: 0 = use operand_size
             }
             0xB0..=0xB7 => {
                 let reg = self.decode_register_from_opcode(opcode_byte - 0xB0, prefix, OperandSize::Byte);

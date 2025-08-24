@@ -888,15 +888,11 @@ impl Engine {
     }
     
     fn execute_movs(&mut self, inst: &Instruction) -> Result<()> {
-        // Determine operand size from instruction encoding
-        let size = if inst.address & 0xFF == 0xA4 {
+        // Determine operand size from the size indicator operand
+        let size = if let Some(Operand::Immediate(1)) = inst.operands.get(0) {
             OperandSize::Byte
-        } else if inst.prefix.operand_size_override {
-            OperandSize::Word
-        } else if inst.prefix.rex.as_ref().map_or(false, |r| r.w) {
-            OperandSize::QWord
         } else {
-            OperandSize::DWord
+            inst.operand_size
         };
         
         // Check if there's a REP prefix
@@ -953,15 +949,11 @@ impl Engine {
     }
     
     fn execute_cmps(&mut self, inst: &Instruction) -> Result<()> {
-        // Determine operand size from instruction encoding
-        let size = if inst.address & 0xFF == 0xA6 {
+        // Determine operand size from the size indicator operand
+        let size = if let Some(Operand::Immediate(1)) = inst.operands.get(0) {
             OperandSize::Byte
-        } else if inst.prefix.operand_size_override {
-            OperandSize::Word
-        } else if inst.prefix.rex.as_ref().map_or(false, |r| r.w) {
-            OperandSize::QWord
         } else {
-            OperandSize::DWord
+            inst.operand_size
         };
         
         // Check if there's a REP prefix
@@ -1043,15 +1035,11 @@ impl Engine {
     }
     
     fn execute_scas(&mut self, inst: &Instruction) -> Result<()> {
-        // Determine operand size from instruction encoding
-        let size = if inst.address & 0xFF == 0xAE {
+        // Determine operand size from the size indicator operand
+        let size = if let Some(Operand::Immediate(1)) = inst.operands.get(0) {
             OperandSize::Byte
-        } else if inst.prefix.operand_size_override {
-            OperandSize::Word
-        } else if inst.prefix.rex.as_ref().map_or(false, |r| r.w) {
-            OperandSize::QWord
         } else {
-            OperandSize::DWord
+            inst.operand_size
         };
         
         // Check if there's a REP prefix
@@ -1131,15 +1119,11 @@ impl Engine {
     }
     
     fn execute_stos(&mut self, inst: &Instruction) -> Result<()> {
-        // Determine operand size from instruction encoding
-        let size = if inst.address & 0xFF == 0xAA {
+        // Determine operand size from the size indicator operand
+        let size = if let Some(Operand::Immediate(1)) = inst.operands.get(0) {
             OperandSize::Byte
-        } else if inst.prefix.operand_size_override {
-            OperandSize::Word
-        } else if inst.prefix.rex.as_ref().map_or(false, |r| r.w) {
-            OperandSize::QWord
         } else {
-            OperandSize::DWord
+            inst.operand_size
         };
         
         // Check if there's a REP prefix
@@ -1193,15 +1177,11 @@ impl Engine {
     }
     
     fn execute_lods(&mut self, inst: &Instruction) -> Result<()> {
-        // Determine operand size from instruction encoding
-        let size = if inst.address & 0xFF == 0xAC {
+        // Determine operand size from the size indicator operand
+        let size = if let Some(Operand::Immediate(1)) = inst.operands.get(0) {
             OperandSize::Byte
-        } else if inst.prefix.operand_size_override {
-            OperandSize::Word
-        } else if inst.prefix.rex.as_ref().map_or(false, |r| r.w) {
-            OperandSize::QWord
         } else {
-            OperandSize::DWord
+            inst.operand_size
         };
         
         // Check if there's a REP prefix (rarely used with LODS)
