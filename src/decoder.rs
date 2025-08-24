@@ -229,10 +229,17 @@ impl Decoder {
                 offset += consumed;
                 (Opcode::TEST, vec![op1, op2])
             }
-            0x88..=0x8B => {
-                let (op1, op2, consumed) = self.decode_modrm_operands(&bytes[offset..], prefix)?;
+            0x88 | 0x89 => {
+                // MOV r/m, r - memory/rm is destination
+                let (rm_op, reg_op, consumed) = self.decode_modrm_operands(&bytes[offset..], prefix)?;
                 offset += consumed;
-                (Opcode::MOV, vec![op1, op2])
+                (Opcode::MOV, vec![rm_op, reg_op])
+            }
+            0x8A | 0x8B => {
+                // MOV r, r/m - register is destination
+                let (rm_op, reg_op, consumed) = self.decode_modrm_operands(&bytes[offset..], prefix)?;
+                offset += consumed;
+                (Opcode::MOV, vec![reg_op, rm_op])
             }
             0x90 => (Opcode::NOP, vec![]),
             0xB0..=0xB7 => {
