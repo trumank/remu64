@@ -182,13 +182,14 @@ impl Decoder {
         // consumed includes the opcode byte, and offset-1 is the position before we read the opcode
         let total_size = (offset - 1) + consumed;
         
+        let operand_size = self.operand_size(&prefix);
         Ok(Instruction {
             address,
             opcode,
             operands,
             size: total_size,
             prefix,
-            operand_size: self.operand_size(&prefix),
+            operand_size,
         })
     }
     
