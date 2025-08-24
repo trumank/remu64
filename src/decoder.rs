@@ -297,11 +297,23 @@ impl Decoder {
                 offset += consumed;
                 (Opcode::TEST, vec![op1, op2])
             }
+            0x87 => {
+                // XCHG r/m, r
+                let (rm_op, reg_op, consumed) = self.decode_modrm_operands(&bytes[offset..], prefix)?;
+                offset += consumed;
+                (Opcode::XCHG, vec![rm_op, reg_op])
+            }
             0x88 | 0x89 => {
                 // MOV r/m, r - memory/rm is destination
                 let (rm_op, reg_op, consumed) = self.decode_modrm_operands(&bytes[offset..], prefix)?;
                 offset += consumed;
                 (Opcode::MOV, vec![rm_op, reg_op])
+            }
+            0x8D => {
+                // LEA r, m
+                let (mem_op, reg_op, consumed) = self.decode_modrm_operands(&bytes[offset..], prefix)?;
+                offset += consumed;
+                (Opcode::LEA, vec![reg_op, mem_op])
             }
             0x8A | 0x8B => {
                 // MOV r, r/m - register is destination
@@ -323,6 +335,26 @@ impl Decoder {
                 (Opcode::MOV, vec![Operand::Register(reg), Operand::Immediate(imm)])
             }
             0xC3 => (Opcode::RET, vec![]),
+            0xD3 => {
+                // Shift/rotate group with CL
+                if bytes.len() <= offset {
+                    return Err(EmulatorError::InvalidInstruction(0));
+                }
+                let modrm = bytes[offset];
+                let reg_bits = (modrm >> 3) & 0x07;
+                let (rm_op, _, consumed) = self.decode_modrm_operands(&bytes[offset..], prefix)?;
+                offset += consumed;
+                
+                let opcode = match reg_bits {
+                    0 => Opcode::ROL,
+                    1 => Opcode::ROR,
+                    4 => Opcode::SHL,
+                    5 => Opcode::SHR,
+                    7 => Opcode::SAR,
+                    _ => return Err(EmulatorError::UnsupportedInstruction(format!("D3 /{}", reg_bits))),
+                };
+                (opcode, vec![rm_op, Operand::Register(Register::CL)])
+            }
             0xC7 => {
                 let (rm_op, _reg_op, consumed) = self.decode_modrm_operands(&bytes[offset..], prefix)?;
                 offset += consumed;
@@ -347,6 +379,22 @@ impl Decoder {
                 (Opcode::JMP, vec![Operand::Relative(rel as i64)])
             }
             0xF4 => (Opcode::HLT, vec![]),
+            0xF7 => {
+                // NEG/NOT group
+                if bytes.len() <= offset {
+                    return Err(EmulatorError::InvalidInstruction(0));
+                }
+                let modrm = bytes[offset];
+                let reg_bits = (modrm >> 3) & 0x07;
+                let (rm_op, _, consumed) = self.decode_modrm_operands(&bytes[offset..], prefix)?;
+                offset += consumed;
+                
+                match reg_bits {
+                    2 => (Opcode::NOT, vec![rm_op]),
+                    3 => (Opcode::NEG, vec![rm_op]),
+                    _ => return Err(EmulatorError::UnsupportedInstruction(format!("F7 /{}", reg_bits))),
+                }
+            }
             0xFF => {
                 if bytes.len() <= offset {
                     return Err(EmulatorError::InvalidInstruction(0));
