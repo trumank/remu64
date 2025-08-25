@@ -144,6 +144,8 @@ pub enum Opcode {
     BTC,
     VINSERTF128,
     VZEROUPPER,
+    MOVDQA,
+    BSR,
 }
 
 #[derive(Debug, Clone)]
@@ -683,6 +685,18 @@ impl Decoder {
                     .ok_or(EmulatorError::InvalidInstruction(0))? as i8
                     as i64;
                 offset += 1;
+                
+                (Opcode::IMUL, vec![reg_op, rm_op, Operand::Immediate(imm)])
+            }
+            0x69 => {
+                // IMUL r, r/m, imm32 - Three-operand signed multiply with 32-bit immediate
+                let (rm_op, reg_op, consumed) =
+                    self.decode_modrm_operands(&bytes[offset..], prefix)?;
+                offset += consumed;
+                
+                // Get the 32-bit immediate value (sign-extended)
+                let imm = self.decode_immediate(&bytes[offset..], OperandSize::DWord)?;
+                offset += 4;
                 
                 (Opcode::IMUL, vec![reg_op, rm_op, Operand::Immediate(imm)])
             }
@@ -1431,6 +1445,67 @@ impl Decoder {
                         let rel = self.decode_immediate(&bytes[offset..], OperandSize::DWord)?;
                         offset += 4;
                         (Opcode::JS, vec![Operand::Relative(rel)])
+                    }
+                    0x7F => {
+                        // MOVDQA xmm/m128, xmm - Move Aligned Double Quadword
+                        if bytes.len() <= offset {
+                            return Err(EmulatorError::InvalidInstruction(0));
+                        }
+                        
+                        let modrm = bytes[offset];
+                        let reg_bits = (modrm >> 3) & 0x07;
+                        let rm_bits = modrm & 0x07;
+                        let mod_bits = (modrm >> 6) & 0x03;
+                        
+                        // Source register (in reg field)
+                        let src_reg = self.decode_xmm_register(reg_bits, prefix);
+                        
+                        offset += 1;
+                        
+                        // Destination operand (r/m field)
+                        let dst_operand = if mod_bits == 0x03 {
+                            // Register to register
+                            let rm_reg = self.decode_xmm_register(rm_bits, prefix);
+                            Operand::Register(rm_reg)
+                        } else {
+                            // Memory operand - decode SIB and displacement
+                            let (base, index, scale, consumed_and_disp_size) =
+                                self.decode_sib_and_displacement(mod_bits, rm_bits, &bytes[offset..], prefix)?;
+                                
+                            let sib_consumed = if rm_bits == 4 { 1 } else { 0 };
+                            let disp_size = if rm_bits == 4 {
+                                consumed_and_disp_size - 1
+                            } else {
+                                consumed_and_disp_size
+                            };
+                            
+                            offset += sib_consumed;
+                            
+                            let displacement = if disp_size > 0 {
+                                let disp = self.decode_displacement(&bytes[offset..], disp_size)?;
+                                offset += disp_size;
+                                disp
+                            } else {
+                                0
+                            };
+                            
+                            Operand::Memory {
+                                base,
+                                index,
+                                scale,
+                                displacement,
+                                size: OperandSize::XmmWord,
+                            }
+                        };
+                        
+                        (Opcode::MOVDQA, vec![dst_operand, Operand::Register(src_reg)])
+                    }
+                    0xBD => {
+                        // BSR r, r/m - Bit Scan Reverse
+                        let (rm_op, reg_op, consumed) =
+                            self.decode_modrm_operands(&bytes[offset..], prefix)?;
+                        offset += consumed;
+                        (Opcode::BSR, vec![reg_op, rm_op])
                     }
                     0xB6 => {
                         // MOVZX r, r/m8 - Move with Zero-Extend byte to word/dword/qword

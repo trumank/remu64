@@ -435,6 +435,8 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             Opcode::BTC => self.execute_btc(inst),
             Opcode::VINSERTF128 => self.execute_vinsertf128(inst),
             Opcode::VZEROUPPER => self.execute_vzeroupper(inst),
+            Opcode::MOVDQA => self.execute_movdqa(inst),
+            Opcode::BSR => self.execute_bsr(inst),
             _ => {
                 if let Some(hooks) = &mut self.hooks {
                     hooks.on_invalid(self.engine, inst.address, 0)?;
@@ -3081,6 +3083,45 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             self.engine.cpu.ymm_regs[i] = ymm_value;
         }
 
+        Ok(())
+    }
+
+    fn execute_movdqa(&mut self, inst: &Instruction) -> Result<()> {
+        // MOVDQA - Move Aligned Double Quadword
+        // This is identical to MOVUPS but requires alignment (we'll treat it the same for simplicity)
+        if inst.operands.len() != 2 {
+            return Err(EmulatorError::InvalidInstruction(inst.address));
+        }
+
+        let value = self.read_xmm_operand(&inst.operands[1])?;
+        self.write_xmm_operand(&inst.operands[0], value)?;
+        Ok(())
+    }
+
+    fn execute_bsr(&mut self, inst: &Instruction) -> Result<()> {
+        // BSR - Bit Scan Reverse (find most significant bit set)
+        if inst.operands.len() != 2 {
+            return Err(EmulatorError::InvalidInstruction(inst.address));
+        }
+
+        let src_value = self.read_operand(&inst.operands[1], inst)?;
+
+        if src_value == 0 {
+            // If source is zero, set ZF and destination is undefined
+            self.engine.cpu.rflags.set(Flags::ZF, true);
+            // Leave destination register unchanged (undefined behavior)
+        } else {
+            // Find the most significant bit set (0-based from right)
+            let bit_pos = 63 - src_value.leading_zeros() as u64;
+
+            // Clear ZF to indicate bit was found
+            self.engine.cpu.rflags.set(Flags::ZF, false);
+
+            // Store bit position in destination
+            self.write_operand(&inst.operands[0], bit_pos, inst)?;
+        }
+
+        // BSR only affects ZF flag, other flags are undefined
         Ok(())
     }
 }
