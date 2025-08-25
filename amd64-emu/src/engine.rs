@@ -416,6 +416,8 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             Opcode::CDQ => self.execute_cdq(inst),
             Opcode::MOVSXD => self.execute_movsxd(inst),
             Opcode::MOVZX => self.execute_movzx(inst),
+            Opcode::MOVSX => self.execute_movsx(inst),
+            Opcode::SETE => self.execute_sete(inst),
             Opcode::SETBE => self.execute_setbe(inst),
             Opcode::SETNE => self.execute_setne(inst),
             Opcode::CMOVAE => self.execute_cmovae(inst),
@@ -2764,6 +2766,86 @@ impl<H: HookManager> ExecutionContext<'_, H> {
 
         // MOVZX doesn't affect any flags
         Ok(())
+    }
+
+    fn execute_movsx(&mut self, inst: &Instruction) -> Result<()> {
+        // MOVSX: Move with Sign-Extend
+        // Takes a smaller source operand, sign-extends it, and stores in destination
+        if inst.operands.len() != 2 {
+            return Err(EmulatorError::InvalidInstruction(inst.address));
+        }
+
+        let src_value = self.read_operand(&inst.operands[1], inst)?;
+        let src_size = self.get_operand_size(&inst.operands[1]);
+
+        let dest_value = match src_size {
+            OperandSize::Byte => {
+                // Sign-extend 8-bit to destination size
+                (src_value as u8 as i8) as i64 as u64
+            }
+            OperandSize::Word => {
+                // Sign-extend 16-bit to destination size
+                (src_value as u16 as i16) as i64 as u64
+            }
+            _ => {
+                // For larger source sizes, just use the value as-is
+                src_value
+            }
+        };
+
+        // Write to the destination register
+        self.write_operand(&inst.operands[0], dest_value, inst)?;
+
+        // MOVSX doesn't affect any flags
+        Ok(())
+    }
+
+    fn execute_sete(&mut self, inst: &Instruction) -> Result<()> {
+        // SETE: Set byte if equal (ZF=1)
+        if inst.operands.len() != 1 {
+            return Err(EmulatorError::InvalidInstruction(inst.address));
+        }
+
+        // Check condition: ZF=1 (equal for comparison)
+        let condition = self.engine.cpu.rflags.contains(Flags::ZF);
+
+        // Set the byte operand to 1 if condition is true, 0 if false
+        let value = if condition { 1u64 } else { 0u64 };
+
+        // Write only to the low byte of the operand
+        match &inst.operands[0] {
+            Operand::Register(reg) => {
+                // For register operands, we need to preserve the upper bits and only set the low byte
+                let current_value = self.engine.cpu.read_reg(*reg);
+                let new_value = (current_value & !0xFF) | (value & 0xFF);
+                self.engine.cpu.write_reg(*reg, new_value);
+                Ok(())
+            }
+            Operand::Memory { .. } => {
+                // For memory operands, write just the byte
+                if let Operand::Memory {
+                    base,
+                    index,
+                    scale,
+                    displacement,
+                    ..
+                } = &inst.operands[0]
+                {
+                    let mut addr = *displacement as u64;
+                    if let Some(base_reg) = base {
+                        addr = addr.wrapping_add(self.engine.cpu.read_reg(*base_reg));
+                    }
+                    if let Some(index_reg) = index {
+                        addr = addr
+                            .wrapping_add(self.engine.cpu.read_reg(*index_reg) * (*scale as u64));
+                    }
+                    self.mem_write_u8(addr, value as u8)
+                } else {
+                    Err(EmulatorError::InvalidOperand)
+                }
+            }
+            _ => Err(EmulatorError::InvalidOperand),
+        }
     }
 
     fn execute_setbe(&mut self, inst: &Instruction) -> Result<()> {

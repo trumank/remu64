@@ -126,6 +126,8 @@ pub enum Opcode {
     UCOMISD,
     MOVSXD,
     MOVZX,
+    MOVSX,
+    SETE,
     SETBE,
     SETNE,
     CMOVAE,
@@ -1546,6 +1548,26 @@ impl Decoder {
                         offset += consumed;
                         (Opcode::MOVZX, vec![reg_op, rm_op])
                     }
+                    0xBE => {
+                        // MOVSX r, r/m8 - Move with Sign-Extend byte to word/dword/qword
+                        let (rm_op, reg_op, consumed) = self.decode_movzx_operands(
+                            &bytes[offset..],
+                            prefix,
+                            OperandSize::Byte,
+                        )?;
+                        offset += consumed;
+                        (Opcode::MOVSX, vec![reg_op, rm_op])
+                    }
+                    0xBF => {
+                        // MOVSX r, r/m16 - Move with Sign-Extend word to dword/qword
+                        let (rm_op, reg_op, consumed) = self.decode_movzx_operands(
+                            &bytes[offset..],
+                            prefix,
+                            OperandSize::Word,
+                        )?;
+                        offset += consumed;
+                        (Opcode::MOVSX, vec![reg_op, rm_op])
+                    }
                     0x42 => {
                         // CMOVB r, r/m - Conditional move if below (CF=1)
                         let (rm_op, reg_op, consumed) =
@@ -1587,6 +1609,13 @@ impl Decoder {
                             self.decode_modrm_operands(&bytes[offset..], prefix)?;
                         offset += consumed;
                         (Opcode::CMOVG, vec![reg_op, rm_op])
+                    }
+                    0x94 => {
+                        // SETE r/m8 - Set byte if equal (ZF=1)
+                        let (rm_op, _, consumed) =
+                            self.decode_modrm_operands(&bytes[offset..], prefix)?;
+                        offset += consumed;
+                        (Opcode::SETE, vec![rm_op])
                     }
                     0x95 => {
                         // SETNE r/m8 - Set byte if not equal (ZF=0)
