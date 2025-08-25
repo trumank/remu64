@@ -71,6 +71,22 @@ pub enum Register {
     XMM13,
     XMM14,
     XMM15,
+    YMM0,
+    YMM1,
+    YMM2,
+    YMM3,
+    YMM4,
+    YMM5,
+    YMM6,
+    YMM7,
+    YMM8,
+    YMM9,
+    YMM10,
+    YMM11,
+    YMM12,
+    YMM13,
+    YMM14,
+    YMM15,
 }
 
 impl Register {
@@ -79,6 +95,8 @@ impl Register {
         match self {
             XMM0 | XMM1 | XMM2 | XMM3 | XMM4 | XMM5 | XMM6 | XMM7 | XMM8 | XMM9 | XMM10 | XMM11
             | XMM12 | XMM13 | XMM14 | XMM15 => 16,
+            YMM0 | YMM1 | YMM2 | YMM3 | YMM4 | YMM5 | YMM6 | YMM7 | YMM8 | YMM9 | YMM10 | YMM11
+            | YMM12 | YMM13 | YMM14 | YMM15 => 32,
             RAX | RBX | RCX | RDX | RSI | RDI | RBP | RSP | R8 | R9 | R10 | R11 | R12 | R13
             | R14 | R15 | RIP | RFLAGS => 8,
             EAX | EBX | ECX | EDX | ESI | EDI | EBP | ESP => 4,
@@ -120,6 +138,15 @@ impl Register {
             | XMM12 | XMM13 | XMM14 | XMM15
         )
     }
+
+    pub fn is_ymm(&self) -> bool {
+        use Register::*;
+        matches!(
+            self,
+            YMM0 | YMM1 | YMM2 | YMM3 | YMM4 | YMM5 | YMM6 | YMM7 | YMM8 | YMM9 | YMM10 | YMM11
+            | YMM12 | YMM13 | YMM14 | YMM15
+        )
+    }
 }
 
 bitflags! {
@@ -149,6 +176,7 @@ bitflags! {
 pub struct CpuState {
     pub regs: [u64; 16],
     pub xmm_regs: [u128; 16],
+    pub ymm_regs: [[u128; 2]; 16], // YMM as two u128 parts: [low_128, high_128]
     pub rip: u64,
     pub rflags: Flags,
     pub segments: SegmentRegisters,
@@ -210,6 +238,7 @@ impl CpuState {
         Self {
             regs: [0; 16],
             xmm_regs: [0; 16],
+            ymm_regs: [[0; 2]; 16],
             rip: 0,
             rflags: Flags::empty(),
             segments: SegmentRegisters::default(),
@@ -275,6 +304,10 @@ impl CpuState {
             | XMM12 | XMM13 | XMM14 | XMM15 => {
                 panic!("Cannot read XMM register as u64, use read_xmm instead")
             }
+            YMM0 | YMM1 | YMM2 | YMM3 | YMM4 | YMM5 | YMM6 | YMM7 | YMM8 | YMM9 | YMM10 | YMM11
+            | YMM12 | YMM13 | YMM14 | YMM15 => {
+                panic!("Cannot read YMM register as u64, use read_ymm instead")
+            }
         }
     }
 
@@ -298,6 +331,29 @@ impl CpuState {
             XMM14 => self.xmm_regs[14],
             XMM15 => self.xmm_regs[15],
             _ => panic!("Not an XMM register"),
+        }
+    }
+
+    pub fn read_ymm(&self, reg: Register) -> [u128; 2] {
+        use Register::*;
+        match reg {
+            YMM0 => self.ymm_regs[0],
+            YMM1 => self.ymm_regs[1],
+            YMM2 => self.ymm_regs[2],
+            YMM3 => self.ymm_regs[3],
+            YMM4 => self.ymm_regs[4],
+            YMM5 => self.ymm_regs[5],
+            YMM6 => self.ymm_regs[6],
+            YMM7 => self.ymm_regs[7],
+            YMM8 => self.ymm_regs[8],
+            YMM9 => self.ymm_regs[9],
+            YMM10 => self.ymm_regs[10],
+            YMM11 => self.ymm_regs[11],
+            YMM12 => self.ymm_regs[12],
+            YMM13 => self.ymm_regs[13],
+            YMM14 => self.ymm_regs[14],
+            YMM15 => self.ymm_regs[15],
+            _ => panic!("Not a YMM register"),
         }
     }
 
@@ -360,6 +416,10 @@ impl CpuState {
             | XMM12 | XMM13 | XMM14 | XMM15 => {
                 panic!("Cannot write XMM register with u64, use write_xmm instead")
             }
+            YMM0 | YMM1 | YMM2 | YMM3 | YMM4 | YMM5 | YMM6 | YMM7 | YMM8 | YMM9 | YMM10 | YMM11
+            | YMM12 | YMM13 | YMM14 | YMM15 => {
+                panic!("Cannot write YMM register with u64, use write_ymm instead")
+            }
         }
     }
 
@@ -383,6 +443,29 @@ impl CpuState {
             XMM14 => self.xmm_regs[14] = value,
             XMM15 => self.xmm_regs[15] = value,
             _ => panic!("Not an XMM register"),
+        }
+    }
+
+    pub fn write_ymm(&mut self, reg: Register, value: [u128; 2]) {
+        use Register::*;
+        match reg {
+            YMM0 => self.ymm_regs[0] = value,
+            YMM1 => self.ymm_regs[1] = value,
+            YMM2 => self.ymm_regs[2] = value,
+            YMM3 => self.ymm_regs[3] = value,
+            YMM4 => self.ymm_regs[4] = value,
+            YMM5 => self.ymm_regs[5] = value,
+            YMM6 => self.ymm_regs[6] = value,
+            YMM7 => self.ymm_regs[7] = value,
+            YMM8 => self.ymm_regs[8] = value,
+            YMM9 => self.ymm_regs[9] = value,
+            YMM10 => self.ymm_regs[10] = value,
+            YMM11 => self.ymm_regs[11] = value,
+            YMM12 => self.ymm_regs[12] = value,
+            YMM13 => self.ymm_regs[13] = value,
+            YMM14 => self.ymm_regs[14] = value,
+            YMM15 => self.ymm_regs[15] = value,
+            _ => panic!("Not a YMM register"),
         }
     }
 }

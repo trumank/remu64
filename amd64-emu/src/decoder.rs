@@ -8,6 +8,7 @@ pub enum OperandSize {
     DWord,
     QWord,
     XmmWord,
+    YmmWord,
 }
 
 #[derive(Debug, Clone)]
@@ -141,6 +142,8 @@ pub enum Opcode {
     BTS,
     BTR,
     BTC,
+    VINSERTF128,
+    VZEROUPPER,
 }
 
 #[derive(Debug, Clone)]
@@ -161,6 +164,7 @@ pub struct InstructionPrefix {
     pub segment: Option<Register>,
     pub rep: Option<RepPrefix>,
     pub lock: bool,
+    pub vex: Option<VexPrefix>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -169,6 +173,18 @@ pub struct RexPrefix {
     pub r: bool,
     pub x: bool,
     pub b: bool,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct VexPrefix {
+    pub r: bool,    // inverted
+    pub x: bool,    // inverted  
+    pub b: bool,    // inverted
+    pub m: u8,      // map_select (0=0F, 1=0F38, 2=0F3A, etc)
+    pub w: bool,    // REX.W equivalent
+    pub vvvv: u8,   // inverted additional operand specifier 
+    pub l: bool,    // vector length (0=128-bit, 1=256-bit)
+    pub pp: u8,     // mandatory prefix (0=none, 1=66, 2=F3, 3=F2)
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -224,6 +240,45 @@ impl Decoder {
                         b: (rex_byte & 0x01) != 0,
                     });
                 }
+                0xC4 => {
+                    // 3-byte VEX prefix
+                    if bytes.len() < offset + 3 {
+                        return Err(EmulatorError::InvalidInstruction(address));
+                    }
+                    let vex1 = bytes[offset + 1];
+                    let vex2 = bytes[offset + 2];
+                    
+                    prefix.vex = Some(VexPrefix {
+                        r: (vex1 & 0x80) == 0,  // inverted
+                        x: (vex1 & 0x40) == 0,  // inverted
+                        b: (vex1 & 0x20) == 0,  // inverted
+                        m: vex1 & 0x1F,
+                        w: (vex2 & 0x80) != 0,
+                        vvvv: (vex2 >> 3) & 0x0F,
+                        l: (vex2 & 0x04) != 0,
+                        pp: vex2 & 0x03,
+                    });
+                    offset += 2; // Skip the additional VEX bytes
+                }
+                0xC5 => {
+                    // 2-byte VEX prefix
+                    if bytes.len() < offset + 2 {
+                        return Err(EmulatorError::InvalidInstruction(address));
+                    }
+                    let vex1 = bytes[offset + 1];
+                    
+                    prefix.vex = Some(VexPrefix {
+                        r: (vex1 & 0x80) == 0,  // inverted
+                        x: false,               // implied 0 in 2-byte VEX
+                        b: false,               // implied 0 in 2-byte VEX
+                        m: 1,                   // implied 0F in 2-byte VEX
+                        w: false,               // implied 0 in 2-byte VEX
+                        vvvv: (vex1 >> 3) & 0x0F,
+                        l: (vex1 & 0x04) != 0,
+                        pp: vex1 & 0x03,
+                    });
+                    offset += 1; // Skip the additional VEX byte
+                }
                 _ => break,
             }
             offset += 1;
@@ -231,6 +286,24 @@ impl Decoder {
 
         if offset >= bytes.len() {
             return Err(EmulatorError::InvalidInstruction(address));
+        }
+
+        // Handle VEX prefix - if we have VEX, skip the prefix and decode the actual opcode
+        if prefix.vex.is_some() {
+            // For VEX prefix, the actual opcode is after the prefix bytes
+            // The offset is already positioned at the opcode byte after VEX prefix parsing
+            let (opcode, operands, consumed) =
+                self.decode_vex_instruction(&bytes[offset..], &prefix)?;
+            let total_size = offset + consumed;
+            let operand_size = self.operand_size(&prefix);
+            return Ok(Instruction {
+                address,
+                opcode,
+                operands,
+                size: total_size,
+                prefix,
+                operand_size,
+            });
         }
 
         let _opcode_byte = bytes[offset];
@@ -1772,6 +1845,25 @@ impl Decoder {
                 15 => Register::XMM15,
                 _ => Register::XMM0,
             },
+            OperandSize::YmmWord => match reg_num {
+                0 => Register::YMM0,
+                1 => Register::YMM1,
+                2 => Register::YMM2,
+                3 => Register::YMM3,
+                4 => Register::YMM4,
+                5 => Register::YMM5,
+                6 => Register::YMM6,
+                7 => Register::YMM7,
+                8 => Register::YMM8,
+                9 => Register::YMM9,
+                10 => Register::YMM10,
+                11 => Register::YMM11,
+                12 => Register::YMM12,
+                13 => Register::YMM13,
+                14 => Register::YMM14,
+                15 => Register::YMM15,
+                _ => Register::YMM0,
+            },
         }
     }
 
@@ -1827,6 +1919,7 @@ impl Decoder {
                 ]))
             }
             OperandSize::XmmWord => Err(EmulatorError::InvalidInstruction(0)),
+            OperandSize::YmmWord => Err(EmulatorError::InvalidInstruction(0)),
         }
     }
 
@@ -1905,7 +1998,9 @@ impl Decoder {
 
     fn decode_xmm_register(&self, reg: u8, prefix: &InstructionPrefix) -> Register {
         use Register::*;
-        let reg_num = if let Some(rex) = prefix.rex {
+        let reg_num = if let Some(vex) = prefix.vex {
+            reg + if vex.r { 8 } else { 0 }
+        } else if let Some(rex) = prefix.rex {
             reg + if rex.r { 8 } else { 0 }
         } else {
             reg
@@ -1931,6 +2026,238 @@ impl Decoder {
             _ => panic!("Invalid XMM register number: {}", reg_num),
         }
     }
+
+    fn decode_ymm_register(&self, reg: u8, prefix: &InstructionPrefix) -> Register {
+        use Register::*;
+        let reg_num = if let Some(vex) = prefix.vex {
+            reg + if vex.r { 8 } else { 0 }
+        } else if let Some(rex) = prefix.rex {
+            reg + if rex.r { 8 } else { 0 }
+        } else {
+            reg
+        };
+
+        match reg_num {
+            0 => YMM0,
+            1 => YMM1,
+            2 => YMM2,
+            3 => YMM3,
+            4 => YMM4,
+            5 => YMM5,
+            6 => YMM6,
+            7 => YMM7,
+            8 => YMM8,
+            9 => YMM9,
+            10 => YMM10,
+            11 => YMM11,
+            12 => YMM12,
+            13 => YMM13,
+            14 => YMM14,
+            15 => YMM15,
+            _ => panic!("Invalid YMM register number: {}", reg_num),
+        }
+    }
+
+    fn decode_vex_instruction(
+        &self,
+        bytes: &[u8],
+        prefix: &InstructionPrefix,
+    ) -> Result<(Opcode, Vec<Operand>, usize)> {
+        if bytes.is_empty() {
+            return Err(EmulatorError::InvalidInstruction(0));
+        }
+
+        let vex = prefix.vex.unwrap();
+        let opcode_byte = bytes[0];
+        let mut offset = 1;
+
+        // Handle different VEX maps (m field in VEX prefix)
+        let (opcode, operands) = match vex.m {
+            1 => {
+                // VEX.0F map - corresponds to legacy 0F prefix
+                match opcode_byte {
+                    0x11 => {
+                        // VMOVUPS xmm/ymm, xmm/ymm/m128/m256 (store register to memory/register)
+                        if bytes.len() <= offset {
+                            return Err(EmulatorError::InvalidInstruction(0));
+                        }
+                        
+                        let modrm = bytes[offset];
+                        let reg_bits = (modrm >> 3) & 0x07;
+                        let rm_bits = modrm & 0x07;
+                        let mod_bits = (modrm >> 6) & 0x03;
+                        
+                        // Source register (in reg field)
+                        let src_reg = if vex.l {
+                            self.decode_ymm_register(reg_bits, prefix)
+                        } else {
+                            self.decode_xmm_register(reg_bits, prefix)
+                        };
+                        
+                        offset += 1;
+                        
+                        // Destination operand (r/m field)
+                        let dst_operand = if mod_bits == 0x03 {
+                            // Register to register
+                            let rm_reg = if vex.l {
+                                self.decode_ymm_register(rm_bits, prefix)
+                            } else {
+                                self.decode_xmm_register(rm_bits, prefix)
+                            };
+                            Operand::Register(rm_reg)
+                        } else {
+                            // Memory operand - decode SIB and displacement
+                            let (base, index, scale, consumed_and_disp_size) =
+                                self.decode_sib_and_displacement(mod_bits, rm_bits, &bytes[offset..], prefix)?;
+                                
+                            let sib_consumed = if rm_bits == 4 { 1 } else { 0 };
+                            let disp_size = if rm_bits == 4 {
+                                consumed_and_disp_size - 1
+                            } else {
+                                consumed_and_disp_size
+                            };
+                            
+                            offset += sib_consumed;
+                            
+                            let displacement = if disp_size > 0 {
+                                let disp = self.decode_displacement(&bytes[offset..], disp_size)?;
+                                offset += disp_size;
+                                disp
+                            } else {
+                                0
+                            };
+                            
+                            Operand::Memory {
+                                base,
+                                index,
+                                scale,
+                                displacement,
+                                size: if vex.l { OperandSize::YmmWord } else { OperandSize::XmmWord },
+                            }
+                        };
+                        
+                        (
+                            Opcode::MOVUPS,
+                            vec![
+                                dst_operand,
+                                Operand::Register(src_reg),
+                            ],
+                        )
+                    }
+                    0x77 => {
+                        // VZEROUPPER - Zero upper bits of YMM registers
+                        // This instruction has no operands
+                        (Opcode::VZEROUPPER, vec![])
+                    }
+                    _ => {
+                        return Err(EmulatorError::UnsupportedInstruction(format!(
+                            "VEX.0F {:02X}",
+                            opcode_byte
+                        )))
+                    }
+                }
+            }
+            3 => {
+                // VEX.0F3A map - extended instructions
+                match opcode_byte {
+                    0x18 => {
+                        // VINSERTF128 ymm1, ymm2, xmm3/m128, imm8
+                        if bytes.len() <= offset {
+                            return Err(EmulatorError::InvalidInstruction(0));
+                        }
+                        
+                        let modrm = bytes[offset];
+                        let reg_bits = (modrm >> 3) & 0x07;
+                        let rm_bits = modrm & 0x07;
+                        let mod_bits = (modrm >> 6) & 0x03;
+                        
+                        // Destination is YMM register (L=1 for 256-bit)
+                        let dst_reg = if vex.l {
+                            self.decode_ymm_register(reg_bits, prefix)
+                        } else {
+                            self.decode_xmm_register(reg_bits, prefix)
+                        };
+                        
+                        // VEX.vvvv encodes the first source operand (inverted)
+                        let vvvv_reg = if vex.l {
+                            self.decode_ymm_register(!vex.vvvv & 0x0F, prefix)
+                        } else {
+                            self.decode_xmm_register(!vex.vvvv & 0x0F, prefix)
+                        };
+                        
+                        offset += 1;
+                        
+                        // Second source operand (XMM/m128)
+                        let src2_operand = if mod_bits == 0x03 {
+                            // Register to register
+                            let rm_reg = self.decode_xmm_register(rm_bits, prefix);
+                            Operand::Register(rm_reg)
+                        } else {
+                            // Memory operand - decode SIB and displacement
+                            let (base, index, scale, consumed_and_disp_size) =
+                                self.decode_sib_and_displacement(mod_bits, rm_bits, &bytes[offset..], prefix)?;
+                                
+                            let sib_consumed = if rm_bits == 4 { 1 } else { 0 };
+                            let disp_size = if rm_bits == 4 {
+                                consumed_and_disp_size - 1
+                            } else {
+                                consumed_and_disp_size
+                            };
+                            
+                            offset += sib_consumed;
+                            
+                            let displacement = if disp_size > 0 {
+                                let disp = self.decode_displacement(&bytes[offset..], disp_size)?;
+                                offset += disp_size;
+                                disp
+                            } else {
+                                0
+                            };
+                            
+                            Operand::Memory {
+                                base,
+                                index,
+                                scale,
+                                displacement,
+                                size: OperandSize::XmmWord,
+                            }
+                        };
+                        
+                        // Immediate operand
+                        if bytes.len() <= offset {
+                            return Err(EmulatorError::InvalidInstruction(0));
+                        }
+                        let imm = bytes[offset] as i64;
+                        offset += 1;
+                        
+                        (
+                            Opcode::VINSERTF128,
+                            vec![
+                                Operand::Register(dst_reg),
+                                Operand::Register(vvvv_reg),
+                                src2_operand,
+                                Operand::Immediate(imm),
+                            ],
+                        )
+                    }
+                    _ => {
+                        return Err(EmulatorError::UnsupportedInstruction(format!(
+                            "VEX.0F3A {:02X}",
+                            opcode_byte
+                        )))
+                    }
+                }
+            }
+            _ => {
+                return Err(EmulatorError::UnsupportedInstruction(format!(
+                    "VEX map {}: {:02X}",
+                    vex.m, opcode_byte
+                )))
+            }
+        };
+
+        Ok((opcode, operands, offset))
+    }
 }
 
 impl OperandSize {
@@ -1941,6 +2268,7 @@ impl OperandSize {
             OperandSize::DWord => 4,
             OperandSize::QWord => 8,
             OperandSize::XmmWord => 16,
+            OperandSize::YmmWord => 32,
         }
     }
 }

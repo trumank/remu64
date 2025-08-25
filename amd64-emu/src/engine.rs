@@ -433,6 +433,8 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             Opcode::BTS => self.execute_bts(inst),
             Opcode::BTR => self.execute_btr(inst),
             Opcode::BTC => self.execute_btc(inst),
+            Opcode::VINSERTF128 => self.execute_vinsertf128(inst),
+            Opcode::VZEROUPPER => self.execute_vzeroupper(inst),
             _ => {
                 if let Some(hooks) = &mut self.hooks {
                     hooks.on_invalid(self.engine, inst.address, 0)?;
@@ -1391,6 +1393,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             OperandSize::DWord => self.mem_read_u32(rsi)? as u64,
             OperandSize::QWord => self.mem_read_u64(rsi)?,
             OperandSize::XmmWord => return Err(EmulatorError::InvalidOperand),
+            OperandSize::YmmWord => return Err(EmulatorError::InvalidOperand),
         };
 
         // Write to [RDI]
@@ -1400,6 +1403,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             OperandSize::DWord => self.mem_write_u32(rdi, value as u32)?,
             OperandSize::QWord => self.mem_write_u64(rdi, value)?,
             OperandSize::XmmWord => return Err(EmulatorError::InvalidOperand),
+            OperandSize::YmmWord => return Err(EmulatorError::InvalidOperand),
         };
 
         // Update RSI and RDI based on direction flag
@@ -1484,6 +1488,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             OperandSize::DWord => self.mem_read_u32(rsi)? as u64,
             OperandSize::QWord => self.mem_read_u64(rsi)?,
             OperandSize::XmmWord => return Err(EmulatorError::InvalidOperand),
+            OperandSize::YmmWord => return Err(EmulatorError::InvalidOperand),
         };
 
         let src2 = match size {
@@ -1492,6 +1497,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             OperandSize::DWord => self.mem_read_u32(rdi)? as u64,
             OperandSize::QWord => self.mem_read_u64(rdi)?,
             OperandSize::XmmWord => return Err(EmulatorError::InvalidOperand),
+            OperandSize::YmmWord => return Err(EmulatorError::InvalidOperand),
         };
 
         // Compare src1 - src2
@@ -1579,6 +1585,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             OperandSize::DWord => self.engine.cpu.read_reg(Register::EAX),
             OperandSize::QWord => self.engine.cpu.read_reg(Register::RAX),
             OperandSize::XmmWord => return Err(EmulatorError::InvalidOperand),
+            OperandSize::YmmWord => return Err(EmulatorError::InvalidOperand),
         };
 
         // Read from [RDI]
@@ -1588,6 +1595,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             OperandSize::DWord => self.mem_read_u32(rdi)? as u64,
             OperandSize::QWord => self.mem_read_u64(rdi)?,
             OperandSize::XmmWord => return Err(EmulatorError::InvalidOperand),
+            OperandSize::YmmWord => return Err(EmulatorError::InvalidOperand),
         };
 
         // Compare accumulator - memory
@@ -1647,6 +1655,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             OperandSize::DWord => self.engine.cpu.read_reg(Register::EAX),
             OperandSize::QWord => self.engine.cpu.read_reg(Register::RAX),
             OperandSize::XmmWord => return Err(EmulatorError::InvalidOperand),
+            OperandSize::YmmWord => return Err(EmulatorError::InvalidOperand),
         };
 
         // Write to [RDI]
@@ -1656,6 +1665,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             OperandSize::DWord => self.mem_write_u32(rdi, acc as u32)?,
             OperandSize::QWord => self.mem_write_u64(rdi, acc)?,
             OperandSize::XmmWord => return Err(EmulatorError::InvalidOperand),
+            OperandSize::YmmWord => return Err(EmulatorError::InvalidOperand),
         };
 
         // Update RDI based on direction flag
@@ -1711,6 +1721,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             OperandSize::DWord => self.mem_read_u32(rsi)? as u64,
             OperandSize::QWord => self.mem_read_u64(rsi)?,
             OperandSize::XmmWord => return Err(EmulatorError::InvalidOperand),
+            OperandSize::YmmWord => return Err(EmulatorError::InvalidOperand),
         };
 
         // Store in accumulator
@@ -1720,6 +1731,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             OperandSize::DWord => self.engine.cpu.write_reg(Register::EAX, value),
             OperandSize::QWord => self.engine.cpu.write_reg(Register::RAX, value),
             OperandSize::XmmWord => return Err(EmulatorError::InvalidOperand),
+            OperandSize::YmmWord => return Err(EmulatorError::InvalidOperand),
         };
 
         // Update RSI based on direction flag
@@ -1777,6 +1789,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
                     OperandSize::DWord => self.mem_read_u32(addr).map(|v| v as u64),
                     OperandSize::QWord => self.mem_read_u64(addr),
                     OperandSize::XmmWord => Err(EmulatorError::InvalidOperand),
+                    OperandSize::YmmWord => Err(EmulatorError::InvalidOperand),
                 }
             }
             Operand::Relative(offset) => Ok((self.engine.cpu.rip as i64 + offset) as u64),
@@ -1841,6 +1854,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
                     OperandSize::DWord => self.mem_write_u32(addr, value as u32),
                     OperandSize::QWord => self.mem_write_u64(addr, value),
                     OperandSize::XmmWord => Err(EmulatorError::InvalidOperand),
+                    OperandSize::YmmWord => Err(EmulatorError::InvalidOperand),
                 }
             }
             _ => Err(EmulatorError::InvalidInstruction(0)),
@@ -1914,6 +1928,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             OperandSize::DWord => 0xFFFFFFFF,
             OperandSize::QWord => 0xFFFFFFFFFFFFFFFF,
             OperandSize::XmmWord => return Err(EmulatorError::InvalidInstruction(inst.address)),
+            OperandSize::YmmWord => return Err(EmulatorError::InvalidInstruction(inst.address)),
         };
         
         // Get the appropriate accumulator register
@@ -1923,6 +1938,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             OperandSize::DWord => Register::EAX,
             OperandSize::QWord => Register::RAX,
             OperandSize::XmmWord => return Err(EmulatorError::InvalidInstruction(inst.address)),
+            OperandSize::YmmWord => return Err(EmulatorError::InvalidInstruction(inst.address)),
         };
         
         let acc_value = self.engine.cpu.read_reg(acc_reg) & mask;
@@ -2100,6 +2116,31 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         }
     }
 
+    fn read_ymm_operand(&mut self, operand: &Operand) -> Result<[u128; 2]> {
+        match operand {
+            Operand::Register(reg) => Ok(self.engine.cpu.read_ymm(*reg)),
+            Operand::Memory {
+                base,
+                index,
+                scale,
+                displacement,
+                size,
+            } => {
+                if *size != OperandSize::YmmWord {
+                    return Err(EmulatorError::InvalidOperand);
+                }
+                let address = self.calculate_address(*base, *index, *scale, *displacement)?;
+                let mut bytes = [0u8; 32];
+                self.mem_read_with_hooks(address, &mut bytes)?;
+                // Split into two u128 values (low, high)
+                let low = u128::from_le_bytes(bytes[0..16].try_into().unwrap());
+                let high = u128::from_le_bytes(bytes[16..32].try_into().unwrap());
+                Ok([low, high])
+            }
+            _ => Err(EmulatorError::InvalidOperand),
+        }
+    }
+
     fn write_xmm_operand(&mut self, operand: &Operand, value: u128) -> Result<()> {
         match operand {
             Operand::Register(reg) => {
@@ -2125,6 +2166,33 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         }
     }
 
+    fn write_ymm_operand(&mut self, operand: &Operand, value: [u128; 2]) -> Result<()> {
+        match operand {
+            Operand::Register(reg) => {
+                self.engine.cpu.write_ymm(*reg, value);
+                Ok(())
+            }
+            Operand::Memory {
+                base,
+                index,
+                scale,
+                displacement,
+                size,
+            } => {
+                if *size != OperandSize::YmmWord {
+                    return Err(EmulatorError::InvalidOperand);
+                }
+                let address = self.calculate_address(*base, *index, *scale, *displacement)?;
+                let mut bytes = [0u8; 32];
+                bytes[0..16].copy_from_slice(&value[0].to_le_bytes());
+                bytes[16..32].copy_from_slice(&value[1].to_le_bytes());
+                self.mem_write_with_hooks(address, &bytes)?;
+                Ok(())
+            }
+            _ => Err(EmulatorError::InvalidOperand),
+        }
+    }
+
     fn execute_movaps(&mut self, inst: &Instruction) -> Result<()> {
         if inst.operands.len() != 2 {
             return Err(EmulatorError::InvalidInstruction(inst.address));
@@ -2138,8 +2206,23 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         if inst.operands.len() != 2 {
             return Err(EmulatorError::InvalidInstruction(inst.address));
         }
-        let value = self.read_xmm_operand(&inst.operands[1])?;
-        self.write_xmm_operand(&inst.operands[0], value)?;
+        
+        // Check if we're dealing with YMM or XMM registers
+        let is_ymm = match &inst.operands[1] {
+            Operand::Register(reg) => reg.is_ymm(),
+            Operand::Memory { size, .. } => *size == OperandSize::YmmWord,
+            _ => false,
+        };
+        
+        if is_ymm {
+            // YMM operation (256-bit)
+            let value = self.read_ymm_operand(&inst.operands[1])?;
+            self.write_ymm_operand(&inst.operands[0], value)?;
+        } else {
+            // XMM operation (128-bit)
+            let value = self.read_xmm_operand(&inst.operands[1])?;
+            self.write_xmm_operand(&inst.operands[0], value)?;
+        }
         Ok(())
     }
 
@@ -2885,6 +2968,94 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         // If condition is false, do nothing (don't modify destination)
 
         // CMOVG doesn't affect any flags
+        Ok(())
+    }
+
+    fn execute_vinsertf128(&mut self, inst: &Instruction) -> Result<()> {
+        // VINSERTF128 ymm1, ymm2, xmm3/m128, imm8
+        // Insert 128-bit float values from xmm3/m128 into ymm2 at position specified by imm8
+        // Store result in ymm1
+        if inst.operands.len() != 4 {
+            return Err(EmulatorError::InvalidInstruction(inst.address));
+        }
+
+        // Get the destination YMM register
+        let dst_ymm = if let Operand::Register(reg) = &inst.operands[0] {
+            if !reg.is_ymm() {
+                return Err(EmulatorError::InvalidInstruction(inst.address));
+            }
+            *reg
+        } else {
+            return Err(EmulatorError::InvalidInstruction(inst.address));
+        };
+
+        // Get the source YMM register (first source)
+        let src1_value = if let Operand::Register(reg) = &inst.operands[1] {
+            if reg.is_ymm() {
+                self.engine.cpu.read_ymm(*reg)
+            } else if reg.is_xmm() {
+                // If source is XMM, treat as lower half of YMM
+                [self.engine.cpu.read_xmm(*reg), 0]
+            } else {
+                return Err(EmulatorError::InvalidInstruction(inst.address));
+            }
+        } else {
+            return Err(EmulatorError::InvalidInstruction(inst.address));
+        };
+
+        // Get the second source (128-bit XMM or memory)
+        let src2_value = if let Operand::Register(reg) = &inst.operands[2] {
+            if reg.is_xmm() {
+                self.engine.cpu.read_xmm(*reg)
+            } else {
+                return Err(EmulatorError::InvalidInstruction(inst.address));
+            }
+        } else {
+            // Memory operand - read 128 bits
+            self.read_xmm_operand(&inst.operands[2])?
+        };
+
+        // Get the immediate value (position selector)
+        let imm = if let Operand::Immediate(val) = &inst.operands[3] {
+            *val as u8
+        } else {
+            return Err(EmulatorError::InvalidInstruction(inst.address));
+        };
+
+        // Perform the insertion based on the immediate value
+        let mut result = src1_value;
+        match imm & 1 {  // Only bit 0 is significant for VINSERTF128
+            0 => {
+                // Insert into lower 128 bits (bits 127:0)
+                result[0] = src2_value;
+            }
+            1 => {
+                // Insert into upper 128 bits (bits 255:128)
+                result[1] = src2_value;
+            }
+            _ => unreachable!(),
+        }
+
+        // Store result in destination YMM register
+        self.engine.cpu.write_ymm(dst_ymm, result);
+        Ok(())
+    }
+
+    fn execute_vzeroupper(&mut self, inst: &Instruction) -> Result<()> {
+        // VZEROUPPER - Zero upper bits of all YMM registers
+        // This sets the upper 128 bits (bits 255:128) of all YMM registers to zero
+        // The lower 128 bits (which correspond to XMM registers) are left unchanged
+        if !inst.operands.is_empty() {
+            return Err(EmulatorError::InvalidInstruction(inst.address));
+        }
+
+        // Zero the upper 128 bits of all YMM registers (YMM0-YMM15)
+        for i in 0..16 {
+            let mut ymm_value = self.engine.cpu.ymm_regs[i];
+            ymm_value[1] = 0; // Clear upper 128 bits, keep lower 128 bits
+            self.engine.cpu.ymm_regs[i] = ymm_value;
+        }
+
         Ok(())
     }
 }
