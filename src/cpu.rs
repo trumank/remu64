@@ -17,12 +17,18 @@ pub enum Register {
     AL, BL, CL, DL,
     AH, BH, CH, DH,
     SIL, DIL, BPL, SPL,
+    XMM0, XMM1, XMM2, XMM3,
+    XMM4, XMM5, XMM6, XMM7,
+    XMM8, XMM9, XMM10, XMM11,
+    XMM12, XMM13, XMM14, XMM15,
 }
 
 impl Register {
     pub fn size(&self) -> usize {
         use Register::*;
         match self {
+            XMM0 | XMM1 | XMM2 | XMM3 | XMM4 | XMM5 | XMM6 | XMM7 |
+            XMM8 | XMM9 | XMM10 | XMM11 | XMM12 | XMM13 | XMM14 | XMM15 => 16,
             RAX | RBX | RCX | RDX | RSI | RDI | RBP | RSP |
             R8 | R9 | R10 | R11 | R12 | R13 | R14 | R15 |
             RIP | RFLAGS => 8,
@@ -84,6 +90,7 @@ bitflags! {
 #[derive(Debug, Clone)]
 pub struct CpuState {
     pub regs: [u64; 16],
+    pub xmm_regs: [u128; 16],
     pub rip: u64,
     pub rflags: Flags,
     pub segments: SegmentRegisters,
@@ -135,6 +142,7 @@ impl CpuState {
     pub fn new() -> Self {
         Self {
             regs: [0; 16],
+            xmm_regs: [0; 16],
             rip: 0,
             rflags: Flags::empty(),
             segments: SegmentRegisters::default(),
@@ -196,6 +204,30 @@ impl CpuState {
             FS => self.segments.fs.selector as u64,
             GS => self.segments.gs.selector as u64,
             SS => self.segments.ss.selector as u64,
+            XMM0..=XMM15 => panic!("Cannot read XMM register as u64, use read_xmm instead"),
+        }
+    }
+    
+    pub fn read_xmm(&self, reg: Register) -> u128 {
+        use Register::*;
+        match reg {
+            XMM0 => self.xmm_regs[0],
+            XMM1 => self.xmm_regs[1],
+            XMM2 => self.xmm_regs[2],
+            XMM3 => self.xmm_regs[3],
+            XMM4 => self.xmm_regs[4],
+            XMM5 => self.xmm_regs[5],
+            XMM6 => self.xmm_regs[6],
+            XMM7 => self.xmm_regs[7],
+            XMM8 => self.xmm_regs[8],
+            XMM9 => self.xmm_regs[9],
+            XMM10 => self.xmm_regs[10],
+            XMM11 => self.xmm_regs[11],
+            XMM12 => self.xmm_regs[12],
+            XMM13 => self.xmm_regs[13],
+            XMM14 => self.xmm_regs[14],
+            XMM15 => self.xmm_regs[15],
+            _ => panic!("Not an XMM register"),
         }
     }
     
@@ -254,6 +286,30 @@ impl CpuState {
             FS => self.segments.fs.selector = value as u16,
             GS => self.segments.gs.selector = value as u16,
             SS => self.segments.ss.selector = value as u16,
+            XMM0..=XMM15 => panic!("Cannot write XMM register with u64, use write_xmm instead"),
+        }
+    }
+    
+    pub fn write_xmm(&mut self, reg: Register, value: u128) {
+        use Register::*;
+        match reg {
+            XMM0 => self.xmm_regs[0] = value,
+            XMM1 => self.xmm_regs[1] = value,
+            XMM2 => self.xmm_regs[2] = value,
+            XMM3 => self.xmm_regs[3] = value,
+            XMM4 => self.xmm_regs[4] = value,
+            XMM5 => self.xmm_regs[5] = value,
+            XMM6 => self.xmm_regs[6] = value,
+            XMM7 => self.xmm_regs[7] = value,
+            XMM8 => self.xmm_regs[8] = value,
+            XMM9 => self.xmm_regs[9] = value,
+            XMM10 => self.xmm_regs[10] = value,
+            XMM11 => self.xmm_regs[11] = value,
+            XMM12 => self.xmm_regs[12] = value,
+            XMM13 => self.xmm_regs[13] = value,
+            XMM14 => self.xmm_regs[14] = value,
+            XMM15 => self.xmm_regs[15] = value,
+            _ => panic!("Not an XMM register"),
         }
     }
 }
