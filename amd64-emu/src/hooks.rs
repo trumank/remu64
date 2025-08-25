@@ -12,7 +12,7 @@ pub enum HookType {
     MemRead,
     MemWrite,
     MemAccess,
-    MemFault,    // Called when memory access fails
+    MemFault, // Called when memory access fails
     Interrupt,
     Invalid,
 }
@@ -41,14 +41,14 @@ impl HookManager {
         by_type.insert(HookType::MemFault, Vec::new());
         by_type.insert(HookType::Interrupt, Vec::new());
         by_type.insert(HookType::Invalid, Vec::new());
-        
+
         Self {
             hooks: HashMap::new(),
             next_id: 1,
             by_type,
         }
     }
-    
+
     pub fn add_hook(
         &mut self,
         hook_type: HookType,
@@ -58,20 +58,20 @@ impl HookManager {
     ) -> HookId {
         let id = self.next_id;
         self.next_id += 1;
-        
+
         let hook = Hook {
             hook_type,
             callback,
             begin,
             end,
         };
-        
+
         self.hooks.insert(id, hook);
         self.by_type.get_mut(&hook_type).unwrap().push(id);
-        
+
         id
     }
-    
+
     pub fn remove_hook(&mut self, id: HookId) -> bool {
         if let Some(hook) = self.hooks.remove(&id) {
             if let Some(ids) = self.by_type.get_mut(&hook.hook_type) {
@@ -82,7 +82,7 @@ impl HookManager {
             false
         }
     }
-    
+
     pub fn run_code_hooks(&self, cpu: &mut CpuState, address: u64, size: usize) -> Result<()> {
         if let Some(ids) = self.by_type.get(&HookType::Code) {
             for &id in ids {
@@ -95,7 +95,7 @@ impl HookManager {
         }
         Ok(())
     }
-    
+
     pub fn run_mem_read_hooks(&self, cpu: &mut CpuState, address: u64, size: usize) -> Result<()> {
         for hook_type in [HookType::MemRead, HookType::MemAccess] {
             if let Some(ids) = self.by_type.get(&hook_type) {
@@ -110,7 +110,7 @@ impl HookManager {
         }
         Ok(())
     }
-    
+
     pub fn run_mem_write_hooks(&self, cpu: &mut CpuState, address: u64, size: usize) -> Result<()> {
         for hook_type in [HookType::MemWrite, HookType::MemAccess] {
             if let Some(ids) = self.by_type.get(&hook_type) {
@@ -125,7 +125,7 @@ impl HookManager {
         }
         Ok(())
     }
-    
+
     pub fn run_interrupt_hooks(&self, cpu: &mut CpuState, intno: u64) -> Result<()> {
         if let Some(ids) = self.by_type.get(&HookType::Interrupt) {
             for &id in ids {
@@ -136,7 +136,7 @@ impl HookManager {
         }
         Ok(())
     }
-    
+
     pub fn run_invalid_hooks(&self, cpu: &mut CpuState, address: u64) -> Result<()> {
         if let Some(ids) = self.by_type.get(&HookType::Invalid) {
             for &id in ids {
@@ -147,8 +147,13 @@ impl HookManager {
         }
         Ok(())
     }
-    
-    pub fn run_mem_fault_hooks(&self, cpu: &mut CpuState, address: u64, size: usize) -> Result<bool> {
+
+    pub fn run_mem_fault_hooks(
+        &self,
+        cpu: &mut CpuState,
+        address: u64,
+        size: usize,
+    ) -> Result<bool> {
         let mut handled = false;
         if let Some(ids) = self.by_type.get(&HookType::MemFault) {
             for &id in ids {
@@ -162,7 +167,7 @@ impl HookManager {
         }
         Ok(handled)
     }
-    
+
     pub fn clear(&mut self) {
         self.hooks.clear();
         for ids in self.by_type.values_mut() {

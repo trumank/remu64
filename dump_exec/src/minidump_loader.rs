@@ -46,7 +46,8 @@ impl MinidumpLoader {
     }
 
     pub fn get_module_base_address(&self, name: &str) -> Option<u64> {
-        self.get_module_by_name(name).map(|module| module.base_address())
+        self.get_module_by_name(name)
+            .map(|module| module.base_address())
     }
 
     pub fn read_memory(&self, address: u64, size: usize) -> Result<Vec<u8>> {
@@ -56,21 +57,21 @@ impl MinidumpLoader {
                     UnifiedMemory::Memory(mem) => mem.bytes,
                     UnifiedMemory::Memory64(mem) => mem.bytes,
                 };
-                
+
                 let base_address = match memory {
                     UnifiedMemory::Memory(mem) => mem.base_address,
                     UnifiedMemory::Memory64(mem) => mem.base_address,
                 };
-                
+
                 let offset = (address - base_address) as usize;
                 let available_size = std::cmp::min(size, bytes.len().saturating_sub(offset));
-                
+
                 if offset < bytes.len() && available_size > 0 {
                     return Ok(bytes[offset..offset + available_size].to_vec());
                 }
             }
         }
-        
+
         anyhow::bail!("Memory address 0x{:x} not found in minidump", address);
     }
 
@@ -83,12 +84,15 @@ impl MinidumpLoader {
     }
 
     pub fn list_modules(&self) -> Vec<(String, u64, u64)> {
-        self.modules.iter().map(|module| {
-            let name = module.code_file().to_string();
-            let base = module.base_address();
-            let size = module.size();
-            (name, base, size)
-        }).collect()
+        self.modules
+            .iter()
+            .map(|module| {
+                let name = module.code_file().to_string();
+                let base = module.base_address();
+                let size = module.size();
+                (name, base, size)
+            })
+            .collect()
     }
 
     pub fn find_module_for_address(&self, address: u64) -> Option<(String, u64, u64)> {
@@ -98,7 +102,8 @@ impl MinidumpLoader {
             if address >= base && address < base + size {
                 let name = module.code_file();
                 // Extract just the filename from the full path (handle both Unix and Windows separators)
-                let filename = name.rfind(['/', '\\'])
+                let filename = name
+                    .rfind(['/', '\\'])
                     .map(|pos| &name[pos + 1..])
                     .unwrap_or(&*name)
                     .to_string();

@@ -3,41 +3,90 @@ use std::fmt;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Register {
-    RAX, RBX, RCX, RDX,
-    RSI, RDI, RBP, RSP,
-    R8, R9, R10, R11,
-    R12, R13, R14, R15,
+    RAX,
+    RBX,
+    RCX,
+    RDX,
+    RSI,
+    RDI,
+    RBP,
+    RSP,
+    R8,
+    R9,
+    R10,
+    R11,
+    R12,
+    R13,
+    R14,
+    R15,
     RIP,
     RFLAGS,
-    CS, DS, ES, FS, GS, SS,
-    EAX, EBX, ECX, EDX,
-    ESI, EDI, EBP, ESP,
-    AX, BX, CX, DX,
-    SI, DI, BP, SP,
-    AL, BL, CL, DL,
-    AH, BH, CH, DH,
-    SIL, DIL, BPL, SPL,
-    XMM0, XMM1, XMM2, XMM3,
-    XMM4, XMM5, XMM6, XMM7,
-    XMM8, XMM9, XMM10, XMM11,
-    XMM12, XMM13, XMM14, XMM15,
+    CS,
+    DS,
+    ES,
+    FS,
+    GS,
+    SS,
+    EAX,
+    EBX,
+    ECX,
+    EDX,
+    ESI,
+    EDI,
+    EBP,
+    ESP,
+    AX,
+    BX,
+    CX,
+    DX,
+    SI,
+    DI,
+    BP,
+    SP,
+    AL,
+    BL,
+    CL,
+    DL,
+    AH,
+    BH,
+    CH,
+    DH,
+    SIL,
+    DIL,
+    BPL,
+    SPL,
+    XMM0,
+    XMM1,
+    XMM2,
+    XMM3,
+    XMM4,
+    XMM5,
+    XMM6,
+    XMM7,
+    XMM8,
+    XMM9,
+    XMM10,
+    XMM11,
+    XMM12,
+    XMM13,
+    XMM14,
+    XMM15,
 }
 
 impl Register {
     pub fn size(&self) -> usize {
         use Register::*;
         match self {
-            XMM0 | XMM1 | XMM2 | XMM3 | XMM4 | XMM5 | XMM6 | XMM7 |
-            XMM8 | XMM9 | XMM10 | XMM11 | XMM12 | XMM13 | XMM14 | XMM15 => 16,
-            RAX | RBX | RCX | RDX | RSI | RDI | RBP | RSP |
-            R8 | R9 | R10 | R11 | R12 | R13 | R14 | R15 |
-            RIP | RFLAGS => 8,
+            XMM0 | XMM1 | XMM2 | XMM3 | XMM4 | XMM5 | XMM6 | XMM7 | XMM8 | XMM9 | XMM10 | XMM11
+            | XMM12 | XMM13 | XMM14 | XMM15 => 16,
+            RAX | RBX | RCX | RDX | RSI | RDI | RBP | RSP | R8 | R9 | R10 | R11 | R12 | R13
+            | R14 | R15 | RIP | RFLAGS => 8,
             EAX | EBX | ECX | EDX | ESI | EDI | EBP | ESP => 4,
             AX | BX | CX | DX | SI | DI | BP | SP | CS | DS | ES | FS | GS | SS => 2,
             AL | BL | CL | DL | AH | BH | CH | DH | SIL | DIL | BPL | SPL => 1,
         }
     }
-    
+
     pub fn parent_64(&self) -> Option<Register> {
         use Register::*;
         match self {
@@ -128,7 +177,10 @@ impl Default for SegmentDescriptor {
 impl Default for SegmentRegisters {
     fn default() -> Self {
         Self {
-            cs: SegmentDescriptor { selector: 0x10, ..Default::default() },
+            cs: SegmentDescriptor {
+                selector: 0x10,
+                ..Default::default()
+            },
             ds: Default::default(),
             es: Default::default(),
             fs: Default::default(),
@@ -148,7 +200,7 @@ impl CpuState {
             segments: SegmentRegisters::default(),
         }
     }
-    
+
     pub fn read_reg(&self, reg: Register) -> u64 {
         use Register::*;
         match reg {
@@ -204,13 +256,13 @@ impl CpuState {
             FS => self.segments.fs.selector as u64,
             GS => self.segments.gs.selector as u64,
             SS => self.segments.ss.selector as u64,
-            XMM0 | XMM1 | XMM2 | XMM3 | XMM4 | XMM5 | XMM6 | XMM7 |
-            XMM8 | XMM9 | XMM10 | XMM11 | XMM12 | XMM13 | XMM14 | XMM15 => {
+            XMM0 | XMM1 | XMM2 | XMM3 | XMM4 | XMM5 | XMM6 | XMM7 | XMM8 | XMM9 | XMM10 | XMM11
+            | XMM12 | XMM13 | XMM14 | XMM15 => {
                 panic!("Cannot read XMM register as u64, use read_xmm instead")
             }
         }
     }
-    
+
     pub fn read_xmm(&self, reg: Register) -> u128 {
         use Register::*;
         match reg {
@@ -233,7 +285,7 @@ impl CpuState {
             _ => panic!("Not an XMM register"),
         }
     }
-    
+
     pub fn write_reg(&mut self, reg: Register, value: u64) {
         use Register::*;
         match reg {
@@ -289,13 +341,13 @@ impl CpuState {
             FS => self.segments.fs.selector = value as u16,
             GS => self.segments.gs.selector = value as u16,
             SS => self.segments.ss.selector = value as u16,
-            XMM0 | XMM1 | XMM2 | XMM3 | XMM4 | XMM5 | XMM6 | XMM7 |
-            XMM8 | XMM9 | XMM10 | XMM11 | XMM12 | XMM13 | XMM14 | XMM15 => {
+            XMM0 | XMM1 | XMM2 | XMM3 | XMM4 | XMM5 | XMM6 | XMM7 | XMM8 | XMM9 | XMM10 | XMM11
+            | XMM12 | XMM13 | XMM14 | XMM15 => {
                 panic!("Cannot write XMM register with u64, use write_xmm instead")
             }
         }
     }
-    
+
     pub fn write_xmm(&mut self, reg: Register, value: u128) {
         use Register::*;
         match reg {
@@ -323,16 +375,53 @@ impl CpuState {
 impl fmt::Display for CpuState {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(f, "CPU State:")?;
-        writeln!(f, "  RAX: {:#018x}  R8:  {:#018x}", self.regs[0], self.regs[8])?;
-        writeln!(f, "  RBX: {:#018x}  R9:  {:#018x}", self.regs[3], self.regs[9])?;
-        writeln!(f, "  RCX: {:#018x}  R10: {:#018x}", self.regs[1], self.regs[10])?;
-        writeln!(f, "  RDX: {:#018x}  R11: {:#018x}", self.regs[2], self.regs[11])?;
-        writeln!(f, "  RSI: {:#018x}  R12: {:#018x}", self.regs[6], self.regs[12])?;
-        writeln!(f, "  RDI: {:#018x}  R13: {:#018x}", self.regs[7], self.regs[13])?;
-        writeln!(f, "  RBP: {:#018x}  R14: {:#018x}", self.regs[5], self.regs[14])?;
-        writeln!(f, "  RSP: {:#018x}  R15: {:#018x}", self.regs[4], self.regs[15])?;
+        writeln!(
+            f,
+            "  RAX: {:#018x}  R8:  {:#018x}",
+            self.regs[0], self.regs[8]
+        )?;
+        writeln!(
+            f,
+            "  RBX: {:#018x}  R9:  {:#018x}",
+            self.regs[3], self.regs[9]
+        )?;
+        writeln!(
+            f,
+            "  RCX: {:#018x}  R10: {:#018x}",
+            self.regs[1], self.regs[10]
+        )?;
+        writeln!(
+            f,
+            "  RDX: {:#018x}  R11: {:#018x}",
+            self.regs[2], self.regs[11]
+        )?;
+        writeln!(
+            f,
+            "  RSI: {:#018x}  R12: {:#018x}",
+            self.regs[6], self.regs[12]
+        )?;
+        writeln!(
+            f,
+            "  RDI: {:#018x}  R13: {:#018x}",
+            self.regs[7], self.regs[13]
+        )?;
+        writeln!(
+            f,
+            "  RBP: {:#018x}  R14: {:#018x}",
+            self.regs[5], self.regs[14]
+        )?;
+        writeln!(
+            f,
+            "  RSP: {:#018x}  R15: {:#018x}",
+            self.regs[4], self.regs[15]
+        )?;
         writeln!(f, "  RIP: {:#018x}", self.rip)?;
-        writeln!(f, "  RFLAGS: {:#018x} {:?}", self.rflags.bits(), self.rflags)?;
+        writeln!(
+            f,
+            "  RFLAGS: {:#018x} {:?}",
+            self.rflags.bits(),
+            self.rflags
+        )?;
         Ok(())
     }
 }

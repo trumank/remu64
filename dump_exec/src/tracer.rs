@@ -1,9 +1,12 @@
-use anyhow::Result;
-use iced_x86::{Decoder, DecoderOptions, Formatter, FormatterOutput, FormatterTextKind, IntelFormatter, Instruction};
-use amd64_emu::{Engine, Register};
-use std::io::Write;
-use colored::*;
 use crate::MinidumpLoader;
+use amd64_emu::{Engine, Register};
+use anyhow::Result;
+use colored::*;
+use iced_x86::{
+    Decoder, DecoderOptions, Formatter, FormatterOutput, FormatterTextKind, Instruction,
+    IntelFormatter,
+};
+use std::io::Write;
 
 struct ColorFormatterOutput {
     result: String,
@@ -79,11 +82,11 @@ impl InstructionTracer {
     pub fn set_enabled(&mut self, enabled: bool) {
         self.enabled = enabled;
     }
-    
+
     pub fn set_full_trace(&mut self, full_trace: bool) {
         self.full_trace = full_trace;
     }
-    
+
     pub fn is_full_trace_enabled(&self) -> bool {
         self.full_trace
     }
@@ -109,14 +112,16 @@ impl InstructionTracer {
         // Get instruction length and actual bytes
         let instruction_len = instruction.len();
         let actual_bytes = &instruction_bytes[..instruction_len.min(instruction_bytes.len())];
-        let hex_bytes = actual_bytes.iter()
+        let hex_bytes = actual_bytes
+            .iter()
             .map(|b| format!("{:02x}", b))
             .collect::<Vec<_>>()
             .join(" ");
 
         // Format the disassembly with colors
         self.formatter_output.clear();
-        self.formatter.format(&instruction, &mut self.formatter_output);
+        self.formatter
+            .format(&instruction, &mut self.formatter_output);
         let colored_disasm = self.formatter_output.get_result();
 
         // Get register values
@@ -138,15 +143,19 @@ impl InstructionTracer {
         let r15 = engine.reg_read(Register::R15).unwrap_or(0);
 
         // Check if RIP is in a known module
-        let module_info = loader
-            .and_then(|l| l.find_module_for_address(rip));
+        let module_info = loader.and_then(|l| l.find_module_for_address(rip));
 
         // Format the address with module information and always show RIP
         let address_str = match module_info {
             Some((module_name, _base, offset)) => {
-                format!("0x{:016x} ({}+0x{:x})", rip, module_name.green().bold(), offset)
+                format!(
+                    "0x{:016x} ({}+0x{:x})",
+                    rip,
+                    module_name.green().bold(),
+                    offset
+                )
             }
-            None => format!("0x{:016x}", rip).yellow().to_string()
+            None => format!("0x{:016x}", rip).yellow().to_string(),
         };
 
         if self.full_trace {
@@ -160,7 +169,7 @@ impl InstructionTracer {
                 hex_bytes.bright_magenta(),
                 instruction_len
             )?;
-            
+
             // Show all general-purpose registers in a compact format
             writeln!(
                 self.output,
@@ -202,7 +211,7 @@ impl InstructionTracer {
                 let reg = instruction.op_register(i);
                 reg == iced_x86::Register::RSP || reg == iced_x86::Register::RBP
             });
-            
+
             if uses_rsp_rbp {
                 writeln!(
                     self.output,
@@ -217,7 +226,7 @@ impl InstructionTracer {
                 let reg = instruction.op_register(i);
                 reg == iced_x86::Register::RSI || reg == iced_x86::Register::RDI
             });
-            
+
             if uses_rsi_rdi {
                 writeln!(
                     self.output,
@@ -232,7 +241,7 @@ impl InstructionTracer {
                 let reg = instruction.op_register(i);
                 reg == iced_x86::Register::R8 || reg == iced_x86::Register::R9
             });
-            
+
             if uses_r8_r9 {
                 writeln!(
                     self.output,
@@ -247,7 +256,6 @@ impl InstructionTracer {
         Ok(())
     }
 
-
     pub fn trace_memory_access(
         &mut self,
         address: u64,
@@ -259,8 +267,12 @@ impl InstructionTracer {
             return Ok(());
         }
 
-        let access_type = if is_write { "WRITE".red() } else { "READ".blue() };
-        
+        let access_type = if is_write {
+            "WRITE".red()
+        } else {
+            "READ".blue()
+        };
+
         match value {
             Some(val) => {
                 writeln!(

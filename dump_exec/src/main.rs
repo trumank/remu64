@@ -1,6 +1,6 @@
-use dump_exec::{DumpExec, ArgumentType};
 use anyhow::Result;
 use clap::Parser;
+use dump_exec::{ArgumentType, DumpExec};
 
 #[derive(Parser)]
 #[command(name = "dump_exec")]
@@ -34,10 +34,10 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
 
     let minidump_path = &cli.minidump_path;
-    
+
     println!("Loading minidump from: {}", minidump_path);
     let loader = DumpExec::load_minidump(minidump_path)?;
-    
+
     if cli.list_modules {
         println!("Modules found:");
         for (name, base, size) in loader.list_modules() {
@@ -55,7 +55,8 @@ fn main() -> Result<()> {
         u64::from_str_radix(&function_address_str[2..], 16)
     } else {
         function_address_str.parse::<u64>()
-    }.map_err(|_| anyhow::anyhow!("Invalid function address: {}", function_address_str))?;
+    }
+    .map_err(|_| anyhow::anyhow!("Invalid function address: {}", function_address_str))?;
 
     let mut function_args = Vec::new();
     for arg in &cli.args {
@@ -64,15 +65,18 @@ fn main() -> Result<()> {
                 .map_err(|_| anyhow::anyhow!("Invalid pointer argument: {}", arg))?;
             function_args.push(ArgumentType::Pointer(ptr_value));
         } else if arg.starts_with("ptr:") {
-            let ptr_value = arg[4..].parse::<u64>()
+            let ptr_value = arg[4..]
+                .parse::<u64>()
                 .map_err(|_| anyhow::anyhow!("Invalid pointer argument: {}", arg))?;
             function_args.push(ArgumentType::Pointer(ptr_value));
         } else if arg.contains('.') {
-            let float_value = arg.parse::<f64>()
+            let float_value = arg
+                .parse::<f64>()
                 .map_err(|_| anyhow::anyhow!("Invalid float argument: {}", arg))?;
             function_args.push(ArgumentType::Float(float_value));
         } else {
-            let int_value = arg.parse::<u64>()
+            let int_value = arg
+                .parse::<u64>()
                 .map_err(|_| anyhow::anyhow!("Invalid integer argument: {}", arg))?;
             function_args.push(ArgumentType::Integer(int_value));
         }
@@ -80,32 +84,34 @@ fn main() -> Result<()> {
 
     println!("Creating function executor...");
     let mut executor = DumpExec::create_executor(loader)?;
-    
+
     if cli.trace {
         println!("Enabling instruction tracing...");
         executor.enable_tracing(true);
     }
-    
+
     if cli.full_trace {
         println!("Enabling full CPU state tracing...");
         executor.enable_tracing(true);
         executor.enable_full_trace(true);
     }
 
-    println!("Executing function at 0x{:x} with {} arguments", function_address, function_args.len());
-    
+    println!(
+        "Executing function at 0x{:x} with {} arguments",
+        function_address,
+        function_args.len()
+    );
+
     match executor.execute_function(function_address, function_args) {
-        Ok(_) => {
-            match executor.get_return_value() {
-                Ok(return_value) => {
-                    println!("Function executed successfully!");
-                    println!("Return value: 0x{:x} ({})", return_value, return_value);
-                }
-                Err(e) => {
-                    println!("Function executed, but failed to read return value: {}", e);
-                }
+        Ok(_) => match executor.get_return_value() {
+            Ok(return_value) => {
+                println!("Function executed successfully!");
+                println!("Return value: 0x{:x} ({})", return_value, return_value);
             }
-        }
+            Err(e) => {
+                println!("Function executed, but failed to read return value: {}", e);
+            }
+        },
         Err(e) => {
             eprintln!("Function execution failed: {}", e);
             std::process::exit(1);

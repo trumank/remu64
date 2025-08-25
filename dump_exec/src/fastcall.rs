@@ -1,4 +1,4 @@
-use amd64_emu::{Register, Engine};
+use amd64_emu::{Engine, Register};
 use anyhow::Result;
 
 #[derive(Debug, Clone)]
@@ -49,12 +49,7 @@ impl FastcallSetup {
     }
 
     pub fn setup_registers(&self, engine: &mut Engine, stack_pointer: u64) -> Result<u64> {
-        let integer_registers = [
-            Register::RCX,
-            Register::RDX,
-            Register::R8,
-            Register::R9,
-        ];
+        let integer_registers = [Register::RCX, Register::RDX, Register::R8, Register::R9];
 
         for (_i, &value) in self.integer_args.iter().enumerate() {
             if _i < integer_registers.len() {
@@ -63,7 +58,7 @@ impl FastcallSetup {
         }
 
         let mut current_stack = stack_pointer;
-        
+
         current_stack -= 8;
         engine.reg_write(Register::RSP, current_stack)?;
 
@@ -109,7 +104,7 @@ impl CallingConvention {
 
     pub fn setup_shadow_space(engine: &mut Engine) -> Result<()> {
         let current_rsp = engine.reg_read(Register::RSP)?;
-        let shadow_space_rsp = current_rsp - 32; 
+        let shadow_space_rsp = current_rsp - 32;
         engine.reg_write(Register::RSP, shadow_space_rsp)?;
         Ok(())
     }
