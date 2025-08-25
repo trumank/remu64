@@ -636,6 +636,17 @@ impl Decoder {
                 offset += consumed;
                 (Opcode::CMP, vec![reg_op, rm_op])
             }
+            0x3D => {
+                // CMP EAX, imm32 - Compare EAX with immediate
+                let imm = self.decode_immediate(&bytes[offset..], OperandSize::DWord)?;
+                offset += 4;
+                let reg = if prefix.rex.map_or(false, |r| r.w) {
+                    Register::RAX
+                } else {
+                    Register::EAX
+                };
+                (Opcode::CMP, vec![Operand::Register(reg), Operand::Immediate(imm)])
+            }
             0x50..=0x57 => {
                 let reg = self.decode_register_from_opcode(
                     opcode_byte - 0x50,
@@ -658,6 +669,22 @@ impl Decoder {
                     self.decode_modrm_operands(&bytes[offset..], prefix)?;
                 offset += consumed;
                 (Opcode::MOVSXD, vec![reg_op, rm_op])
+            }
+            0x6B => {
+                // IMUL r, r/m, imm8 - Three-operand signed multiply with 8-bit immediate
+                let (rm_op, reg_op, consumed) =
+                    self.decode_modrm_operands(&bytes[offset..], prefix)?;
+                offset += consumed;
+                
+                // Get the 8-bit immediate value (sign-extended)
+                let imm = bytes
+                    .get(offset)
+                    .copied()
+                    .ok_or(EmulatorError::InvalidInstruction(0))? as i8
+                    as i64;
+                offset += 1;
+                
+                (Opcode::IMUL, vec![reg_op, rm_op, Operand::Immediate(imm)])
             }
             0x74 => {
                 let rel = bytes
@@ -1375,6 +1402,11 @@ impl Decoder {
                         offset += 4;
                         (Opcode::JB, vec![Operand::Relative(rel)])
                     }
+                    0x83 => {
+                        let rel = self.decode_immediate(&bytes[offset..], OperandSize::DWord)?;
+                        offset += 4;
+                        (Opcode::JAE, vec![Operand::Relative(rel)])
+                    }
                     0x84 => {
                         let rel = self.decode_immediate(&bytes[offset..], OperandSize::DWord)?;
                         offset += 4;
@@ -1394,6 +1426,11 @@ impl Decoder {
                         let rel = self.decode_immediate(&bytes[offset..], OperandSize::DWord)?;
                         offset += 4;
                         (Opcode::JA, vec![Operand::Relative(rel)])
+                    }
+                    0x88 => {
+                        let rel = self.decode_immediate(&bytes[offset..], OperandSize::DWord)?;
+                        offset += 4;
+                        (Opcode::JS, vec![Operand::Relative(rel)])
                     }
                     0xB6 => {
                         // MOVZX r, r/m8 - Move with Zero-Extend byte to word/dword/qword

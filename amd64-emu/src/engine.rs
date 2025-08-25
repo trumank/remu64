@@ -1158,6 +1158,31 @@ impl<H: HookManager> ExecutionContext<'_, H> {
                 self.engine.cpu.rflags.set(Flags::CF, overflow);
                 self.engine.cpu.rflags.set(Flags::OF, overflow);
             }
+            3 => {
+                // Three operand form: reg1 = reg2/mem * imm (signed)
+                let multiplicand = self.read_operand(&inst.operands[1], inst)? as i64;
+                let multiplier = self.read_operand(&inst.operands[2], inst)? as i64;
+
+                let result = (multiplicand as i128) * (multiplier as i128);
+
+                // Store result in destination register
+                self.write_operand(&inst.operands[0], result as u64, inst)?;
+
+                // Set CF and OF if result doesn't fit in destination size (signed)
+                let dest_size = match inst.operand_size {
+                    OperandSize::Word => 16,
+                    OperandSize::DWord => 32,
+                    OperandSize::QWord => 64,
+                    _ => 64,
+                };
+                
+                let max_positive = (1i128 << (dest_size - 1)) - 1;
+                let min_negative = -(1i128 << (dest_size - 1));
+                let overflow = result > max_positive || result < min_negative;
+                
+                self.engine.cpu.rflags.set(Flags::CF, overflow);
+                self.engine.cpu.rflags.set(Flags::OF, overflow);
+            }
             _ => {
                 return Err(EmulatorError::InvalidInstruction(inst.address));
             }
