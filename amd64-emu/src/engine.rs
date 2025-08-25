@@ -208,6 +208,102 @@ struct ExecutionContext<'a, H: HookManager> {
 }
 
 impl<H: HookManager> ExecutionContext<'_, H> {
+    fn mem_read_with_hooks(&mut self, address: u64, buf: &mut [u8]) -> Result<()> {
+        if let Some(hooks) = self.hooks.as_deref_mut() {
+            hooks.on_mem_read(self.engine, address, buf.len())?;
+        }
+
+        // Try to read memory, handle faults with hooks
+        match self.engine.memory.read(address, buf) {
+            Ok(()) => Ok(()),
+            Err(EmulatorError::UnmappedMemory(_)) => {
+                // Try to handle the fault with memory fault hooks
+                if let Some(hooks) = self.hooks.as_deref_mut() {
+                    if hooks.on_mem_fault(self.engine, address, buf.len())? {
+                        // Hook handled the fault, try reading again
+                        self.engine.memory.read(address, buf)
+                    } else {
+                        // No hook handled the fault, return original error
+                        Err(EmulatorError::UnmappedMemory(address))
+                    }
+                } else {
+                    Err(EmulatorError::UnmappedMemory(address))
+                }
+            }
+            Err(e) => Err(e),
+        }
+    }
+
+    fn mem_write_with_hooks(&mut self, address: u64, buf: &[u8]) -> Result<()> {
+        if let Some(hooks) = self.hooks.as_deref_mut() {
+            hooks.on_mem_write(self.engine, address, buf.len())?;
+        }
+
+        // Try to write memory, handle faults with hooks
+        match self.engine.memory.write(address, buf) {
+            Ok(()) => Ok(()),
+            Err(EmulatorError::UnmappedMemory(_)) => {
+                // Try to handle the fault with memory fault hooks
+                if let Some(hooks) = self.hooks.as_deref_mut() {
+                    if hooks.on_mem_fault(self.engine, address, buf.len())? {
+                        // Hook handled the fault, try writing again
+                        self.engine.memory.write(address, buf)
+                    } else {
+                        // No hook handled the fault, return original error
+                        Err(EmulatorError::UnmappedMemory(address))
+                    }
+                } else {
+                    Err(EmulatorError::UnmappedMemory(address))
+                }
+            }
+            Err(e) => Err(e),
+        }
+    }
+
+    fn mem_read_u8(&mut self, address: u64) -> Result<u8> {
+        let mut buf = [0u8; 1];
+        self.mem_read_with_hooks(address, &mut buf)?;
+        Ok(buf[0])
+    }
+
+    fn mem_read_u16(&mut self, address: u64) -> Result<u16> {
+        let mut buf = [0u8; 2];
+        self.mem_read_with_hooks(address, &mut buf)?;
+        Ok(u16::from_le_bytes(buf))
+    }
+
+    fn mem_read_u32(&mut self, address: u64) -> Result<u32> {
+        let mut buf = [0u8; 4];
+        self.mem_read_with_hooks(address, &mut buf)?;
+        Ok(u32::from_le_bytes(buf))
+    }
+
+    fn mem_read_u64(&mut self, address: u64) -> Result<u64> {
+        let mut buf = [0u8; 8];
+        self.mem_read_with_hooks(address, &mut buf)?;
+        Ok(u64::from_le_bytes(buf))
+    }
+
+    fn mem_write_u8(&mut self, address: u64, value: u8) -> Result<()> {
+        let buf = [value];
+        self.mem_write_with_hooks(address, &buf)
+    }
+
+    fn mem_write_u16(&mut self, address: u64, value: u16) -> Result<()> {
+        let buf = value.to_le_bytes();
+        self.mem_write_with_hooks(address, &buf)
+    }
+
+    fn mem_write_u32(&mut self, address: u64, value: u32) -> Result<()> {
+        let buf = value.to_le_bytes();
+        self.mem_write_with_hooks(address, &buf)
+    }
+
+    fn mem_write_u64(&mut self, address: u64, value: u64) -> Result<()> {
+        let buf = value.to_le_bytes();
+        self.mem_write_with_hooks(address, &buf)
+    }
+
     fn execute_instruction(&mut self, inst: &Instruction) -> Result<()> {
         match inst.opcode {
             Opcode::MOV => self.execute_mov(inst),
@@ -1055,7 +1151,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         let rsp = self.engine.cpu.read_reg(Register::RSP);
         let new_rsp = rsp.wrapping_sub(8);
         self.engine.cpu.write_reg(Register::RSP, new_rsp);
-        self.engine.memory.write_u64(new_rsp, value)?;
+        self.mem_write_u64(new_rsp, value)?;
         Ok(())
     }
 
@@ -1065,7 +1161,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         }
 
         let rsp = self.engine.cpu.read_reg(Register::RSP);
-        let value = self.engine.memory.read_u64(rsp)?;
+        let value = self.mem_read_u64(rsp)?;
         self.write_operand(&inst.operands[0], value)?;
         self.engine
             .cpu
@@ -1081,7 +1177,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         let rsp = self.engine.cpu.read_reg(Register::RSP);
         let new_rsp = rsp.wrapping_sub(8);
         self.engine.cpu.write_reg(Register::RSP, new_rsp);
-        self.engine.memory.write_u64(new_rsp, self.engine.cpu.rip)?;
+        self.mem_write_u64(new_rsp, self.engine.cpu.rip)?;
 
         match &inst.operands[0] {
             Operand::Relative(offset) => {
@@ -1097,7 +1193,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
 
     fn execute_ret(&mut self, _inst: &Instruction) -> Result<()> {
         let rsp = self.engine.cpu.read_reg(Register::RSP);
-        let return_addr = self.engine.memory.read_u64(rsp)?;
+        let return_addr = self.mem_read_u64(rsp)?;
         self.engine
             .cpu
             .write_reg(Register::RSP, rsp.wrapping_add(8));
@@ -1239,19 +1335,19 @@ impl<H: HookManager> ExecutionContext<'_, H> {
 
         // Read from [RSI]
         let value = match size {
-            OperandSize::Byte => self.engine.memory.read_u8(rsi)? as u64,
-            OperandSize::Word => self.engine.memory.read_u16(rsi)? as u64,
-            OperandSize::DWord => self.engine.memory.read_u32(rsi)? as u64,
-            OperandSize::QWord => self.engine.memory.read_u64(rsi)?,
+            OperandSize::Byte => self.mem_read_u8(rsi)? as u64,
+            OperandSize::Word => self.mem_read_u16(rsi)? as u64,
+            OperandSize::DWord => self.mem_read_u32(rsi)? as u64,
+            OperandSize::QWord => self.mem_read_u64(rsi)?,
             OperandSize::XmmWord => return Err(EmulatorError::InvalidOperand),
         };
 
         // Write to [RDI]
         match size {
-            OperandSize::Byte => self.engine.memory.write_u8(rdi, value as u8)?,
-            OperandSize::Word => self.engine.memory.write_u16(rdi, value as u16)?,
-            OperandSize::DWord => self.engine.memory.write_u32(rdi, value as u32)?,
-            OperandSize::QWord => self.engine.memory.write_u64(rdi, value)?,
+            OperandSize::Byte => self.mem_write_u8(rdi, value as u8)?,
+            OperandSize::Word => self.mem_write_u16(rdi, value as u16)?,
+            OperandSize::DWord => self.mem_write_u32(rdi, value as u32)?,
+            OperandSize::QWord => self.mem_write_u64(rdi, value)?,
             OperandSize::XmmWord => return Err(EmulatorError::InvalidOperand),
         };
 
@@ -1332,18 +1428,18 @@ impl<H: HookManager> ExecutionContext<'_, H> {
 
         // Read from [RSI] and [RDI]
         let src1 = match size {
-            OperandSize::Byte => self.engine.memory.read_u8(rsi)? as u64,
-            OperandSize::Word => self.engine.memory.read_u16(rsi)? as u64,
-            OperandSize::DWord => self.engine.memory.read_u32(rsi)? as u64,
-            OperandSize::QWord => self.engine.memory.read_u64(rsi)?,
+            OperandSize::Byte => self.mem_read_u8(rsi)? as u64,
+            OperandSize::Word => self.mem_read_u16(rsi)? as u64,
+            OperandSize::DWord => self.mem_read_u32(rsi)? as u64,
+            OperandSize::QWord => self.mem_read_u64(rsi)?,
             OperandSize::XmmWord => return Err(EmulatorError::InvalidOperand),
         };
 
         let src2 = match size {
-            OperandSize::Byte => self.engine.memory.read_u8(rdi)? as u64,
-            OperandSize::Word => self.engine.memory.read_u16(rdi)? as u64,
-            OperandSize::DWord => self.engine.memory.read_u32(rdi)? as u64,
-            OperandSize::QWord => self.engine.memory.read_u64(rdi)?,
+            OperandSize::Byte => self.mem_read_u8(rdi)? as u64,
+            OperandSize::Word => self.mem_read_u16(rdi)? as u64,
+            OperandSize::DWord => self.mem_read_u32(rdi)? as u64,
+            OperandSize::QWord => self.mem_read_u64(rdi)?,
             OperandSize::XmmWord => return Err(EmulatorError::InvalidOperand),
         };
 
@@ -1436,10 +1532,10 @@ impl<H: HookManager> ExecutionContext<'_, H> {
 
         // Read from [RDI]
         let mem_value = match size {
-            OperandSize::Byte => self.engine.memory.read_u8(rdi)? as u64,
-            OperandSize::Word => self.engine.memory.read_u16(rdi)? as u64,
-            OperandSize::DWord => self.engine.memory.read_u32(rdi)? as u64,
-            OperandSize::QWord => self.engine.memory.read_u64(rdi)?,
+            OperandSize::Byte => self.mem_read_u8(rdi)? as u64,
+            OperandSize::Word => self.mem_read_u16(rdi)? as u64,
+            OperandSize::DWord => self.mem_read_u32(rdi)? as u64,
+            OperandSize::QWord => self.mem_read_u64(rdi)?,
             OperandSize::XmmWord => return Err(EmulatorError::InvalidOperand),
         };
 
@@ -1504,10 +1600,10 @@ impl<H: HookManager> ExecutionContext<'_, H> {
 
         // Write to [RDI]
         match size {
-            OperandSize::Byte => self.engine.memory.write_u8(rdi, acc as u8)?,
-            OperandSize::Word => self.engine.memory.write_u16(rdi, acc as u16)?,
-            OperandSize::DWord => self.engine.memory.write_u32(rdi, acc as u32)?,
-            OperandSize::QWord => self.engine.memory.write_u64(rdi, acc)?,
+            OperandSize::Byte => self.mem_write_u8(rdi, acc as u8)?,
+            OperandSize::Word => self.mem_write_u16(rdi, acc as u16)?,
+            OperandSize::DWord => self.mem_write_u32(rdi, acc as u32)?,
+            OperandSize::QWord => self.mem_write_u64(rdi, acc)?,
             OperandSize::XmmWord => return Err(EmulatorError::InvalidOperand),
         };
 
@@ -1559,10 +1655,10 @@ impl<H: HookManager> ExecutionContext<'_, H> {
 
         // Read from [RSI]
         let value = match size {
-            OperandSize::Byte => self.engine.memory.read_u8(rsi)? as u64,
-            OperandSize::Word => self.engine.memory.read_u16(rsi)? as u64,
-            OperandSize::DWord => self.engine.memory.read_u32(rsi)? as u64,
-            OperandSize::QWord => self.engine.memory.read_u64(rsi)?,
+            OperandSize::Byte => self.mem_read_u8(rsi)? as u64,
+            OperandSize::Word => self.mem_read_u16(rsi)? as u64,
+            OperandSize::DWord => self.mem_read_u32(rsi)? as u64,
+            OperandSize::QWord => self.mem_read_u64(rsi)?,
             OperandSize::XmmWord => return Err(EmulatorError::InvalidOperand),
         };
 
@@ -1611,10 +1707,10 @@ impl<H: HookManager> ExecutionContext<'_, H> {
                 }
 
                 match size {
-                    OperandSize::Byte => self.engine.memory.read_u8(addr).map(|v| v as u64),
-                    OperandSize::Word => self.engine.memory.read_u16(addr).map(|v| v as u64),
-                    OperandSize::DWord => self.engine.memory.read_u32(addr).map(|v| v as u64),
-                    OperandSize::QWord => self.engine.memory.read_u64(addr),
+                    OperandSize::Byte => self.mem_read_u8(addr).map(|v| v as u64),
+                    OperandSize::Word => self.mem_read_u16(addr).map(|v| v as u64),
+                    OperandSize::DWord => self.mem_read_u32(addr).map(|v| v as u64),
+                    OperandSize::QWord => self.mem_read_u64(addr),
                     OperandSize::XmmWord => Err(EmulatorError::InvalidOperand),
                 }
             }
@@ -1645,10 +1741,10 @@ impl<H: HookManager> ExecutionContext<'_, H> {
                 }
 
                 match size {
-                    OperandSize::Byte => self.engine.memory.write_u8(addr, value as u8),
-                    OperandSize::Word => self.engine.memory.write_u16(addr, value as u16),
-                    OperandSize::DWord => self.engine.memory.write_u32(addr, value as u32),
-                    OperandSize::QWord => self.engine.memory.write_u64(addr, value),
+                    OperandSize::Byte => self.mem_write_u8(addr, value as u8),
+                    OperandSize::Word => self.mem_write_u16(addr, value as u16),
+                    OperandSize::DWord => self.mem_write_u32(addr, value as u32),
+                    OperandSize::QWord => self.mem_write_u64(addr, value),
                     OperandSize::XmmWord => Err(EmulatorError::InvalidOperand),
                 }
             }
@@ -1728,7 +1824,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         Ok(addr)
     }
 
-    fn read_xmm_operand(&self, operand: &Operand) -> Result<u128> {
+    fn read_xmm_operand(&mut self, operand: &Operand) -> Result<u128> {
         match operand {
             Operand::Register(reg) => Ok(self.engine.cpu.read_xmm(*reg)),
             Operand::Memory {
@@ -1743,7 +1839,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
                 }
                 let address = self.calculate_address(*base, *index, *scale, *displacement)?;
                 let mut bytes = [0u8; 16];
-                self.engine.memory.read(address, &mut bytes)?;
+                self.mem_read_with_hooks(address, &mut bytes)?;
                 Ok(u128::from_le_bytes(bytes))
             }
             _ => Err(EmulatorError::InvalidOperand),
@@ -1768,7 +1864,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
                 }
                 let address = self.calculate_address(*base, *index, *scale, *displacement)?;
                 let bytes = value.to_le_bytes();
-                self.engine.memory.write(address, &bytes)?;
+                self.mem_write_with_hooks(address, &bytes)?;
                 Ok(())
             }
             _ => Err(EmulatorError::InvalidOperand),
@@ -2295,7 +2391,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
                         addr = addr
                             .wrapping_add(self.engine.cpu.read_reg(*index_reg) * (*scale as u64));
                     }
-                    self.engine.memory.write_u8(addr, value as u8)
+                    self.mem_write_u8(addr, value as u8)
                 } else {
                     Err(EmulatorError::InvalidOperand)
                 }
