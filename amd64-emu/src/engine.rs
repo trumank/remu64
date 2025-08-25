@@ -189,7 +189,9 @@ impl Engine {
         match inst.opcode {
             Opcode::MOV => self.execute_mov(inst),
             Opcode::ADD => self.execute_add(inst),
+            Opcode::ADC => self.execute_adc(inst),
             Opcode::SUB => self.execute_sub(inst),
+            Opcode::SBB => self.execute_sbb(inst),
             Opcode::XOR => self.execute_xor(inst),
             Opcode::AND => self.execute_and(inst),
             Opcode::OR => self.execute_or(inst),
@@ -292,6 +294,76 @@ impl Engine {
         let result = dst.wrapping_sub(src);
         
         self.update_flags_arithmetic(dst, src, result, true);
+        self.write_operand(&inst.operands[0], result)?;
+        Ok(())
+    }
+    
+    fn execute_adc(&mut self, inst: &Instruction) -> Result<()> {
+        if inst.operands.len() != 2 {
+            return Err(EmulatorError::InvalidInstruction(inst.address));
+        }
+        
+        let dst = self.read_operand(&inst.operands[0])?;
+        let src = self.read_operand(&inst.operands[1])?;
+        let carry = if self.cpu.rflags.contains(Flags::CF) { 1 } else { 0 };
+        
+        // Add with carry: dst + src + CF
+        let result = dst.wrapping_add(src).wrapping_add(carry);
+        
+        // Update flags - need to check both additions for overflow/carry
+        let intermediate = dst.wrapping_add(src);
+        let carry_out = (dst > u64::MAX - src) || (intermediate > u64::MAX - carry);
+        
+        self.cpu.rflags.set(Flags::CF, carry_out);
+        self.cpu.rflags.set(Flags::ZF, result == 0);
+        self.cpu.rflags.set(Flags::SF, (result as i64) < 0);
+        
+        // Overflow flag: sign change when adding values of same sign
+        let dst_sign = (dst as i64) < 0;
+        let src_sign = (src as i64) < 0;
+        let result_sign = (result as i64) < 0;
+        let overflow = (dst_sign == src_sign) && (dst_sign != result_sign);
+        self.cpu.rflags.set(Flags::OF, overflow);
+        
+        // Parity flag
+        let parity = (result as u8).count_ones() % 2 == 0;
+        self.cpu.rflags.set(Flags::PF, parity);
+        
+        self.write_operand(&inst.operands[0], result)?;
+        Ok(())
+    }
+    
+    fn execute_sbb(&mut self, inst: &Instruction) -> Result<()> {
+        if inst.operands.len() != 2 {
+            return Err(EmulatorError::InvalidInstruction(inst.address));
+        }
+        
+        let dst = self.read_operand(&inst.operands[0])?;
+        let src = self.read_operand(&inst.operands[1])?;
+        let borrow = if self.cpu.rflags.contains(Flags::CF) { 1 } else { 0 };
+        
+        // Subtract with borrow: dst - src - CF
+        let result = dst.wrapping_sub(src).wrapping_sub(borrow);
+        
+        // Update flags - need to check both subtractions for borrow
+        let intermediate = dst.wrapping_sub(src);
+        let borrow_out = (dst < src) || (intermediate < borrow);
+        
+        self.cpu.rflags.set(Flags::CF, borrow_out);
+        self.cpu.rflags.set(Flags::ZF, result == 0);
+        self.cpu.rflags.set(Flags::SF, (result as i64) < 0);
+        
+        // Overflow flag: sign change when subtracting values of different sign
+        let dst_sign = (dst as i64) < 0;
+        let src_sign = (src as i64) < 0;
+        let result_sign = (result as i64) < 0;
+        let overflow = (dst_sign != src_sign) && (dst_sign != result_sign);
+        self.cpu.rflags.set(Flags::OF, overflow);
+        
+        // Parity flag
+        let parity = (result as u8).count_ones() % 2 == 0;
+        self.cpu.rflags.set(Flags::PF, parity);
+        
         self.write_operand(&inst.operands[0], result)?;
         Ok(())
     }
