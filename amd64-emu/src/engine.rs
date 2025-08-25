@@ -400,6 +400,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             Opcode::SYSCALL => self.execute_syscall(inst),
             Opcode::MOVAPS => self.execute_movaps(inst),
             Opcode::MOVUPS => self.execute_movups(inst),
+            Opcode::VMOVDQU => self.execute_vmovdqu(inst),
             Opcode::MOVQ => self.execute_movq(inst),
             Opcode::MOVLHPS => self.execute_movlhps(inst),
             Opcode::ADDPS => self.execute_addps(inst),
@@ -2245,6 +2246,31 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         let is_ymm = match &inst.operands[1] {
             Operand::Register(reg) => reg.is_ymm(),
             Operand::Memory { size, .. } => *size == OperandSize::YmmWord,
+            _ => false,
+        };
+
+        if is_ymm {
+            // YMM operation (256-bit)
+            let value = self.read_ymm_operand(&inst.operands[1])?;
+            self.write_ymm_operand(&inst.operands[0], value)?;
+        } else {
+            // XMM operation (128-bit)
+            let value = self.read_xmm_operand(&inst.operands[1])?;
+            self.write_xmm_operand(&inst.operands[0], value)?;
+        }
+        Ok(())
+    }
+
+    fn execute_vmovdqu(&mut self, inst: &Instruction) -> Result<()> {
+        // VMOVDQU: Vector Move Unaligned Double Quadword (Integer)
+        // Similar to MOVUPS but for integer data (no alignment requirement)
+        if inst.operands.len() != 2 {
+            return Err(EmulatorError::InvalidInstruction(inst.address));
+        }
+
+        // Check if we're dealing with YMM or XMM registers
+        let is_ymm = match &inst.operands[0] {
+            Operand::Register(reg) => reg.is_ymm(),
             _ => false,
         };
 
