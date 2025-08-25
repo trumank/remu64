@@ -16,7 +16,7 @@ fn test_adc_basic() {
 
     engine.mem_write(0x1000, &code).unwrap();
     engine
-        .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
+        .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0, None)
         .unwrap();
 
     // Without carry: 5 + 3 = 8
@@ -42,7 +42,7 @@ fn test_adc_with_carry() {
 
     engine.mem_write(0x1000, &code).unwrap();
     engine
-        .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
+        .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0, None)
         .unwrap();
 
     // With carry: 5 + 3 + 1 = 9
@@ -65,7 +65,7 @@ fn test_sbb_basic() {
 
     engine.mem_write(0x1000, &code).unwrap();
     engine
-        .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
+        .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0, None)
         .unwrap();
 
     // Without borrow: 10 - 3 = 7
@@ -91,7 +91,7 @@ fn test_sbb_with_borrow() {
 
     engine.mem_write(0x1000, &code).unwrap();
     engine
-        .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
+        .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0, None)
         .unwrap();
 
     // With borrow: 10 - 3 - 1 = 6
@@ -121,7 +121,7 @@ fn test_adc_chain() {
 
     engine.mem_write(0x1000, &code).unwrap();
     engine
-        .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
+        .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0, None)
         .unwrap();
 
     // Low part: 0xFFFFFFFFFFFFFFFF + 1 = 0 (wraps to 0, sets carry)
@@ -152,7 +152,7 @@ fn test_sbb_chain() {
 
     engine.mem_write(0x1000, &code).unwrap();
     engine
-        .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
+        .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0, None)
         .unwrap();
 
     // Low part: 0 - 1 = -1 (wraps to 0xFFFFFFFFFFFFFFFF, sets borrow)
@@ -178,7 +178,7 @@ fn test_adc_immediate() {
 
     engine.mem_write(0x1000, &code).unwrap();
     engine
-        .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
+        .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0, None)
         .unwrap();
 
     // AL = 5 + 3 + 1 (carry) = 9
@@ -202,7 +202,7 @@ fn test_sbb_immediate() {
 
     engine.mem_write(0x1000, &code).unwrap();
     engine
-        .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
+        .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0, None)
         .unwrap();
 
     // AL = 10 - 3 - 1 (borrow) = 6

@@ -18,7 +18,7 @@ fn test_movs_byte() {
     let code = vec![0xA4]; // MOVSB
     emu.mem_write(0x1000, &code).unwrap();
 
-    emu.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
+    emu.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0, None)
         .unwrap();
 
     // Check that byte was copied
@@ -50,7 +50,7 @@ fn test_rep_movs() {
     let code = vec![0xF3, 0xA4]; // REP MOVSB
     emu.mem_write(0x1000, &code).unwrap();
 
-    emu.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
+    emu.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0, None)
         .unwrap();
 
     // Check that string was copied
@@ -81,7 +81,7 @@ fn test_stos_byte() {
     let code = vec![0xAA]; // STOSB
     emu.mem_write(0x1000, &code).unwrap();
 
-    emu.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
+    emu.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0, None)
         .unwrap();
 
     // Check that byte was stored
@@ -112,7 +112,7 @@ fn test_rep_stos() {
     let code = vec![0xF3, 0xAA]; // REP STOSB
     emu.mem_write(0x1000, &code).unwrap();
 
-    emu.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
+    emu.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0, None)
         .unwrap();
 
     // Check that memory was zeroed
@@ -145,7 +145,7 @@ fn test_lods_byte() {
     let code = vec![0xAC]; // LODSB
     emu.mem_write(0x1000, &code).unwrap();
 
-    emu.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
+    emu.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0, None)
         .unwrap();
 
     // Check that byte was loaded into AL
@@ -173,7 +173,7 @@ fn test_scas_byte() {
     let code = vec![0xAE]; // SCASB
     emu.mem_write(0x1000, &code).unwrap();
 
-    emu.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
+    emu.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0, None)
         .unwrap();
 
     // Check that ZF is set (match found)
@@ -203,7 +203,7 @@ fn test_repz_scas() {
     let code = vec![0xF3, 0xAE]; // REPZ SCASB
     emu.mem_write(0x1000, &code).unwrap();
 
-    emu.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
+    emu.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0, None)
         .unwrap();
 
     // Check that scan stopped at 'B'
@@ -234,7 +234,7 @@ fn test_cmps_byte() {
     let code = vec![0xA6]; // CMPSB
     emu.mem_write(0x1000, &code).unwrap();
 
-    emu.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
+    emu.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0, None)
         .unwrap();
 
     // Check that ZF is clear (not equal) and CF is set (B < C)
@@ -267,7 +267,7 @@ fn test_repz_cmps() {
     let code = vec![0xF3, 0xA6]; // REPZ CMPSB
     emu.mem_write(0x1000, &code).unwrap();
 
-    emu.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
+    emu.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0, None)
         .unwrap();
 
     // Check that comparison stopped at the difference

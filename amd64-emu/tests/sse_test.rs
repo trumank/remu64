@@ -20,7 +20,7 @@ fn test_movaps() {
 
     engine.reg_write(Register::RIP, base).unwrap();
     engine
-        .emu_start(base, base + code.len() as u64, 0, 0)
+        .emu_start(base, base + code.len() as u64, 0, 0, None)
         .unwrap();
 
     // Check that XMM0 now contains the value from XMM1
@@ -48,7 +48,7 @@ fn test_xorps() {
 
     engine.reg_write(Register::RIP, base).unwrap();
     engine
-        .emu_start(base, base + code.len() as u64, 0, 0)
+        .emu_start(base, base + code.len() as u64, 0, 0, None)
         .unwrap();
 
     // Check that XMM0 is now zero
@@ -92,7 +92,7 @@ fn test_addps() {
 
     engine.reg_write(Register::RIP, base).unwrap();
     engine
-        .emu_start(base, base + code.len() as u64, 0, 0)
+        .emu_start(base, base + code.len() as u64, 0, 0, None)
         .unwrap();
 
     // Check results: XMM0 should now contain [6.0, 8.0, 10.0, 12.0]
@@ -140,7 +140,7 @@ fn test_subps() {
 
     engine.reg_write(Register::RIP, base).unwrap();
     engine
-        .emu_start(base, base + code.len() as u64, 0, 0)
+        .emu_start(base, base + code.len() as u64, 0, 0, None)
         .unwrap();
 
     // Check results: XMM0 should now contain [5.0, 10.0, 15.0, 20.0]
@@ -188,7 +188,7 @@ fn test_mulps() {
 
     engine.reg_write(Register::RIP, base).unwrap();
     engine
-        .emu_start(base, base + code.len() as u64, 0, 0)
+        .emu_start(base, base + code.len() as u64, 0, 0, None)
         .unwrap();
 
     // Check results: XMM0 should now contain [6.0, 12.0, 20.0, 30.0]
@@ -236,7 +236,7 @@ fn test_divps() {
 
     engine.reg_write(Register::RIP, base).unwrap();
     engine
-        .emu_start(base, base + code.len() as u64, 0, 0)
+        .emu_start(base, base + code.len() as u64, 0, 0, None)
         .unwrap();
 
     // Check results: XMM0 should now contain [5.0, 5.0, 6.0, 5.0]
@@ -271,7 +271,7 @@ fn test_andps() {
 
     engine.reg_write(Register::RIP, base).unwrap();
     engine
-        .emu_start(base, base + code.len() as u64, 0, 0)
+        .emu_start(base, base + code.len() as u64, 0, 0, None)
         .unwrap();
 
     // Check result
@@ -303,7 +303,7 @@ fn test_orps() {
 
     engine.reg_write(Register::RIP, base).unwrap();
     engine
-        .emu_start(base, base + code.len() as u64, 0, 0)
+        .emu_start(base, base + code.len() as u64, 0, 0, None)
         .unwrap();
 
     // Check result

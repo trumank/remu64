@@ -16,7 +16,7 @@ fn test_mul_instruction() {
     let code = vec![0x48, 0xF7, 0xE3];
     engine.mem_write(0x1000, &code).unwrap();
     engine
-        .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
+        .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0, None)
         .unwrap();
 
     // Result should be 0x10 * 0x20 = 0x200
@@ -28,7 +28,7 @@ fn test_mul_instruction() {
     engine.reg_write(Register::RBX, 0x02).unwrap();
     engine.reg_write(Register::RIP, 0x1000).unwrap();
     engine
-        .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
+        .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0, None)
         .unwrap();
 
     // Result should overflow into RDX
@@ -52,7 +52,7 @@ fn test_div_instruction() {
     let code = vec![0x48, 0xF7, 0xF3];
     engine.mem_write(0x1000, &code).unwrap();
     engine
-        .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
+        .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0, None)
         .unwrap();
 
     // Quotient should be 0x200 / 0x10 = 0x20
@@ -66,7 +66,7 @@ fn test_div_instruction() {
     engine.reg_write(Register::RBX, 0x10).unwrap();
     engine.reg_write(Register::RIP, 0x1000).unwrap();
     engine
-        .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
+        .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0, None)
         .unwrap();
 
     assert_eq!(engine.reg_read(Register::RAX).unwrap(), 0x20); // Quotient
@@ -89,7 +89,7 @@ fn test_imul_instruction() {
     let code = vec![0x48, 0xF7, 0xEB];
     engine.mem_write(0x1000, &code).unwrap();
     engine
-        .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
+        .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0, None)
         .unwrap();
 
     // Result should be -10 * 5 = -50
@@ -114,7 +114,7 @@ fn test_idiv_instruction() {
     let code = vec![0x48, 0xF7, 0xFB];
     engine.mem_write(0x1000, &code).unwrap();
     engine
-        .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
+        .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0, None)
         .unwrap();
 
     // Quotient should be -50 / 5 = -10
@@ -139,6 +139,6 @@ fn test_div_by_zero() {
     let code = vec![0x48, 0xF7, 0xF3];
     engine.mem_write(0x1000, &code).unwrap();
     engine
-        .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
+        .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0, None)
         .unwrap();
 }

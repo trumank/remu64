@@ -14,7 +14,7 @@ fn test_neg_instruction() {
     let code = vec![0x48, 0xF7, 0xD8];
     engine.mem_write(0x1000, &code).unwrap();
     engine
-        .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
+        .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0, None)
         .unwrap();
 
     assert_eq!(engine.reg_read(Register::RAX).unwrap(), (-0x42i64) as u64);
@@ -23,7 +23,7 @@ fn test_neg_instruction() {
     engine.reg_write(Register::RAX, 0).unwrap();
     engine.reg_write(Register::RIP, 0x1000).unwrap();
     engine
-        .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
+        .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0, None)
         .unwrap();
 
     assert_eq!(engine.reg_read(Register::RAX).unwrap(), 0);
@@ -42,7 +42,7 @@ fn test_not_instruction() {
     let code = vec![0x48, 0xF7, 0xD0];
     engine.mem_write(0x1000, &code).unwrap();
     engine
-        .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
+        .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0, None)
         .unwrap();
 
     assert_eq!(engine.reg_read(Register::RAX).unwrap(), 0xFF00FF00FF00FF00);
@@ -62,7 +62,7 @@ fn test_shift_left() {
     let code = vec![0x48, 0xD3, 0xE0];
     engine.mem_write(0x1000, &code).unwrap();
     engine
-        .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
+        .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0, None)
         .unwrap();
 
     assert_eq!(engine.reg_read(Register::RAX).unwrap(), 0x10);
@@ -82,7 +82,7 @@ fn test_shift_right_logical() {
     let code = vec![0x48, 0xD3, 0xE8];
     engine.mem_write(0x1000, &code).unwrap();
     engine
-        .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
+        .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0, None)
         .unwrap();
 
     assert_eq!(engine.reg_read(Register::RAX).unwrap(), 0x8);
@@ -105,7 +105,7 @@ fn test_shift_right_arithmetic() {
     let code = vec![0x48, 0xD3, 0xF8];
     engine.mem_write(0x1000, &code).unwrap();
     engine
-        .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
+        .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0, None)
         .unwrap();
 
     // Should preserve sign bit (arithmetic shift)
@@ -129,7 +129,7 @@ fn test_lea_instruction() {
     let code = vec![0x48, 0x8D, 0x84, 0xB3, 0x00, 0x01, 0x00, 0x00];
     engine.mem_write(0x1000, &code).unwrap();
     engine
-        .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
+        .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0, None)
         .unwrap();
 
     // RAX should contain the calculated address: 0x2000 + 0x8*4 + 0x100 = 0x2120
@@ -150,7 +150,7 @@ fn test_rotate_left() {
     let code = vec![0x48, 0xD3, 0xC0];
     engine.mem_write(0x1000, &code).unwrap();
     engine
-        .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
+        .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0, None)
         .unwrap();
 
     // Bit 63 rotates to bit 0, bit 0 rotates to bit 1
@@ -171,7 +171,7 @@ fn test_rotate_right() {
     let code = vec![0x48, 0xD3, 0xC8];
     engine.mem_write(0x1000, &code).unwrap();
     engine
-        .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
+        .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0, None)
         .unwrap();
 
     // Bit 0 rotates to bit 63, bit 63 rotates to bit 62
@@ -193,7 +193,7 @@ fn test_xchg_instruction() {
     let code = vec![0x48, 0x87, 0xD8];
     engine.mem_write(0x1000, &code).unwrap();
     engine
-        .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
+        .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0, None)
         .unwrap();
 
     assert_eq!(engine.reg_read(Register::RAX).unwrap(), 0x5678);

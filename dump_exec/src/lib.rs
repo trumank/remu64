@@ -18,7 +18,7 @@ impl DumpExec {
         MinidumpLoader::load(path)
     }
 
-    pub fn create_executor<'a>(loader: MinidumpLoader) -> Result<FunctionExecutor<'a>> {
+    pub fn create_executor(loader: MinidumpLoader) -> Result<FunctionExecutor> {
         FunctionExecutor::new(loader)
     }
 }

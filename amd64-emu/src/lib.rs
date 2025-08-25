@@ -8,7 +8,7 @@ pub mod memory;
 pub use cpu::{CpuState, Flags, Register};
 pub use engine::{Engine, EngineMode};
 pub use error::{EmulatorError, Result};
-pub use hooks::{Hook, HookType};
+pub use hooks::{Hook, HookManager, HookType};
 pub use memory::{Memory, MemoryRegion, Permission};
 
 pub const VERSION_MAJOR: u32 = 0;

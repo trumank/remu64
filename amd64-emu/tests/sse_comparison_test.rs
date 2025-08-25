@@ -28,7 +28,7 @@ fn test_cmpps_equal() {
     let code = vec![0x0F, 0xC2, 0xC1, 0x00];
 
     emu.mem_write(0x1000, &code).unwrap();
-    emu.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
+    emu.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0, None)
         .unwrap();
 
     // Check result - should be [0xFFFFFFFF, 0, 0xFFFFFFFF, 0]
@@ -64,7 +64,7 @@ fn test_cmpps_less_than() {
     let code = vec![0x0F, 0xC2, 0xC1, 0x01];
 
     emu.mem_write(0x1000, &code).unwrap();
-    emu.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
+    emu.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0, None)
         .unwrap();
 
     // Check result - should be [0xFFFFFFFF, 0, 0xFFFFFFFF, 0]
@@ -98,7 +98,7 @@ fn test_cmpss_equal() {
     let code = vec![0xF3, 0x0F, 0xC2, 0xC1, 0x00];
 
     emu.mem_write(0x1000, &code).unwrap();
-    emu.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
+    emu.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0, None)
         .unwrap();
 
     // Check result - only lowest 32 bits should be affected
@@ -129,7 +129,7 @@ fn test_comiss_equal() {
     let code = vec![0x0F, 0x2F, 0xC1];
 
     emu.mem_write(0x1000, &code).unwrap();
-    emu.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
+    emu.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0, None)
         .unwrap();
 
     // Check EFLAGS for equal result
@@ -157,7 +157,7 @@ fn test_comiss_less_than() {
     let code = vec![0x0F, 0x2F, 0xC1];
 
     emu.mem_write(0x1000, &code).unwrap();
-    emu.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
+    emu.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0, None)
         .unwrap();
 
     // Check EFLAGS for less than result
@@ -185,7 +185,7 @@ fn test_comiss_greater_than() {
     let code = vec![0x0F, 0x2F, 0xC1];
 
     emu.mem_write(0x1000, &code).unwrap();
-    emu.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
+    emu.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0, None)
         .unwrap();
 
     // Check EFLAGS for greater than result
@@ -214,7 +214,7 @@ fn test_ucomiss_nan() {
     let code = vec![0x0F, 0x2E, 0xC1];
 
     emu.mem_write(0x1000, &code).unwrap();
-    emu.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
+    emu.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0, None)
         .unwrap();
 
     // Check EFLAGS for unordered result (NaN)
@@ -249,7 +249,7 @@ fn test_cmpps_unordered() {
     let code = vec![0x0F, 0xC2, 0xC1, 0x03];
 
     emu.mem_write(0x1000, &code).unwrap();
-    emu.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
+    emu.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0, None)
         .unwrap();
 
     // Check result - NaN comparisons should return true for unordered

@@ -6,14 +6,14 @@ use amd64_emu::{EmulatorError, Engine, EngineMode, Permission, Register};
 use anyhow::{Context, Result};
 use iced_x86::Formatter;
 
-pub struct FunctionExecutor<'a> {
-    engine: Engine<'a>,
+pub struct FunctionExecutor {
+    engine: Engine,
     memory_manager: MemoryManager,
     stack_base: u64,
     tracer: InstructionTracer,
 }
 
-impl<'a> FunctionExecutor<'a> {
+impl FunctionExecutor {
     pub fn new(minidump_loader: MinidumpLoader) -> Result<Self> {
         let mut engine = Engine::new(EngineMode::Mode64);
         let mut memory_manager = MemoryManager::with_minidump(minidump_loader);
@@ -91,13 +91,13 @@ impl<'a> FunctionExecutor<'a> {
             }
 
             // Execute single instruction
-            match self.engine.emu_start(rip, rip + 15, 0, 1) {
+            match self.engine.emu_start(rip, rip + 15, 0, 1, None) {
                 Ok(()) => {}
                 Err(EmulatorError::UnmappedMemory(addr)) => {
                     // Try to handle memory fault by loading from minidump
                     if self.handle_memory_fault(addr, 8).unwrap_or(false) {
                         // Retry the instruction after loading memory
-                        if let Err(e) = self.engine.emu_start(rip, rip + 15, 0, 1) {
+                        if let Err(e) = self.engine.emu_start(rip, rip + 15, 0, 1, None) {
                             self.report_instruction_error(rip, &instruction_bytes, e)?;
                         }
                     } else {
@@ -166,7 +166,7 @@ impl<'a> FunctionExecutor<'a> {
         &self.engine
     }
 
-    pub fn get_engine_mut(&mut self) -> &mut Engine<'a> {
+    pub fn get_engine_mut(&mut self) -> &mut Engine {
         &mut self.engine
     }
 

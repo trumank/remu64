@@ -16,7 +16,7 @@ fn main() {
     engine.mem_write(0x1000, &code).unwrap();
     engine.set_trace(true);
     
-    match engine.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0) {
+    match engine.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0, None) {
         Ok(()) => {
             let result = engine.reg_read(Register::RAX).unwrap() & 0xFF;
             println!("Result: AL = {}", result);

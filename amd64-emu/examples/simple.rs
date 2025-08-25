@@ -17,7 +17,7 @@ fn main() {
 
     println!("Starting emulation...");
     engine
-        .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
+        .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0, None)
         .unwrap();
 
     let rax = engine.reg_read(Register::RAX).unwrap();
