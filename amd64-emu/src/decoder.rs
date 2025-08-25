@@ -126,6 +126,10 @@ pub enum Opcode {
     SETBE,
     CMOVAE,
     CMOVG,
+    BT,
+    BTS,
+    BTR,
+    BTC,
 }
 
 #[derive(Debug, Clone)]
@@ -1241,6 +1245,38 @@ impl Decoder {
                             self.decode_modrm_operands(&bytes[offset..], prefix)?;
                         offset += consumed;
                         (Opcode::SETBE, vec![rm_op])
+                    }
+                    0xBA => {
+                        // Group 8 bit manipulation instructions: BT, BTS, BTR, BTC
+                        if bytes.len() <= offset {
+                            return Err(EmulatorError::InvalidInstruction(0));
+                        }
+                        let modrm = bytes[offset];
+                        let reg_bits = (modrm >> 3) & 0x07;
+                        
+                        let opcode = match reg_bits {
+                            4 => Opcode::BT,  // BT r/m, imm8
+                            5 => Opcode::BTS, // BTS r/m, imm8
+                            6 => Opcode::BTR, // BTR r/m, imm8
+                            7 => Opcode::BTC, // BTC r/m, imm8
+                            _ => return Err(EmulatorError::UnsupportedInstruction(format!(
+                                "0F BA /{}",
+                                reg_bits
+                            ))),
+                        };
+                        
+                        let (rm_op, _, consumed) =
+                            self.decode_modrm_operands(&bytes[offset..], prefix)?;
+                        offset += consumed;
+                        
+                        // Add immediate byte operand
+                        if bytes.len() <= offset {
+                            return Err(EmulatorError::InvalidInstruction(0));
+                        }
+                        let imm = bytes[offset] as i64;
+                        offset += 1;
+                        
+                        (opcode, vec![rm_op, Operand::Immediate(imm)])
                     }
                     0xC1 => {
                         // XADD r/m, r

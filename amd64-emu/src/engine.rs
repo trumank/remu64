@@ -418,6 +418,10 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             Opcode::SETBE => self.execute_setbe(inst),
             Opcode::CMOVAE => self.execute_cmovae(inst),
             Opcode::CMOVG => self.execute_cmovg(inst),
+            Opcode::BT => self.execute_bt(inst),
+            Opcode::BTS => self.execute_bts(inst),
+            Opcode::BTR => self.execute_btr(inst),
+            Opcode::BTC => self.execute_btc(inst),
             _ => {
                 if let Some(hooks) = &mut self.hooks {
                     hooks.on_invalid(self.engine, inst.address, 0)?;
@@ -1782,6 +1786,71 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             }
             _ => Err(EmulatorError::InvalidInstruction(0)),
         }
+    }
+
+    fn execute_bt(&mut self, inst: &Instruction) -> Result<()> {
+        if inst.operands.len() != 2 {
+            return Err(EmulatorError::InvalidInstruction(inst.address));
+        }
+
+        let bit_base = self.read_operand(&inst.operands[0], inst)?;
+        let bit_offset = self.read_operand(&inst.operands[1], inst)? & 0x3F; // Mask to 6 bits for 64-bit
+        
+        let bit_value = (bit_base >> bit_offset) & 1;
+        self.engine.cpu.rflags.set(Flags::CF, bit_value != 0);
+        
+        Ok(())
+    }
+
+    fn execute_bts(&mut self, inst: &Instruction) -> Result<()> {
+        if inst.operands.len() != 2 {
+            return Err(EmulatorError::InvalidInstruction(inst.address));
+        }
+
+        let bit_base = self.read_operand(&inst.operands[0], inst)?;
+        let bit_offset = self.read_operand(&inst.operands[1], inst)? & 0x3F; // Mask to 6 bits for 64-bit
+        
+        let bit_value = (bit_base >> bit_offset) & 1;
+        self.engine.cpu.rflags.set(Flags::CF, bit_value != 0);
+        
+        let new_value = bit_base | (1 << bit_offset);
+        self.write_operand(&inst.operands[0], new_value, inst)?;
+        
+        Ok(())
+    }
+
+    fn execute_btr(&mut self, inst: &Instruction) -> Result<()> {
+        if inst.operands.len() != 2 {
+            return Err(EmulatorError::InvalidInstruction(inst.address));
+        }
+
+        let bit_base = self.read_operand(&inst.operands[0], inst)?;
+        let bit_offset = self.read_operand(&inst.operands[1], inst)? & 0x3F; // Mask to 6 bits for 64-bit
+        
+        let bit_value = (bit_base >> bit_offset) & 1;
+        self.engine.cpu.rflags.set(Flags::CF, bit_value != 0);
+        
+        let new_value = bit_base & !(1 << bit_offset);
+        self.write_operand(&inst.operands[0], new_value, inst)?;
+        
+        Ok(())
+    }
+
+    fn execute_btc(&mut self, inst: &Instruction) -> Result<()> {
+        if inst.operands.len() != 2 {
+            return Err(EmulatorError::InvalidInstruction(inst.address));
+        }
+
+        let bit_base = self.read_operand(&inst.operands[0], inst)?;
+        let bit_offset = self.read_operand(&inst.operands[1], inst)? & 0x3F; // Mask to 6 bits for 64-bit
+        
+        let bit_value = (bit_base >> bit_offset) & 1;
+        self.engine.cpu.rflags.set(Flags::CF, bit_value != 0);
+        
+        let new_value = bit_base ^ (1 << bit_offset);
+        self.write_operand(&inst.operands[0], new_value, inst)?;
+        
+        Ok(())
     }
 
     fn update_flags_arithmetic(&mut self, dst: u64, src: u64, result: u64, is_sub: bool) {
