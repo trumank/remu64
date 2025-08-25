@@ -420,7 +420,11 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             Opcode::CMOVAE => self.execute_cmovae(inst),
             Opcode::CMOVE => self.execute_cmove(inst),
             Opcode::CMOVG => self.execute_cmovg(inst),
+            Opcode::CMOVNE => self.execute_cmovne(inst),
             Opcode::RDTSC => self.execute_rdtsc(inst),
+            Opcode::MONITORX => self.execute_monitorx(inst),
+            Opcode::PREFETCHW => self.execute_prefetchw(inst),
+            Opcode::CMPXCHG => self.execute_cmpxchg(inst),
             Opcode::BT => self.execute_bt(inst),
             Opcode::BTS => self.execute_bts(inst),
             Opcode::BTR => self.execute_btr(inst),
@@ -1813,6 +1817,78 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         Ok(())
     }
 
+    fn execute_monitorx(&mut self, inst: &Instruction) -> Result<()> {
+        // MONITORX: Monitor a memory address range (AMD instruction)
+        // This is typically used for optimized waiting/synchronization
+        // For emulation purposes, we implement this as a no-op
+        if !inst.operands.is_empty() {
+            return Err(EmulatorError::InvalidInstruction(inst.address));
+        }
+        
+        // MONITORX uses EAX for the address to monitor, but we don't need to
+        // actually implement the monitoring functionality for emulation
+        Ok(())
+    }
+
+    fn execute_prefetchw(&mut self, inst: &Instruction) -> Result<()> {
+        // PREFETCHW: Prefetch data into cache with intent to write
+        // This is a performance hint instruction - implement as no-op for emulation
+        if inst.operands.len() != 1 {
+            return Err(EmulatorError::InvalidInstruction(inst.address));
+        }
+        
+        // We don't need to actually do anything - it's just a cache hint
+        // The operand specifies which memory address to prefetch, but we ignore it
+        Ok(())
+    }
+
+    fn execute_cmpxchg(&mut self, inst: &Instruction) -> Result<()> {
+        // CMPXCHG: Compare and Exchange
+        // Compares the accumulator (EAX/RAX) with the destination operand
+        // If equal: ZF=1 and destination = source operand
+        // If not equal: ZF=0 and accumulator = destination operand
+        if inst.operands.len() != 2 {
+            return Err(EmulatorError::InvalidInstruction(inst.address));
+        }
+
+        let dest_value = self.read_operand(&inst.operands[0], inst)?;
+        let src_value = self.read_operand(&inst.operands[1], inst)?;
+        
+        // Determine operand size from the first operand
+        let operand_size = self.get_operand_size(&inst.operands[0]);
+        let mask = match operand_size {
+            OperandSize::Byte => 0xFF,
+            OperandSize::Word => 0xFFFF,
+            OperandSize::DWord => 0xFFFFFFFF,
+            OperandSize::QWord => 0xFFFFFFFFFFFFFFFF,
+            OperandSize::XmmWord => return Err(EmulatorError::InvalidInstruction(inst.address)),
+        };
+        
+        // Get the appropriate accumulator register
+        let acc_reg = match operand_size {
+            OperandSize::Byte => Register::AL,
+            OperandSize::Word => Register::AX,
+            OperandSize::DWord => Register::EAX,
+            OperandSize::QWord => Register::RAX,
+            OperandSize::XmmWord => return Err(EmulatorError::InvalidInstruction(inst.address)),
+        };
+        
+        let acc_value = self.engine.cpu.read_reg(acc_reg) & mask;
+        let dest_masked = dest_value & mask;
+        
+        if acc_value == dest_masked {
+            // Equal: Set ZF=1 and destination = source
+            self.engine.cpu.rflags.set(Flags::ZF, true);
+            self.write_operand(&inst.operands[0], src_value & mask, inst)?;
+        } else {
+            // Not equal: Set ZF=0 and accumulator = destination
+            self.engine.cpu.rflags.set(Flags::ZF, false);
+            self.engine.cpu.write_reg(acc_reg, dest_masked);
+        }
+        
+        Ok(())
+    }
+
     fn execute_bt(&mut self, inst: &Instruction) -> Result<()> {
         if inst.operands.len() != 2 {
             return Err(EmulatorError::InvalidInstruction(inst.address));
@@ -2625,6 +2701,26 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         // If condition is false, do nothing (don't modify destination)
 
         // CMOVE doesn't affect any flags
+        Ok(())
+    }
+
+    fn execute_cmovne(&mut self, inst: &Instruction) -> Result<()> {
+        // CMOVNE: Conditional move if not equal (ZF=0)
+        if inst.operands.len() != 2 {
+            return Err(EmulatorError::InvalidInstruction(inst.address));
+        }
+
+        // Check condition: ZF=0 (not equal)
+        let condition = !self.engine.cpu.rflags.contains(Flags::ZF);
+
+        if condition {
+            // Only move if condition is true
+            let value = self.read_operand(&inst.operands[1], inst)?;
+            self.write_operand(&inst.operands[0], value, inst)?;
+        }
+        // If condition is false, do nothing (don't modify destination)
+
+        // CMOVNE doesn't affect any flags
         Ok(())
     }
 

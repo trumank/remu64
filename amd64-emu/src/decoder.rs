@@ -128,7 +128,11 @@ pub enum Opcode {
     CMOVAE,
     CMOVE,
     CMOVG,
+    CMOVNE,
     RDTSC,
+    MONITORX,
+    PREFETCHW,
+    CMPXCHG,
     BT,
     BTS,
     BTR,
@@ -804,6 +808,15 @@ impl Decoder {
                 // CMPS WORD/DWORD/QWORD PTR [RSI], [RDI]
                 (Opcode::CMPS, vec![Operand::Immediate(0)]) // Size indicator: 0 = use operand_size
             }
+            0xA8 => {
+                // TEST AL, imm8
+                if bytes.len() <= offset {
+                    return Err(EmulatorError::InvalidInstruction(0));
+                }
+                let imm = bytes[offset] as i64;
+                offset += 1;
+                (Opcode::TEST, vec![Operand::Register(Register::AL), Operand::Immediate(imm)])
+            }
             0xAA => {
                 // STOS BYTE PTR [RDI], AL
                 (Opcode::STOS, vec![Operand::Immediate(1)]) // Size indicator: 1 = byte
@@ -936,6 +949,19 @@ impl Decoder {
                     }
                 };
                 (opcode, vec![rm_op, Operand::Register(Register::CL)])
+            }
+            0xC6 => {
+                // MOV r/m8, imm8
+                let (rm_op, _reg_op, consumed) =
+                    self.decode_modrm_operands(&bytes[offset..], prefix)?;
+                offset += consumed;
+                
+                if bytes.len() <= offset {
+                    return Err(EmulatorError::InvalidInstruction(0));
+                }
+                let imm = bytes[offset] as i64;
+                offset += 1;
+                (Opcode::MOV, vec![rm_op, Operand::Immediate(imm)])
             }
             0xC7 => {
                 let (rm_op, _reg_op, consumed) =
@@ -1087,7 +1113,29 @@ impl Decoder {
                 let secondary = bytes[offset];
                 offset += 1;
                 match secondary {
+                    0x01 => {
+                        // 0F 01 group - need to check ModRM byte
+                        if bytes.len() <= offset {
+                            return Err(EmulatorError::InvalidInstruction(0));
+                        }
+                        let modrm = bytes[offset];
+                        offset += 1;
+                        
+                        match modrm {
+                            0xFA => (Opcode::MONITORX, vec![]),
+                            _ => return Err(EmulatorError::UnsupportedInstruction(format!(
+                                "0F 01 {:02X}", modrm
+                            ))),
+                        }
+                    }
                     0x05 => (Opcode::SYSCALL, vec![]),
+                    0x0D => {
+                        // PREFETCHW m8
+                        let (rm_op, _reg_op, consumed) =
+                            self.decode_modrm_operands(&bytes[offset..], prefix)?;
+                        offset += consumed;
+                        (Opcode::PREFETCHW, vec![rm_op])
+                    }
                     0x31 => (Opcode::RDTSC, vec![]),
                     0x10 => {
                         let (dst, src, consumed) =
@@ -1261,6 +1309,13 @@ impl Decoder {
                         offset += consumed;
                         (Opcode::CMOVE, vec![reg_op, rm_op])
                     }
+                    0x45 => {
+                        // CMOVNE r, r/m - Conditional move if not equal (ZF=0)
+                        let (rm_op, reg_op, consumed) =
+                            self.decode_modrm_operands(&bytes[offset..], prefix)?;
+                        offset += consumed;
+                        (Opcode::CMOVNE, vec![reg_op, rm_op])
+                    }
                     0x4F => {
                         // CMOVG r, r/m - Conditional move if greater (ZF=0 AND SF=OF)
                         let (rm_op, reg_op, consumed) =
@@ -1313,6 +1368,13 @@ impl Decoder {
                         offset += 1;
                         
                         (opcode, vec![rm_op, Operand::Immediate(imm)])
+                    }
+                    0xB1 => {
+                        // CMPXCHG r/m, r
+                        let (rm_op, reg_op, consumed) =
+                            self.decode_modrm_operands(&bytes[offset..], prefix)?;
+                        offset += consumed;
+                        (Opcode::CMPXCHG, vec![rm_op, reg_op])
                     }
                     0xC1 => {
                         // XADD r/m, r
