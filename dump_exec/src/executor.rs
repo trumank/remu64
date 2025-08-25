@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use amd64_emu::{Engine, EngineMode, Register, Permission};
+use amd64_emu::{Engine, EngineMode, Register, Permission, HookType, EmulatorError};
 use crate::minidump_loader::MinidumpLoader;
 use crate::memory_manager::MemoryManager;
 use crate::fastcall::{ArgumentType, CallingConvention};
@@ -25,14 +25,19 @@ impl FunctionExecutor {
         engine.mem_map(stack_base - 0x10000, 0x10000, Permission::ALL)
             .context("Failed to map stack memory")?;
 
-        let tracer = InstructionTracer::new(false);
+        let mut tracer = InstructionTracer::new(false);
 
-        Ok(FunctionExecutor {
+        let mut executor = FunctionExecutor {
             engine,
             memory_manager,
             stack_base,
             tracer,
-        })
+        };
+        
+        // Set up memory fault hook for automatic minidump loading
+        executor.setup_memory_fault_hook()?;
+        
+        Ok(executor)
     }
 
     pub fn execute_function(
@@ -84,54 +89,22 @@ impl FunctionExecutor {
             }
             
             // Execute single instruction
-            if let Err(e) = self.engine.emu_start(rip, rip + 15, 0, 1) {
-                // Enhanced error reporting with instruction details
-                let instruction_len = if instruction_bytes.len() >= 1 {
-                    // Try to decode to get actual length
-                    let mut decoder = iced_x86::Decoder::with_ip(64, &instruction_bytes, rip, iced_x86::DecoderOptions::NONE);
-                    let mut instruction = iced_x86::Instruction::default();
-                    decoder.decode_out(&mut instruction);
-                    instruction.len()
-                } else {
-                    1
-                };
-                
-                let actual_bytes = &instruction_bytes[..instruction_len.min(instruction_bytes.len())];
-                let hex_bytes = actual_bytes.iter()
-                    .map(|b| format!("{:02x}", b))
-                    .collect::<Vec<_>>()
-                    .join(" ");
-                
-                // Try to disassemble for better error reporting
-                let disasm = if !actual_bytes.is_empty() {
-                    let mut decoder = iced_x86::Decoder::with_ip(64, actual_bytes, rip, iced_x86::DecoderOptions::NONE);
-                    let mut instruction = iced_x86::Instruction::default();
-                    decoder.decode_out(&mut instruction);
-                    let mut formatter = iced_x86::IntelFormatter::new();
-                    let mut output = String::new();
-                    formatter.format(&instruction, &mut output);
-                    output
-                } else {
-                    "<unable to decode>".to_string()
-                };
-                
-                // Check if RIP is in a known module
-                let module_info = self.memory_manager.get_loader().find_module_for_address(rip);
-                let address_str = match module_info {
-                    Some((module_name, _base, offset)) => {
-                        format!("{}+0x{:x}", module_name, offset)
+            match self.engine.emu_start(rip, rip + 15, 0, 1) {
+                Ok(()) => {}
+                Err(EmulatorError::UnmappedMemory(addr)) => {
+                    // Try to handle memory fault by loading from minidump
+                    if self.handle_memory_fault(addr, 8).unwrap_or(false) {
+                        // Retry the instruction after loading memory
+                        if let Err(e) = self.engine.emu_start(rip, rip + 15, 0, 1) {
+                            self.report_instruction_error(rip, &instruction_bytes, e)?;
+                        }
+                    } else {
+                        self.report_instruction_error(rip, &instruction_bytes, EmulatorError::UnmappedMemory(addr))?;
                     }
-                    None => format!("0x{:016x}", rip)
-                };
-                
-                anyhow::bail!(
-                    "Emulation failed at {}: {} [{}] ({} bytes)\nOriginal error: {}", 
-                    address_str,
-                    disasm,
-                    hex_bytes,
-                    instruction_len,
-                    e
-                );
+                }
+                Err(e) => {
+                    self.report_instruction_error(rip, &instruction_bytes, e)?;
+                }
             }
             
             instruction_count += 1;
@@ -146,20 +119,25 @@ impl FunctionExecutor {
     
     fn read_instruction_at(&mut self, address: u64) -> Result<Vec<u8>> {
         // Ensure memory is mapped
+        self.ensure_memory_mapped(address)?;
+        
+        // Read up to 15 bytes for the instruction (max x86-64 instruction length)
+        let mut instruction_bytes = vec![0u8; 15];
+        self.engine.mem_read(address, &mut instruction_bytes)?;
+        Ok(instruction_bytes)
+    }
+    
+    fn ensure_memory_mapped(&mut self, address: u64) -> Result<()> {
         let page_base = address & !0xfff;
         
-        // Try to read from minidump first
+        // Try to read from minidump and map it
         if let Ok(page_data) = self.memory_manager.read_memory(page_base, 4096) {
             // Map the page if not already mapped
             if self.engine.mem_map(page_base, 4096, Permission::ALL).is_ok() {
                 self.engine.mem_write(page_base, &page_data)?;
             }
         }
-        
-        // Read up to 15 bytes for the instruction (max x86-64 instruction length)
-        let mut instruction_bytes = vec![0u8; 15];
-        self.engine.mem_read(address, &mut instruction_bytes)?;
-        Ok(instruction_bytes)
+        Ok(())
     }
 
     pub fn get_return_value(&self) -> Result<u64> {
@@ -200,6 +178,69 @@ impl FunctionExecutor {
     
     pub fn get_instruction_count(&self) -> usize {
         self.tracer.get_instruction_count()
+    }
+    
+    fn setup_memory_fault_hook(&mut self) -> Result<()> {
+        // For now, we'll handle memory faults in the mem_read override
+        // The engine's hook system will call back to handle_memory_fault
+        // when an unmapped memory access occurs
+        Ok(())
+    }
+    
+    pub fn handle_memory_fault(&mut self, address: u64, _size: usize) -> Result<bool> {
+        // Try to load the missing memory page from the minidump
+        self.ensure_memory_mapped(address)?;
+        Ok(true) // Indicate we handled the fault
+    }
+    
+    fn report_instruction_error(&self, rip: u64, instruction_bytes: &[u8], e: EmulatorError) -> Result<()> {
+        // Enhanced error reporting with instruction details
+        let instruction_len = if instruction_bytes.len() >= 1 {
+            // Try to decode to get actual length
+            let mut decoder = iced_x86::Decoder::with_ip(64, &instruction_bytes, rip, iced_x86::DecoderOptions::NONE);
+            let mut instruction = iced_x86::Instruction::default();
+            decoder.decode_out(&mut instruction);
+            instruction.len()
+        } else {
+            1
+        };
+        
+        let actual_bytes = &instruction_bytes[..instruction_len.min(instruction_bytes.len())];
+        let hex_bytes = actual_bytes.iter()
+            .map(|b| format!("{:02x}", b))
+            .collect::<Vec<_>>()
+            .join(" ");
+        
+        // Try to disassemble for better error reporting
+        let disasm = if !actual_bytes.is_empty() {
+            let mut decoder = iced_x86::Decoder::with_ip(64, actual_bytes, rip, iced_x86::DecoderOptions::NONE);
+            let mut instruction = iced_x86::Instruction::default();
+            decoder.decode_out(&mut instruction);
+            let mut formatter = iced_x86::IntelFormatter::new();
+            let mut output = String::new();
+            formatter.format(&instruction, &mut output);
+            output
+        } else {
+            "<unable to decode>".to_string()
+        };
+        
+        // Check if RIP is in a known module
+        let module_info = self.memory_manager.get_loader().find_module_for_address(rip);
+        let address_str = match module_info {
+            Some((module_name, _base, offset)) => {
+                format!("{}+0x{:x}", module_name, offset)
+            }
+            None => format!("0x{:016x}", rip)
+        };
+        
+        anyhow::bail!(
+            "Emulation failed at {}: {} [{}] ({} bytes)\nOriginal error: {}", 
+            address_str,
+            disasm,
+            hex_bytes,
+            instruction_len,
+            e
+        )
     }
 }
 

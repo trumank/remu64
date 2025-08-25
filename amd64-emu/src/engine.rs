@@ -64,7 +64,22 @@ impl Engine {
     
     pub fn mem_read(&mut self, address: u64, buf: &mut [u8]) -> Result<()> {
         self.hooks.run_mem_read_hooks(&mut self.cpu, address, buf.len())?;
-        self.memory.read(address, buf)
+        
+        // Try to read memory, handle faults with hooks
+        match self.memory.read(address, buf) {
+            Ok(()) => Ok(()),
+            Err(EmulatorError::UnmappedMemory(_)) => {
+                // Try to handle the fault with memory fault hooks
+                if self.hooks.run_mem_fault_hooks(&mut self.cpu, address, buf.len())? {
+                    // Hook handled the fault, try reading again
+                    self.memory.read(address, buf)
+                } else {
+                    // No hook handled the fault, return original error
+                    Err(EmulatorError::UnmappedMemory(address))
+                }
+            }
+            Err(e) => Err(e),
+        }
     }
     
     pub fn reg_read(&self, reg: Register) -> Result<u64> {

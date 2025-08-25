@@ -12,6 +12,7 @@ pub enum HookType {
     MemRead,
     MemWrite,
     MemAccess,
+    MemFault,    // Called when memory access fails
     Interrupt,
     Invalid,
 }
@@ -37,6 +38,7 @@ impl HookManager {
         by_type.insert(HookType::MemRead, Vec::new());
         by_type.insert(HookType::MemWrite, Vec::new());
         by_type.insert(HookType::MemAccess, Vec::new());
+        by_type.insert(HookType::MemFault, Vec::new());
         by_type.insert(HookType::Interrupt, Vec::new());
         by_type.insert(HookType::Invalid, Vec::new());
         
@@ -144,6 +146,21 @@ impl HookManager {
             }
         }
         Ok(())
+    }
+    
+    pub fn run_mem_fault_hooks(&self, cpu: &mut CpuState, address: u64, size: usize) -> Result<bool> {
+        let mut handled = false;
+        if let Some(ids) = self.by_type.get(&HookType::MemFault) {
+            for &id in ids {
+                if let Some(hook) = self.hooks.get(&id) {
+                    if address >= hook.begin && address < hook.end {
+                        (hook.callback)(cpu, address, size)?;
+                        handled = true;
+                    }
+                }
+            }
+        }
+        Ok(handled)
     }
     
     pub fn clear(&mut self) {
