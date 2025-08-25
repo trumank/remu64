@@ -27,7 +27,9 @@ pub enum Operand {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Opcode {
     ADD,
+    ADC,
     SUB,
+    SBB,
     MOV,
     XOR,
     AND,
