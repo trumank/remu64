@@ -56,7 +56,7 @@ impl FunctionExecutor {
         function_address: u64,
         args: Vec<ArgumentType>,
     ) -> Result<()> {
-        let return_address = 0xdeadbeef;
+        let return_address = 0; // TODO this indicates never stop, which is fine since there will be other issues before the function returns at the moment
 
         // Setup calling convention
         CallingConvention::setup_fastcall(&mut self.engine, args, self.stack_base, return_address)?;
@@ -79,7 +79,7 @@ impl FunctionExecutor {
         let mut hooks: HookManager<ExecutionContext> = HookManager::new();
 
         // Setup memory fault hook
-        hooks.set_mem_fault_hook(|_cpu, context, address, _size| {
+        hooks.set_mem_fault_hook(|_engine, context, address, _size| {
             println!("!!mem fault hook");
             let page_base = address & !0xfff;
 
@@ -97,7 +97,7 @@ impl FunctionExecutor {
         });
 
         // Setup code hook for instruction counting, tracing, and return detection
-        hooks.set_code_hook(|_cpu, context, address, _size| {
+        hooks.set_code_hook(|_engine, context, address, _size| {
             println!("!!code hook");
             // Check instruction count limit
             {

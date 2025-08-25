@@ -71,7 +71,7 @@ impl Engine {
         mut context: Option<&mut Context>,
     ) -> Result<()> {
         if let (Some(hooks), Some(context)) = (hooks.as_deref_mut(), context.as_deref_mut()) {
-            hooks.run_mem_read_hook(&mut self.cpu, context, address, buf.len())?;
+            hooks.run_mem_read_hook(self, context, address, buf.len())?;
         }
 
         // Try to read memory, handle faults with hooks
@@ -80,7 +80,7 @@ impl Engine {
             Err(EmulatorError::UnmappedMemory(_)) => {
                 // Try to handle the fault with memory fault hooks
                 if let (Some(hooks), Some(context)) = (hooks, context) {
-                    if hooks.run_mem_fault_hook(&mut self.cpu, context, address, buf.len())? {
+                    if hooks.run_mem_fault_hook(self, context, address, buf.len())? {
                         // Hook handled the fault, try reading again
                         self.memory.read(address, buf)
                     } else {
@@ -133,7 +133,7 @@ impl Engine {
                 break;
             }
 
-            if self.cpu.rip >= until && until != 0 {
+            if self.cpu.rip == until && until != 0 {
                 break;
             }
 
@@ -186,7 +186,7 @@ impl Engine {
         }
 
         if let (Some(hooks), Some(context)) = (hooks.as_deref_mut(), context.as_deref_mut()) {
-            hooks.run_code_hook(&mut self.cpu, context, rip, inst.size)?;
+            hooks.run_code_hook(self, context, rip, inst.size)?;
         }
 
         self.cpu.rip = rip + inst.size as u64;
@@ -313,7 +313,7 @@ impl Engine {
             Opcode::CMOVG => self.execute_cmovg(inst),
             _ => {
                 if let (Some(hooks), Some(context)) = (hooks, context) {
-                    hooks.run_invalid_hook(&mut self.cpu, context, inst.address)?;
+                    hooks.run_invalid_hook(self, context, inst.address)?;
                 }
                 Err(EmulatorError::UnsupportedInstruction(format!(
                     "{:?}",
@@ -1113,7 +1113,7 @@ impl Engine {
         mut context: Option<&mut Context>,
     ) -> Result<()> {
         if let (Some(hooks), Some(context)) = (hooks, context) {
-            hooks.run_interrupt_hook(&mut self.cpu, context, 0x80)?;
+            hooks.run_interrupt_hook(self, context, 0x80)?;
         }
         Ok(())
     }
