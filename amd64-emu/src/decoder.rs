@@ -67,6 +67,7 @@ pub enum Opcode {
     ROR,
     XCHG,
     XADD,
+    CDQ,
     MUL,
     DIV,
     IMUL,
@@ -531,6 +532,7 @@ impl Decoder {
                 (Opcode::MOV, vec![reg_op, rm_op])
             }
             0x90 => (Opcode::NOP, vec![]),
+            0x99 => (Opcode::CDQ, vec![]),
             0xA4 => {
                 // MOVS BYTE PTR [RDI], [RSI]
                 (Opcode::MOVS, vec![Operand::Immediate(1)]) // Size indicator: 1 = byte

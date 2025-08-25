@@ -261,6 +261,7 @@ impl Engine {
             Opcode::CMPSS => self.execute_cmpss(inst),
             Opcode::COMISS => self.execute_comiss(inst),
             Opcode::UCOMISS => self.execute_ucomiss(inst),
+            Opcode::CDQ => self.execute_cdq(inst),
             _ => {
                 self.hooks.run_invalid_hooks(&mut self.cpu, inst.address)?;
                 Err(EmulatorError::UnsupportedInstruction(format!("{:?}", inst.opcode)))
@@ -1981,5 +1982,20 @@ impl Engine {
         
         let parity = (result_masked as u8).count_ones() % 2 == 0;
         self.cpu.rflags.set(Flags::PF, parity);
+    }
+    
+    fn execute_cdq(&mut self, _inst: &Instruction) -> Result<()> {
+        // CDQ: Convert Doubleword to Quadword
+        // Sign-extend EAX into EDX:EAX
+        let eax = self.cpu.read_reg(Register::EAX) as u32 as i32;
+        
+        // If EAX is negative (bit 31 is set), EDX should be 0xFFFFFFFF
+        // If EAX is positive or zero, EDX should be 0x00000000
+        let edx = if eax < 0 { 0xFFFFFFFF } else { 0x00000000 };
+        
+        self.cpu.write_reg(Register::EDX, edx);
+        
+        // CDQ doesn't affect any flags
+        Ok(())
     }
 }
