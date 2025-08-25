@@ -121,7 +121,8 @@ impl Memory {
 
     pub fn find_region(&self, addr: u64) -> Option<&MemoryRegion> {
         self.regions
-            .range(..=addr).next_back()
+            .range(..=addr)
+            .next_back()
             .and_then(|(_, region)| {
                 if region.contains(addr) {
                     Some(region)
@@ -133,7 +134,8 @@ impl Memory {
 
     pub fn find_region_mut(&mut self, addr: u64) -> Option<&mut MemoryRegion> {
         self.regions
-            .range_mut(..=addr).next_back()
+            .range_mut(..=addr)
+            .next_back()
             .and_then(|(_, region)| {
                 if region.contains(addr) {
                     Some(region)

@@ -1533,7 +1533,8 @@ impl Decoder {
 
     fn decode_immediate(&self, bytes: &[u8], size: OperandSize) -> Result<i64> {
         match size {
-            OperandSize::Byte => bytes.first()
+            OperandSize::Byte => bytes
+                .first()
                 .map(|&b| b as i8 as i64)
                 .ok_or(EmulatorError::InvalidInstruction(0)),
             OperandSize::Word => {
@@ -1562,7 +1563,8 @@ impl Decoder {
 
     fn decode_displacement(&self, bytes: &[u8], size: usize) -> Result<i64> {
         match size {
-            1 => bytes.first()
+            1 => bytes
+                .first()
                 .map(|&b| b as i8 as i64)
                 .ok_or(EmulatorError::InvalidInstruction(0)),
             4 => {

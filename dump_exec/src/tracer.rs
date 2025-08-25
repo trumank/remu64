@@ -110,9 +110,7 @@ impl InstructionTracer {
         decoder.decode_out(&mut instruction);
 
         // Get instruction length and actual bytes
-        let instruction_len = instruction.len();
-        let actual_bytes = &instruction_bytes[..instruction_len.min(instruction_bytes.len())];
-        let hex_bytes = actual_bytes
+        let hex_bytes = instruction_bytes
             .iter()
             .map(|b| format!("{:02x}", b))
             .collect::<Vec<_>>()
@@ -167,7 +165,7 @@ impl InstructionTracer {
                 address_str,
                 colored_disasm,
                 hex_bytes.bright_magenta(),
-                instruction_len
+                instruction_bytes.len()
             )?;
 
             // Show all general-purpose registers in a compact format
@@ -200,7 +198,7 @@ impl InstructionTracer {
                 address_str,
                 colored_disasm,
                 hex_bytes.bright_magenta(),
-                instruction_len,
+                instruction_bytes.len(),
                 format!("RAX={:016x}", rax).bright_blue(),
                 format!("RCX={:016x}", rcx).bright_blue(),
                 format!("RDX={:016x}", rdx).bright_blue()

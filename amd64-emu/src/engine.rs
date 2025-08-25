@@ -13,18 +13,18 @@ pub enum EngineMode {
     Mode64,
 }
 
-pub struct Engine {
+pub struct Engine<'a> {
     cpu: CpuState,
     memory: Memory,
     decoder: Decoder,
-    hooks: HookManager,
+    hooks: HookManager<'a>,
     _mode: EngineMode,
     stop_requested: Arc<AtomicBool>,
     instruction_count: u64,
     trace_enabled: bool,
 }
 
-impl Engine {
+impl Engine<'_> {
     pub fn new(mode: EngineMode) -> Self {
         let decoder_mode = match mode {
             EngineMode::Mode16 => DecoderMode::Mode16,
@@ -107,9 +107,7 @@ impl Engine {
         end: u64,
         callback: impl Fn(&mut CpuState, u64, usize) -> Result<()> + Send + Sync + 'static,
     ) -> Result<HookId> {
-        Ok(self
-            .hooks
-            .add_hook(hook_type, begin, end, Arc::new(callback)))
+        Ok(self.hooks.add_hook(hook_type, begin, end, callback))
     }
 
     pub fn hook_del(&mut self, id: HookId) -> Result<()> {

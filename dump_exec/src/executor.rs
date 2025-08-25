@@ -6,14 +6,14 @@ use amd64_emu::{EmulatorError, Engine, EngineMode, Permission, Register};
 use anyhow::{Context, Result};
 use iced_x86::Formatter;
 
-pub struct FunctionExecutor {
-    engine: Engine,
+pub struct FunctionExecutor<'a> {
+    engine: Engine<'a>,
     memory_manager: MemoryManager,
     stack_base: u64,
     tracer: InstructionTracer,
 }
 
-impl FunctionExecutor {
+impl<'a> FunctionExecutor<'a> {
     pub fn new(minidump_loader: MinidumpLoader) -> Result<Self> {
         let mut engine = Engine::new(EngineMode::Mode64);
         let mut memory_manager = MemoryManager::with_minidump(minidump_loader);
@@ -166,7 +166,7 @@ impl FunctionExecutor {
         &self.engine
     }
 
-    pub fn get_engine_mut(&mut self) -> &mut Engine {
+    pub fn get_engine_mut(&mut self) -> &mut Engine<'a> {
         &mut self.engine
     }
 

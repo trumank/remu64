@@ -1,10 +1,9 @@
 use crate::cpu::CpuState;
 use crate::error::Result;
 use std::collections::HashMap;
-use std::sync::Arc;
 
 pub type HookId = usize;
-pub type HookCallback = Arc<dyn Fn(&mut CpuState, u64, usize) -> Result<()> + Send + Sync>;
+pub type HookCallback = dyn FnMut(&mut CpuState, u64, usize) -> Result<()>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum HookType {
@@ -17,27 +16,26 @@ pub enum HookType {
     Invalid,
 }
 
-#[derive(Clone)]
-pub struct Hook {
+pub struct Hook<'a> {
     pub hook_type: HookType,
-    pub callback: HookCallback,
+    pub callback: Box<dyn FnMut(&mut CpuState, u64, usize) -> Result<()> + 'a>,
     pub begin: u64,
     pub end: u64,
 }
 
-pub struct HookManager {
-    hooks: HashMap<HookId, Hook>,
+pub struct HookManager<'a> {
+    hooks: HashMap<HookId, Hook<'a>>,
     next_id: HookId,
     by_type: HashMap<HookType, Vec<HookId>>,
 }
 
-impl Default for HookManager {
+impl Default for HookManager<'_> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl HookManager {
+impl<'a> HookManager<'a> {
     pub fn new() -> Self {
         let mut by_type = HashMap::new();
         by_type.insert(HookType::Code, Vec::new());
@@ -55,19 +53,22 @@ impl HookManager {
         }
     }
 
-    pub fn add_hook(
+    pub fn add_hook<F: 'a>(
         &mut self,
         hook_type: HookType,
         begin: u64,
         end: u64,
-        callback: HookCallback,
-    ) -> HookId {
+        callback: F,
+    ) -> HookId
+    where
+        F: FnMut(&mut CpuState, u64, usize) -> Result<()> + 'a,
+    {
         let id = self.next_id;
         self.next_id += 1;
 
         let hook = Hook {
             hook_type,
-            callback,
+            callback: Box::new(callback),
             begin,
             end,
         };
@@ -89,10 +90,10 @@ impl HookManager {
         }
     }
 
-    pub fn run_code_hooks(&self, cpu: &mut CpuState, address: u64, size: usize) -> Result<()> {
+    pub fn run_code_hooks(&mut self, cpu: &mut CpuState, address: u64, size: usize) -> Result<()> {
         if let Some(ids) = self.by_type.get(&HookType::Code) {
             for &id in ids {
-                if let Some(hook) = self.hooks.get(&id) {
+                if let Some(hook) = self.hooks.get_mut(&id) {
                     if address >= hook.begin && address < hook.end {
                         (hook.callback)(cpu, address, size)?;
                     }
@@ -102,11 +103,16 @@ impl HookManager {
         Ok(())
     }
 
-    pub fn run_mem_read_hooks(&self, cpu: &mut CpuState, address: u64, size: usize) -> Result<()> {
+    pub fn run_mem_read_hooks(
+        &mut self,
+        cpu: &mut CpuState,
+        address: u64,
+        size: usize,
+    ) -> Result<()> {
         for hook_type in [HookType::MemRead, HookType::MemAccess] {
             if let Some(ids) = self.by_type.get(&hook_type) {
                 for &id in ids {
-                    if let Some(hook) = self.hooks.get(&id) {
+                    if let Some(hook) = self.hooks.get_mut(&id) {
                         if address >= hook.begin && address < hook.end {
                             (hook.callback)(cpu, address, size)?;
                         }
@@ -117,11 +123,16 @@ impl HookManager {
         Ok(())
     }
 
-    pub fn run_mem_write_hooks(&self, cpu: &mut CpuState, address: u64, size: usize) -> Result<()> {
+    pub fn run_mem_write_hooks(
+        &mut self,
+        cpu: &mut CpuState,
+        address: u64,
+        size: usize,
+    ) -> Result<()> {
         for hook_type in [HookType::MemWrite, HookType::MemAccess] {
             if let Some(ids) = self.by_type.get(&hook_type) {
                 for &id in ids {
-                    if let Some(hook) = self.hooks.get(&id) {
+                    if let Some(hook) = self.hooks.get_mut(&id) {
                         if address >= hook.begin && address < hook.end {
                             (hook.callback)(cpu, address, size)?;
                         }
@@ -132,10 +143,10 @@ impl HookManager {
         Ok(())
     }
 
-    pub fn run_interrupt_hooks(&self, cpu: &mut CpuState, intno: u64) -> Result<()> {
+    pub fn run_interrupt_hooks(&mut self, cpu: &mut CpuState, intno: u64) -> Result<()> {
         if let Some(ids) = self.by_type.get(&HookType::Interrupt) {
             for &id in ids {
-                if let Some(hook) = self.hooks.get(&id) {
+                if let Some(hook) = self.hooks.get_mut(&id) {
                     (hook.callback)(cpu, intno, 0)?;
                 }
             }
@@ -143,10 +154,10 @@ impl HookManager {
         Ok(())
     }
 
-    pub fn run_invalid_hooks(&self, cpu: &mut CpuState, address: u64) -> Result<()> {
+    pub fn run_invalid_hooks(&mut self, cpu: &mut CpuState, address: u64) -> Result<()> {
         if let Some(ids) = self.by_type.get(&HookType::Invalid) {
             for &id in ids {
-                if let Some(hook) = self.hooks.get(&id) {
+                if let Some(hook) = self.hooks.get_mut(&id) {
                     (hook.callback)(cpu, address, 0)?;
                 }
             }
@@ -155,7 +166,7 @@ impl HookManager {
     }
 
     pub fn run_mem_fault_hooks(
-        &self,
+        &mut self,
         cpu: &mut CpuState,
         address: u64,
         size: usize,
@@ -163,7 +174,7 @@ impl HookManager {
         let mut handled = false;
         if let Some(ids) = self.by_type.get(&HookType::MemFault) {
             for &id in ids {
-                if let Some(hook) = self.hooks.get(&id) {
+                if let Some(hook) = self.hooks.get_mut(&id) {
                     if address >= hook.begin && address < hook.end {
                         (hook.callback)(cpu, address, size)?;
                         handled = true;
