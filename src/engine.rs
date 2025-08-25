@@ -1115,6 +1115,7 @@ impl Engine {
             OperandSize::Word => self.memory.read_u16(rdi)? as u64,
             OperandSize::DWord => self.memory.read_u32(rdi)? as u64,
             OperandSize::QWord => self.memory.read_u64(rdi)?,
+            OperandSize::XmmWord => return Err(EmulatorError::InvalidOperand),
         };
         
         // Compare accumulator - memory
