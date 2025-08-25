@@ -567,6 +567,12 @@ impl Decoder {
                 };
                 (opcode, vec![rm_op, Operand::Immediate(imm)])
             }
+            0x84 => {
+                // TEST r/m8, r8
+                let (op1, op2, consumed) = self.decode_modrm_operands(&bytes[offset..], prefix)?;
+                offset += consumed;
+                (Opcode::TEST, vec![op1, op2])
+            }
             0x85 => {
                 let (op1, op2, consumed) = self.decode_modrm_operands(&bytes[offset..], prefix)?;
                 offset += consumed;
