@@ -91,6 +91,10 @@ impl Engine {
         Ok(())
     }
     
+    pub fn flags_read(&self) -> Flags {
+        self.cpu.rflags
+    }
+    
     pub fn hook_add(
         &mut self,
         hook_type: HookType,
