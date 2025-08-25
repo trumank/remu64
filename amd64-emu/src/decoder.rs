@@ -112,6 +112,14 @@ pub enum Opcode {
     ANDPD,
     ORPS,
     ORPD,
+    CMPPS,
+    CMPSS,
+    CMPSD_SSE,
+    CMPPD,
+    COMISS,
+    UCOMISS,
+    COMISD,
+    UCOMISD,
 }
 
 #[derive(Debug, Clone)]
@@ -738,6 +746,35 @@ impl Decoder {
                         let (dst, src, consumed) = self.decode_modrm_xmm(&bytes[offset..], prefix)?;
                         offset += consumed;
                         (Opcode::DIVPS, vec![dst, src])
+                    }
+                    0x2E => {
+                        // UCOMISS xmm1, xmm2/m32
+                        let (dst, src, consumed) = self.decode_modrm_xmm(&bytes[offset..], prefix)?;
+                        offset += consumed;
+                        (Opcode::UCOMISS, vec![dst, src])
+                    }
+                    0x2F => {
+                        // COMISS xmm1, xmm2/m32
+                        let (dst, src, consumed) = self.decode_modrm_xmm(&bytes[offset..], prefix)?;
+                        offset += consumed;
+                        (Opcode::COMISS, vec![dst, src])
+                    }
+                    0xC2 => {
+                        // CMPPS xmm1, xmm2/m128, imm8 (or CMPSS if F3 prefix)
+                        let (dst, src, consumed) = self.decode_modrm_xmm(&bytes[offset..], prefix)?;
+                        offset += consumed;
+                        if bytes.len() <= offset {
+                            return Err(EmulatorError::InvalidInstruction(0));
+                        }
+                        let imm = bytes[offset] as i64;
+                        offset += 1;
+                        
+                        let opcode = if prefix.rep == Some(0xF3) {
+                            Opcode::CMPSS
+                        } else {
+                            Opcode::CMPPS
+                        };
+                        (opcode, vec![dst, src, Operand::Immediate(imm)])
                     }
                     0x84 => {
                         let rel = self.decode_immediate(&bytes[offset..], OperandSize::DWord)?;
