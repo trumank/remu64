@@ -102,6 +102,46 @@ impl<'a> HookManager for ExecutionHooks<'a> {
 
         Ok(())
     }
+
+    // fn on_mem_read(&mut self, engine: &mut Engine, address: u64, size: usize) -> amd64_emu::Result<()> {
+    //     // Read the actual memory value to display it
+    //     let mut buffer = vec![0u8; size];
+    //     if let Ok(()) = engine.mem_read(address, &mut buffer) {
+    //         let value_str = if size <= 8 {
+    //             let mut value = 0u64;
+    //             for (i, &byte) in buffer.iter().enumerate() {
+    //                 value |= (byte as u64) << (i * 8);
+    //             }
+    //             format!("0x{:016x}", value)
+    //         } else {
+    //             format!("{} bytes", size)
+    //         };
+    //         println!("MEM READ  0x{:016x} ({} bytes) -> {}", address, size, value_str);
+    //     } else {
+    //         println!("MEM READ  0x{:016x} ({} bytes) -> <failed>", address, size);
+    //     }
+    //     Ok(())
+    // }
+
+    // fn on_mem_write(&mut self, engine: &mut Engine, address: u64, size: usize) -> amd64_emu::Result<()> {
+    //     // Read the memory value that was just written to display it
+    //     let mut buffer = vec![0u8; size];
+    //     if let Ok(()) = engine.mem_read(address, &mut buffer) {
+    //         let value_str = if size <= 8 {
+    //             let mut value = 0u64;
+    //             for (i, &byte) in buffer.iter().enumerate() {
+    //                 value |= (byte as u64) << (i * 8);
+    //             }
+    //             format!("0x{:016x}", value)
+    //         } else {
+    //             format!("{} bytes", size)
+    //         };
+    //         println!("MEM WRITE 0x{:016x} ({} bytes) <- {}", address, size, value_str);
+    //     } else {
+    //         println!("MEM WRITE 0x{:016x} ({} bytes) <- <failed>", address, size);
+    //     }
+    //     Ok(())
+    // }
 }
 
 pub struct FunctionExecutor {
@@ -194,10 +234,11 @@ impl FunctionExecutor {
                     Ok(rip) => rip,
                     Err(_) => 0, // Fallback if we can't read RIP
                 };
-                
+
                 // Try to read instruction bytes at the current RIP
-                let instruction_bytes = self.read_instruction_at(rip).unwrap_or_else(|_| vec![0x90]); // NOP as fallback
-                
+                let instruction_bytes =
+                    self.read_instruction_at(rip).unwrap_or_else(|_| vec![0x90]); // NOP as fallback
+
                 // Use the enhanced error reporting
                 return self.report_instruction_error(rip, &instruction_bytes, e);
             }

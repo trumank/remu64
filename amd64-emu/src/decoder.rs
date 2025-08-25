@@ -1669,6 +1669,14 @@ impl Decoder {
                 5 => Register::EBP,
                 6 => Register::ESI,
                 7 => Register::EDI,
+                8 => Register::R8,   // R8D -> R8 (write_reg will zero upper 32 bits)
+                9 => Register::R9,   // R9D -> R9
+                10 => Register::R10, // R10D -> R10
+                11 => Register::R11, // R11D -> R11
+                12 => Register::R12, // R12D -> R12
+                13 => Register::R13, // R13D -> R13
+                14 => Register::R14, // R14D -> R14
+                15 => Register::R15, // R15D -> R15
                 _ => Register::EAX,
             },
             OperandSize::QWord => match reg_num {

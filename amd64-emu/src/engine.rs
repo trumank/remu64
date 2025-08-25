@@ -1750,7 +1750,23 @@ impl<H: HookManager> ExecutionContext<'_, H> {
     fn write_operand(&mut self, operand: &Operand, value: u64, inst: &Instruction) -> Result<()> {
         match operand {
             Operand::Register(reg) => {
-                self.engine.cpu.write_reg(*reg, value);
+                // Handle 32-bit writes to 64-bit registers - in x86-64, writing to 32-bit 
+                // reg should zero the upper 32 bits of the corresponding 64-bit reg
+                if inst.operand_size == OperandSize::DWord {
+                    match reg {
+                        Register::R8 | Register::R9 | Register::R10 | Register::R11 |
+                        Register::R12 | Register::R13 | Register::R14 | Register::R15 => {
+                            // For R8-R15, zero upper 32 bits when writing 32-bit value
+                            self.engine.cpu.write_reg(*reg, value & 0xFFFFFFFF);
+                        }
+                        _ => {
+                            // For other registers, normal write_reg handles 32-bit semantics
+                            self.engine.cpu.write_reg(*reg, value);
+                        }
+                    }
+                } else {
+                    self.engine.cpu.write_reg(*reg, value);
+                }
                 Ok(())
             }
             Operand::Memory {
