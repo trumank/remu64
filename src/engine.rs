@@ -1333,6 +1333,23 @@ impl Engine {
         self.cpu = state.clone();
     }
     
+    fn calculate_address(
+        &self,
+        base: Option<Register>,
+        index: Option<Register>,
+        scale: u8,
+        displacement: i64,
+    ) -> Result<u64> {
+        let mut addr = displacement as u64;
+        if let Some(base_reg) = base {
+            addr = addr.wrapping_add(self.cpu.read_reg(base_reg));
+        }
+        if let Some(index_reg) = index {
+            addr = addr.wrapping_add(self.cpu.read_reg(index_reg) * (scale as u64));
+        }
+        Ok(addr)
+    }
+    
     fn read_xmm_operand(&self, operand: &Operand) -> Result<u128> {
         match operand {
             Operand::Register(reg) => Ok(self.cpu.read_xmm(*reg)),

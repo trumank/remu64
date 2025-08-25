@@ -204,7 +204,10 @@ impl CpuState {
             FS => self.segments.fs.selector as u64,
             GS => self.segments.gs.selector as u64,
             SS => self.segments.ss.selector as u64,
-            XMM0..=XMM15 => panic!("Cannot read XMM register as u64, use read_xmm instead"),
+            XMM0 | XMM1 | XMM2 | XMM3 | XMM4 | XMM5 | XMM6 | XMM7 |
+            XMM8 | XMM9 | XMM10 | XMM11 | XMM12 | XMM13 | XMM14 | XMM15 => {
+                panic!("Cannot read XMM register as u64, use read_xmm instead")
+            }
         }
     }
     
@@ -286,7 +289,10 @@ impl CpuState {
             FS => self.segments.fs.selector = value as u16,
             GS => self.segments.gs.selector = value as u16,
             SS => self.segments.ss.selector = value as u16,
-            XMM0..=XMM15 => panic!("Cannot write XMM register with u64, use write_xmm instead"),
+            XMM0 | XMM1 | XMM2 | XMM3 | XMM4 | XMM5 | XMM6 | XMM7 |
+            XMM8 | XMM9 | XMM10 | XMM11 | XMM12 | XMM13 | XMM14 | XMM15 => {
+                panic!("Cannot write XMM register with u64, use write_xmm instead")
+            }
         }
     }
     

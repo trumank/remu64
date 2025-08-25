@@ -38,6 +38,9 @@ pub enum EmulatorError {
     #[error("Division overflow")]
     DivisionOverflow,
     
+    #[error("Invalid operand")]
+    InvalidOperand,
+    
     #[error("Internal error: {0}")]
     InternalError(String),
 }
