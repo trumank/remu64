@@ -134,8 +134,21 @@ impl Register {
         use Register::*;
         matches!(
             self,
-            XMM0 | XMM1 | XMM2 | XMM3 | XMM4 | XMM5 | XMM6 | XMM7 | XMM8 | XMM9 | XMM10 | XMM11
-            | XMM12 | XMM13 | XMM14 | XMM15
+            XMM0 | XMM1
+                | XMM2
+                | XMM3
+                | XMM4
+                | XMM5
+                | XMM6
+                | XMM7
+                | XMM8
+                | XMM9
+                | XMM10
+                | XMM11
+                | XMM12
+                | XMM13
+                | XMM14
+                | XMM15
         )
     }
 
@@ -143,8 +156,21 @@ impl Register {
         use Register::*;
         matches!(
             self,
-            YMM0 | YMM1 | YMM2 | YMM3 | YMM4 | YMM5 | YMM6 | YMM7 | YMM8 | YMM9 | YMM10 | YMM11
-            | YMM12 | YMM13 | YMM14 | YMM15
+            YMM0 | YMM1
+                | YMM2
+                | YMM3
+                | YMM4
+                | YMM5
+                | YMM6
+                | YMM7
+                | YMM8
+                | YMM9
+                | YMM10
+                | YMM11
+                | YMM12
+                | YMM13
+                | YMM14
+                | YMM15
         )
     }
 }
@@ -378,7 +404,7 @@ impl CpuState {
             R15 => self.regs[15] = value,
             RIP => self.rip = value,
             RFLAGS => self.rflags = Flags::from_bits_truncate(value),
-            EAX => self.regs[0] = value & 0xFFFFFFFF,  // In x86-64, writing to 32-bit reg zeros upper 32 bits
+            EAX => self.regs[0] = value & 0xFFFFFFFF, // In x86-64, writing to 32-bit reg zeros upper 32 bits
             EBX => self.regs[3] = value & 0xFFFFFFFF,
             ECX => self.regs[1] = value & 0xFFFFFFFF,
             EDX => self.regs[2] = value & 0xFFFFFFFF,

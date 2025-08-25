@@ -6,7 +6,7 @@ use iced_x86::{
     Decoder, DecoderOptions, Formatter, FormatterOutput, FormatterTextKind, Instruction,
     IntelFormatter,
 };
-use std::{collections::HashSet, io::Write};
+use std::io::Write;
 
 struct ColorFormatterOutput {
     result: String,

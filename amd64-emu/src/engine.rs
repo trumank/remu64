@@ -195,7 +195,7 @@ impl Engine {
 
         ExecutionContext {
             engine: self,
-            hooks: hooks,
+            hooks,
         }
         .execute_instruction(&inst)?;
 

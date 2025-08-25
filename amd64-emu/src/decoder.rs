@@ -179,14 +179,14 @@ pub struct RexPrefix {
 
 #[derive(Debug, Clone, Copy)]
 pub struct VexPrefix {
-    pub r: bool,    // inverted
-    pub x: bool,    // inverted  
-    pub b: bool,    // inverted
-    pub m: u8,      // map_select (0=0F, 1=0F38, 2=0F3A, etc)
-    pub w: bool,    // REX.W equivalent
-    pub vvvv: u8,   // inverted additional operand specifier 
-    pub l: bool,    // vector length (0=128-bit, 1=256-bit)
-    pub pp: u8,     // mandatory prefix (0=none, 1=66, 2=F3, 3=F2)
+    pub r: bool,  // inverted
+    pub x: bool,  // inverted
+    pub b: bool,  // inverted
+    pub m: u8,    // map_select (0=0F, 1=0F38, 2=0F3A, etc)
+    pub w: bool,  // REX.W equivalent
+    pub vvvv: u8, // inverted additional operand specifier
+    pub l: bool,  // vector length (0=128-bit, 1=256-bit)
+    pub pp: u8,   // mandatory prefix (0=none, 1=66, 2=F3, 3=F2)
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -249,11 +249,11 @@ impl Decoder {
                     }
                     let vex1 = bytes[offset + 1];
                     let vex2 = bytes[offset + 2];
-                    
+
                     prefix.vex = Some(VexPrefix {
-                        r: (vex1 & 0x80) == 0,  // inverted
-                        x: (vex1 & 0x40) == 0,  // inverted
-                        b: (vex1 & 0x20) == 0,  // inverted
+                        r: (vex1 & 0x80) == 0, // inverted
+                        x: (vex1 & 0x40) == 0, // inverted
+                        b: (vex1 & 0x20) == 0, // inverted
                         m: vex1 & 0x1F,
                         w: (vex2 & 0x80) != 0,
                         vvvv: (vex2 >> 3) & 0x0F,
@@ -268,13 +268,13 @@ impl Decoder {
                         return Err(EmulatorError::InvalidInstruction(address));
                     }
                     let vex1 = bytes[offset + 1];
-                    
+
                     prefix.vex = Some(VexPrefix {
-                        r: (vex1 & 0x80) == 0,  // inverted
-                        x: false,               // implied 0 in 2-byte VEX
-                        b: false,               // implied 0 in 2-byte VEX
-                        m: 1,                   // implied 0F in 2-byte VEX
-                        w: false,               // implied 0 in 2-byte VEX
+                        r: (vex1 & 0x80) == 0, // inverted
+                        x: false,              // implied 0 in 2-byte VEX
+                        b: false,              // implied 0 in 2-byte VEX
+                        m: 1,                  // implied 0F in 2-byte VEX
+                        w: false,              // implied 0 in 2-byte VEX
                         vvvv: (vex1 >> 3) & 0x0F,
                         l: (vex1 & 0x04) != 0,
                         pp: vex1 & 0x03,
@@ -642,12 +642,15 @@ impl Decoder {
                 // CMP EAX, imm32 - Compare EAX with immediate
                 let imm = self.decode_immediate(&bytes[offset..], OperandSize::DWord)?;
                 offset += 4;
-                let reg = if prefix.rex.map_or(false, |r| r.w) {
+                let reg = if prefix.rex.is_some_and(|r| r.w) {
                     Register::RAX
                 } else {
                     Register::EAX
                 };
-                (Opcode::CMP, vec![Operand::Register(reg), Operand::Immediate(imm)])
+                (
+                    Opcode::CMP,
+                    vec![Operand::Register(reg), Operand::Immediate(imm)],
+                )
             }
             0x50..=0x57 => {
                 let reg = self.decode_register_from_opcode(
@@ -677,7 +680,7 @@ impl Decoder {
                 let (rm_op, reg_op, consumed) =
                     self.decode_modrm_operands(&bytes[offset..], prefix)?;
                 offset += consumed;
-                
+
                 // Get the 8-bit immediate value (sign-extended)
                 let imm = bytes
                     .get(offset)
@@ -685,7 +688,7 @@ impl Decoder {
                     .ok_or(EmulatorError::InvalidInstruction(0))? as i8
                     as i64;
                 offset += 1;
-                
+
                 (Opcode::IMUL, vec![reg_op, rm_op, Operand::Immediate(imm)])
             }
             0x69 => {
@@ -693,11 +696,11 @@ impl Decoder {
                 let (rm_op, reg_op, consumed) =
                     self.decode_modrm_operands(&bytes[offset..], prefix)?;
                 offset += consumed;
-                
+
                 // Get the 32-bit immediate value (sign-extended)
                 let imm = self.decode_immediate(&bytes[offset..], OperandSize::DWord)?;
                 offset += 4;
-                
+
                 (Opcode::IMUL, vec![reg_op, rm_op, Operand::Immediate(imm)])
             }
             0x74 => {
@@ -951,7 +954,10 @@ impl Decoder {
                 }
                 let imm = bytes[offset] as i64;
                 offset += 1;
-                (Opcode::TEST, vec![Operand::Register(Register::AL), Operand::Immediate(imm)])
+                (
+                    Opcode::TEST,
+                    vec![Operand::Register(Register::AL), Operand::Immediate(imm)],
+                )
             }
             0xAA => {
                 // STOS BYTE PTR [RDI], AL
@@ -1091,7 +1097,7 @@ impl Decoder {
                 let (rm_op, _reg_op, consumed) =
                     self.decode_modrm_operands(&bytes[offset..], prefix)?;
                 offset += consumed;
-                
+
                 if bytes.len() <= offset {
                     return Err(EmulatorError::InvalidInstruction(0));
                 }
@@ -1195,13 +1201,15 @@ impl Decoder {
                 match reg_bits {
                     0 => {
                         // TEST r/m, imm - immediate operand size depends on operand size
-                        let imm = self.decode_immediate(&bytes[offset..], self.operand_size(prefix))?;
+                        let imm =
+                            self.decode_immediate(&bytes[offset..], self.operand_size(prefix))?;
                         offset += self.operand_size(prefix).bytes();
                         (Opcode::TEST, vec![rm_op, Operand::Immediate(imm)])
                     }
                     1 => {
                         // Also TEST r/m, imm (same as /0)
-                        let imm = self.decode_immediate(&bytes[offset..], self.operand_size(prefix))?;
+                        let imm =
+                            self.decode_immediate(&bytes[offset..], self.operand_size(prefix))?;
                         offset += self.operand_size(prefix).bytes();
                         (Opcode::TEST, vec![rm_op, Operand::Immediate(imm)])
                     }
@@ -1268,12 +1276,15 @@ impl Decoder {
                         }
                         let modrm = bytes[offset];
                         offset += 1;
-                        
+
                         match modrm {
                             0xFA => (Opcode::MONITORX, vec![]),
-                            _ => return Err(EmulatorError::UnsupportedInstruction(format!(
-                                "0F 01 {:02X}", modrm
-                            ))),
+                            _ => {
+                                return Err(EmulatorError::UnsupportedInstruction(format!(
+                                    "0F 01 {:02X}",
+                                    modrm
+                                )))
+                            }
                         }
                     }
                     0x05 => (Opcode::SYSCALL, vec![]),
@@ -1451,17 +1462,17 @@ impl Decoder {
                         if bytes.len() <= offset {
                             return Err(EmulatorError::InvalidInstruction(0));
                         }
-                        
+
                         let modrm = bytes[offset];
                         let reg_bits = (modrm >> 3) & 0x07;
                         let rm_bits = modrm & 0x07;
                         let mod_bits = (modrm >> 6) & 0x03;
-                        
+
                         // Source register (in reg field)
                         let src_reg = self.decode_xmm_register(reg_bits, prefix);
-                        
+
                         offset += 1;
-                        
+
                         // Destination operand (r/m field)
                         let dst_operand = if mod_bits == 0x03 {
                             // Register to register
@@ -1469,18 +1480,23 @@ impl Decoder {
                             Operand::Register(rm_reg)
                         } else {
                             // Memory operand - decode SIB and displacement
-                            let (base, index, scale, consumed_and_disp_size) =
-                                self.decode_sib_and_displacement(mod_bits, rm_bits, &bytes[offset..], prefix)?;
-                                
+                            let (base, index, scale, consumed_and_disp_size) = self
+                                .decode_sib_and_displacement(
+                                    mod_bits,
+                                    rm_bits,
+                                    &bytes[offset..],
+                                    prefix,
+                                )?;
+
                             let sib_consumed = if rm_bits == 4 { 1 } else { 0 };
                             let disp_size = if rm_bits == 4 {
                                 consumed_and_disp_size - 1
                             } else {
                                 consumed_and_disp_size
                             };
-                            
+
                             offset += sib_consumed;
-                            
+
                             let displacement = if disp_size > 0 {
                                 let disp = self.decode_displacement(&bytes[offset..], disp_size)?;
                                 offset += disp_size;
@@ -1488,7 +1504,7 @@ impl Decoder {
                             } else {
                                 0
                             };
-                            
+
                             Operand::Memory {
                                 base,
                                 index,
@@ -1497,8 +1513,11 @@ impl Decoder {
                                 size: OperandSize::XmmWord,
                             }
                         };
-                        
-                        (Opcode::MOVDQA, vec![dst_operand, Operand::Register(src_reg)])
+
+                        (
+                            Opcode::MOVDQA,
+                            vec![dst_operand, Operand::Register(src_reg)],
+                        )
                     }
                     0xBD => {
                         // BSR r, r/m - Bit Scan Reverse
@@ -1584,29 +1603,31 @@ impl Decoder {
                         }
                         let modrm = bytes[offset];
                         let reg_bits = (modrm >> 3) & 0x07;
-                        
+
                         let opcode = match reg_bits {
                             4 => Opcode::BT,  // BT r/m, imm8
                             5 => Opcode::BTS, // BTS r/m, imm8
                             6 => Opcode::BTR, // BTR r/m, imm8
                             7 => Opcode::BTC, // BTC r/m, imm8
-                            _ => return Err(EmulatorError::UnsupportedInstruction(format!(
-                                "0F BA /{}",
-                                reg_bits
-                            ))),
+                            _ => {
+                                return Err(EmulatorError::UnsupportedInstruction(format!(
+                                    "0F BA /{}",
+                                    reg_bits
+                                )))
+                            }
                         };
-                        
+
                         let (rm_op, _, consumed) =
                             self.decode_modrm_operands(&bytes[offset..], prefix)?;
                         offset += consumed;
-                        
+
                         // Add immediate byte operand
                         if bytes.len() <= offset {
                             return Err(EmulatorError::InvalidInstruction(0));
                         }
                         let imm = bytes[offset] as i64;
                         offset += 1;
-                        
+
                         (opcode, vec![rm_op, Operand::Immediate(imm)])
                     }
                     0x6E => {
@@ -1616,14 +1637,15 @@ impl Decoder {
                         }
                         let modrm = bytes[offset];
                         let reg_bits = (modrm >> 3) & 0x07;
-                        
+
                         // Destination is always XMM
                         let xmm_reg = self.decode_xmm_register(reg_bits, prefix);
-                        
+
                         // Source can be GPR or memory, use regular modrm decoding
-                        let (rm_op, _, consumed) = self.decode_modrm_operands(&bytes[offset..], prefix)?;
+                        let (rm_op, _, consumed) =
+                            self.decode_modrm_operands(&bytes[offset..], prefix)?;
                         offset += consumed;
-                        
+
                         (Opcode::MOVQ, vec![Operand::Register(xmm_reg), rm_op])
                     }
                     0xAF => {
@@ -1862,14 +1884,24 @@ impl Decoder {
         self.decode_register_by_num(reg_num, size)
     }
 
-    fn decode_rm_register(&self, reg: u8, prefix: &InstructionPrefix, size: OperandSize) -> Register {
+    fn decode_rm_register(
+        &self,
+        reg: u8,
+        prefix: &InstructionPrefix,
+        size: OperandSize,
+    ) -> Register {
         let extended = prefix.rex.as_ref().is_some_and(|r| r.b);
         let reg_num = if extended { reg + 8 } else { reg };
 
         self.decode_register_by_num(reg_num, size)
     }
 
-    fn decode_index_register(&self, reg: u8, prefix: &InstructionPrefix, size: OperandSize) -> Register {
+    fn decode_index_register(
+        &self,
+        reg: u8,
+        prefix: &InstructionPrefix,
+        size: OperandSize,
+    ) -> Register {
         let extended = prefix.rex.as_ref().is_some_and(|r| r.x);
         let reg_num = if extended { reg + 8 } else { reg };
 
@@ -1909,8 +1941,8 @@ impl Decoder {
                 5 => Register::EBP,
                 6 => Register::ESI,
                 7 => Register::EDI,
-                8 => Register::R8,   // R8D -> R8 (write_reg will zero upper 32 bits)
-                9 => Register::R9,   // R9D -> R9
+                8 => Register::R8, // R8D -> R8 (write_reg will zero upper 32 bits)
+                9 => Register::R9, // R9D -> R9
                 10 => Register::R10, // R10D -> R10
                 11 => Register::R11, // R11D -> R11
                 12 => Register::R12, // R12D -> R12
@@ -2193,21 +2225,21 @@ impl Decoder {
                         if bytes.len() <= offset {
                             return Err(EmulatorError::InvalidInstruction(0));
                         }
-                        
+
                         let modrm = bytes[offset];
                         let reg_bits = (modrm >> 3) & 0x07;
                         let rm_bits = modrm & 0x07;
                         let mod_bits = (modrm >> 6) & 0x03;
-                        
+
                         // Source register (in reg field)
                         let src_reg = if vex.l {
                             self.decode_ymm_register(reg_bits, prefix)
                         } else {
                             self.decode_xmm_register(reg_bits, prefix)
                         };
-                        
+
                         offset += 1;
-                        
+
                         // Destination operand (r/m field)
                         let dst_operand = if mod_bits == 0x03 {
                             // Register to register
@@ -2219,18 +2251,23 @@ impl Decoder {
                             Operand::Register(rm_reg)
                         } else {
                             // Memory operand - decode SIB and displacement
-                            let (base, index, scale, consumed_and_disp_size) =
-                                self.decode_sib_and_displacement(mod_bits, rm_bits, &bytes[offset..], prefix)?;
-                                
+                            let (base, index, scale, consumed_and_disp_size) = self
+                                .decode_sib_and_displacement(
+                                    mod_bits,
+                                    rm_bits,
+                                    &bytes[offset..],
+                                    prefix,
+                                )?;
+
                             let sib_consumed = if rm_bits == 4 { 1 } else { 0 };
                             let disp_size = if rm_bits == 4 {
                                 consumed_and_disp_size - 1
                             } else {
                                 consumed_and_disp_size
                             };
-                            
+
                             offset += sib_consumed;
-                            
+
                             let displacement = if disp_size > 0 {
                                 let disp = self.decode_displacement(&bytes[offset..], disp_size)?;
                                 offset += disp_size;
@@ -2238,22 +2275,23 @@ impl Decoder {
                             } else {
                                 0
                             };
-                            
+
                             Operand::Memory {
                                 base,
                                 index,
                                 scale,
                                 displacement,
-                                size: if vex.l { OperandSize::YmmWord } else { OperandSize::XmmWord },
+                                size: if vex.l {
+                                    OperandSize::YmmWord
+                                } else {
+                                    OperandSize::XmmWord
+                                },
                             }
                         };
-                        
+
                         (
                             Opcode::MOVUPS,
-                            vec![
-                                dst_operand,
-                                Operand::Register(src_reg),
-                            ],
+                            vec![dst_operand, Operand::Register(src_reg)],
                         )
                     }
                     0x77 => {
@@ -2277,28 +2315,28 @@ impl Decoder {
                         if bytes.len() <= offset {
                             return Err(EmulatorError::InvalidInstruction(0));
                         }
-                        
+
                         let modrm = bytes[offset];
                         let reg_bits = (modrm >> 3) & 0x07;
                         let rm_bits = modrm & 0x07;
                         let mod_bits = (modrm >> 6) & 0x03;
-                        
+
                         // Destination is YMM register (L=1 for 256-bit)
                         let dst_reg = if vex.l {
                             self.decode_ymm_register(reg_bits, prefix)
                         } else {
                             self.decode_xmm_register(reg_bits, prefix)
                         };
-                        
+
                         // VEX.vvvv encodes the first source operand (inverted)
                         let vvvv_reg = if vex.l {
                             self.decode_ymm_register(!vex.vvvv & 0x0F, prefix)
                         } else {
                             self.decode_xmm_register(!vex.vvvv & 0x0F, prefix)
                         };
-                        
+
                         offset += 1;
-                        
+
                         // Second source operand (XMM/m128)
                         let src2_operand = if mod_bits == 0x03 {
                             // Register to register
@@ -2306,18 +2344,23 @@ impl Decoder {
                             Operand::Register(rm_reg)
                         } else {
                             // Memory operand - decode SIB and displacement
-                            let (base, index, scale, consumed_and_disp_size) =
-                                self.decode_sib_and_displacement(mod_bits, rm_bits, &bytes[offset..], prefix)?;
-                                
+                            let (base, index, scale, consumed_and_disp_size) = self
+                                .decode_sib_and_displacement(
+                                    mod_bits,
+                                    rm_bits,
+                                    &bytes[offset..],
+                                    prefix,
+                                )?;
+
                             let sib_consumed = if rm_bits == 4 { 1 } else { 0 };
                             let disp_size = if rm_bits == 4 {
                                 consumed_and_disp_size - 1
                             } else {
                                 consumed_and_disp_size
                             };
-                            
+
                             offset += sib_consumed;
-                            
+
                             let displacement = if disp_size > 0 {
                                 let disp = self.decode_displacement(&bytes[offset..], disp_size)?;
                                 offset += disp_size;
@@ -2325,7 +2368,7 @@ impl Decoder {
                             } else {
                                 0
                             };
-                            
+
                             Operand::Memory {
                                 base,
                                 index,
@@ -2334,14 +2377,14 @@ impl Decoder {
                                 size: OperandSize::XmmWord,
                             }
                         };
-                        
+
                         // Immediate operand
                         if bytes.len() <= offset {
                             return Err(EmulatorError::InvalidInstruction(0));
                         }
                         let imm = bytes[offset] as i64;
                         offset += 1;
-                        
+
                         (
                             Opcode::VINSERTF128,
                             vec![

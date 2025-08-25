@@ -211,7 +211,7 @@ impl FunctionExecutor {
             }
             Err(e) => {
                 let rip = self.engine.reg_read(Register::RIP);
-                let instruction_bytes = self.read_instruction_at(rip).unwrap_or(vec![]);
+                let instruction_bytes = self.read_instruction_at(rip).unwrap_or_default();
                 return self.report_instruction_error(rip, &instruction_bytes, e);
             }
         }
