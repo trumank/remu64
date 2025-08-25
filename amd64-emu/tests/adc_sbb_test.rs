@@ -101,7 +101,7 @@ fn test_adc_chain() {
     // Add two 128-bit numbers: (0xFFFFFFFFFFFFFFFF, 0x1) + (0x1, 0x0)
     let code = vec![
         // Low 64 bits
-        0x48, 0xC7, 0xC0, 0xFF, 0xFF, 0xFF, 0xFF,  // mov rax, 0xFFFFFFFF (low part of first number)
+        0x48, 0xB8, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,  // mov rax, 0xFFFFFFFFFFFFFFFF
         0x48, 0xC7, 0xC2, 0x01, 0x00, 0x00, 0x00,  // mov rdx, 1 (low part of second number)
         0x48, 0x01, 0xD0,                          // add rax, rdx (produces carry)
         // High 64 bits
@@ -113,10 +113,10 @@ fn test_adc_chain() {
     engine.mem_write(0x1000, &code).unwrap();
     engine.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0).unwrap();
     
-    // Low part: 0xFFFFFFFF + 1 = 0x100000000 (wraps to 0, sets carry)
-    assert_eq!(engine.reg_read(Register::RAX).unwrap(), 0x100000000);
+    // Low part: 0xFFFFFFFFFFFFFFFF + 1 = 0 (wraps to 0, sets carry)
+    assert_eq!(engine.reg_read(Register::RAX).unwrap(), 0);
     // High part: 1 + 0 + carry = 2
-    assert_eq!(engine.reg_read(Register::RCX).unwrap(), 1);
+    assert_eq!(engine.reg_read(Register::RCX).unwrap(), 2);
 }
 
 #[test]
@@ -157,7 +157,7 @@ fn test_adc_immediate() {
     
     // Test ADC with immediate values
     let code = vec![
-        0x48, 0xC7, 0xC0, 0xFF, 0xFF, 0xFF, 0xFF,  // mov rax, 0xFFFFFFFF
+        0x48, 0xB8, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,  // mov rax, 0xFFFFFFFFFFFFFFFF
         0x48, 0x05, 0x01, 0x00, 0x00, 0x00,        // add rax, 1 (sets carry)
         0x14, 0x05,                                // adc al, 5
     ];
@@ -180,7 +180,7 @@ fn test_sbb_immediate() {
     let code = vec![
         0x48, 0xC7, 0xC0, 0x00, 0x00, 0x00, 0x00,  // mov rax, 0
         0x48, 0x2D, 0x01, 0x00, 0x00, 0x00,        // sub rax, 1 (sets borrow)
-        0xB0, 0x0A,                                // mov al, 10
+        0x48, 0xC7, 0xC0, 0x0A, 0x00, 0x00, 0x00,  // mov rax, 10  
         0x1C, 0x03,                                // sbb al, 3
     ];
     
