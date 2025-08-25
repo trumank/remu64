@@ -1746,7 +1746,7 @@ impl Decoder {
 
         let rm_operand = match mod_bits {
             0x03 => {
-                let rm_reg = self.decode_register(rm_bits, prefix, size);
+                let rm_reg = self.decode_rm_register(rm_bits, prefix, size);
                 Operand::Register(rm_reg)
             }
             _ => {
@@ -2480,6 +2480,80 @@ impl Decoder {
                         (
                             Opcode::VMOVDQU,
                             vec![Operand::Register(dst_reg), src_operand],
+                        )
+                    }
+                    0x7F => {
+                        // VMOVDQU xmm/ymm/m128/m256, xmm/ymm (store register to memory/register)
+                        if bytes.len() <= offset {
+                            return Err(EmulatorError::InvalidInstruction(0));
+                        }
+
+                        let modrm = bytes[offset];
+                        let reg_bits = (modrm >> 3) & 0x07;
+                        let rm_bits = modrm & 0x07;
+                        let mod_bits = (modrm >> 6) & 0x03;
+
+                        // Source register (in reg field)
+                        let src_reg = if vex.l {
+                            self.decode_ymm_register(reg_bits, prefix)
+                        } else {
+                            self.decode_xmm_register(reg_bits, prefix)
+                        };
+
+                        offset += 1;
+
+                        // Destination operand (r/m field)
+                        let dst_operand = if mod_bits == 0x03 {
+                            // Register to register
+                            let rm_reg = if vex.l {
+                                self.decode_ymm_register(rm_bits, prefix)
+                            } else {
+                                self.decode_xmm_register(rm_bits, prefix)
+                            };
+                            Operand::Register(rm_reg)
+                        } else {
+                            // Memory operand - decode SIB and displacement
+                            let (base, index, scale, consumed_and_disp_size) = self
+                                .decode_sib_and_displacement(
+                                    mod_bits,
+                                    rm_bits,
+                                    &bytes[offset..],
+                                    prefix,
+                                )?;
+
+                            let sib_consumed = if rm_bits == 4 { 1 } else { 0 };
+                            let disp_size = if rm_bits == 4 {
+                                consumed_and_disp_size - 1
+                            } else {
+                                consumed_and_disp_size
+                            };
+
+                            offset += sib_consumed;
+
+                            let displacement = if disp_size > 0 {
+                                let disp = self.decode_displacement(&bytes[offset..], disp_size)?;
+                                offset += disp_size;
+                                disp
+                            } else {
+                                0
+                            };
+
+                            Operand::Memory {
+                                base,
+                                index,
+                                scale,
+                                displacement,
+                                size: if vex.l {
+                                    OperandSize::YmmWord
+                                } else {
+                                    OperandSize::XmmWord
+                                },
+                            }
+                        };
+
+                        (
+                            Opcode::VMOVDQU,
+                            vec![dst_operand, Operand::Register(src_reg)],
                         )
                     }
                     0x77 => {

@@ -2269,10 +2269,14 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         }
 
         // Check if we're dealing with YMM or XMM registers
-        let is_ymm = match &inst.operands[0] {
-            Operand::Register(reg) => reg.is_ymm(),
-            _ => false,
-        };
+        // Look for YMM register in either operand
+        let is_ymm = inst.operands.iter().any(|op| {
+            if let Operand::Register(reg) = op {
+                reg.is_ymm()
+            } else {
+                false
+            }
+        });
 
         if is_ymm {
             // YMM operation (256-bit)
