@@ -874,6 +874,23 @@ impl Decoder {
                         offset += consumed;
                         (Opcode::MOVUPS, vec![src, dst])
                     }
+                    0x1F => {
+                        // Multi-byte NOP - 0x0F 0x1F /0
+                        if bytes.len() <= offset {
+                            return Err(EmulatorError::InvalidInstruction(0));
+                        }
+                        let modrm = bytes[offset];
+                        let reg_bits = (modrm >> 3) & 0x07;
+                        
+                        if reg_bits != 0 {
+                            return Err(EmulatorError::UnsupportedInstruction(format!("0F 1F /{}", reg_bits)));
+                        }
+                        
+                        // Decode the ModR/M operand but ignore it (it's just for encoding length)
+                        let (_, _, consumed) = self.decode_modrm_operands(&bytes[offset..], prefix)?;
+                        offset += consumed;
+                        (Opcode::NOP, vec![])
+                    }
                     0x28 => {
                         let (dst, src, consumed) = self.decode_modrm_xmm(&bytes[offset..], prefix)?;
                         offset += consumed;
