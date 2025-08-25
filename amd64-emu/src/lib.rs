@@ -7,7 +7,7 @@ pub mod hooks;
 
 pub use engine::{Engine, EngineMode};
 pub use error::{EmulatorError, Result};
-pub use cpu::{Register, CpuState};
+pub use cpu::{Register, CpuState, Flags};
 pub use memory::{Memory, MemoryRegion, Permission};
 pub use hooks::{Hook, HookType};
 
