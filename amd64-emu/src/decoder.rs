@@ -482,6 +482,36 @@ impl Decoder {
                 offset += 1;
                 (Opcode::JNZ, vec![Operand::Relative(rel as i64)])
             }
+            0x78 => {
+                let rel = bytes.get(offset).copied().ok_or(EmulatorError::InvalidInstruction(0))? as i8;
+                offset += 1;
+                (Opcode::JS, vec![Operand::Relative(rel as i64)])
+            }
+            0x79 => {
+                let rel = bytes.get(offset).copied().ok_or(EmulatorError::InvalidInstruction(0))? as i8;
+                offset += 1;
+                (Opcode::JNS, vec![Operand::Relative(rel as i64)])
+            }
+            0x7C => {
+                let rel = bytes.get(offset).copied().ok_or(EmulatorError::InvalidInstruction(0))? as i8;
+                offset += 1;
+                (Opcode::JL, vec![Operand::Relative(rel as i64)])
+            }
+            0x7D => {
+                let rel = bytes.get(offset).copied().ok_or(EmulatorError::InvalidInstruction(0))? as i8;
+                offset += 1;
+                (Opcode::JGE, vec![Operand::Relative(rel as i64)])
+            }
+            0x7E => {
+                let rel = bytes.get(offset).copied().ok_or(EmulatorError::InvalidInstruction(0))? as i8;
+                offset += 1;
+                (Opcode::JLE, vec![Operand::Relative(rel as i64)])
+            }
+            0x7F => {
+                let rel = bytes.get(offset).copied().ok_or(EmulatorError::InvalidInstruction(0))? as i8;
+                offset += 1;
+                (Opcode::JG, vec![Operand::Relative(rel as i64)])
+            }
             0x81 => {
                 // Arithmetic group with 32-bit immediate
                 if bytes.len() <= offset {

@@ -214,6 +214,30 @@ impl Engine {
             Opcode::JNO => self.execute_jcc(inst, !self.cpu.rflags.contains(Flags::OF)),
             Opcode::JB => self.execute_jcc(inst, self.cpu.rflags.contains(Flags::CF)),
             Opcode::JAE => self.execute_jcc(inst, !self.cpu.rflags.contains(Flags::CF)),
+            Opcode::JBE => self.execute_jcc(inst, self.cpu.rflags.contains(Flags::CF) || self.cpu.rflags.contains(Flags::ZF)),
+            Opcode::JA => self.execute_jcc(inst, !self.cpu.rflags.contains(Flags::CF) && !self.cpu.rflags.contains(Flags::ZF)),
+            Opcode::JL => self.execute_jcc(inst, {
+                let sf = self.cpu.rflags.contains(Flags::SF);
+                let of = self.cpu.rflags.contains(Flags::OF);
+                sf != of
+            }),
+            Opcode::JGE => self.execute_jcc(inst, {
+                let sf = self.cpu.rflags.contains(Flags::SF);
+                let of = self.cpu.rflags.contains(Flags::OF);
+                sf == of
+            }),
+            Opcode::JLE => self.execute_jcc(inst, {
+                let sf = self.cpu.rflags.contains(Flags::SF);
+                let of = self.cpu.rflags.contains(Flags::OF);
+                let zf = self.cpu.rflags.contains(Flags::ZF);
+                zf || (sf != of)
+            }),
+            Opcode::JG => self.execute_jcc(inst, {
+                let sf = self.cpu.rflags.contains(Flags::SF);
+                let of = self.cpu.rflags.contains(Flags::OF);
+                let zf = self.cpu.rflags.contains(Flags::ZF);
+                !zf && (sf == of)
+            }),
             Opcode::INC => self.execute_inc(inst),
             Opcode::DEC => self.execute_dec(inst),
             Opcode::NEG => self.execute_neg(inst),
