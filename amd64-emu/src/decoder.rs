@@ -114,7 +114,7 @@ pub enum Opcode {
     ORPD,
     CMPPS,
     CMPSS,
-    CMPSD_SSE,
+    CMPSDSSE,
     CMPPD,
     COMISS,
     UCOMISS,
@@ -769,7 +769,7 @@ impl Decoder {
                         let imm = bytes[offset] as i64;
                         offset += 1;
                         
-                        let opcode = if prefix.rep == Some(0xF3) {
+                        let opcode = if matches!(prefix.rep, Some(RepPrefix::RepZ)) {
                             Opcode::CMPSS
                         } else {
                             Opcode::CMPPS
