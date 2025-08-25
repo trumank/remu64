@@ -418,6 +418,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             Opcode::SETBE => self.execute_setbe(inst),
             Opcode::SETNE => self.execute_setne(inst),
             Opcode::CMOVAE => self.execute_cmovae(inst),
+            Opcode::CMOVBE => self.execute_cmovbe(inst),
             Opcode::CMOVE => self.execute_cmove(inst),
             Opcode::CMOVG => self.execute_cmovg(inst),
             Opcode::CMOVNE => self.execute_cmovne(inst),
@@ -2717,6 +2718,27 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         // If condition is false, do nothing (don't modify destination)
 
         // CMOVE doesn't affect any flags
+        Ok(())
+    }
+
+    fn execute_cmovbe(&mut self, inst: &Instruction) -> Result<()> {
+        // CMOVBE: Conditional move if below or equal (CF=1 OR ZF=1)
+        if inst.operands.len() != 2 {
+            return Err(EmulatorError::InvalidInstruction(inst.address));
+        }
+
+        // Check condition: CF=1 OR ZF=1 (below or equal)
+        let condition = self.engine.cpu.rflags.contains(Flags::CF) || 
+                       self.engine.cpu.rflags.contains(Flags::ZF);
+
+        if condition {
+            // Only move if condition is true
+            let value = self.read_operand(&inst.operands[1], inst)?;
+            self.write_operand(&inst.operands[0], value, inst)?;
+        }
+        // If condition is false, do nothing (don't modify destination)
+
+        // CMOVBE doesn't affect any flags
         Ok(())
     }
 

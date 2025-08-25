@@ -126,6 +126,7 @@ pub enum Opcode {
     SETBE,
     SETNE,
     CMOVAE,
+    CMOVBE,
     CMOVE,
     CMOVG,
     CMOVNE,
@@ -597,6 +598,15 @@ impl Decoder {
                     .ok_or(EmulatorError::InvalidInstruction(0))? as i8;
                 offset += 1;
                 (Opcode::JNZ, vec![Operand::Relative(rel as i64)])
+            }
+            0x76 => {
+                // JBE/JNA rel8 - Jump if below or equal (CF=1 OR ZF=1)
+                let rel = bytes
+                    .get(offset)
+                    .copied()
+                    .ok_or(EmulatorError::InvalidInstruction(0))? as i8;
+                offset += 1;
+                (Opcode::JBE, vec![Operand::Relative(rel as i64)])
             }
             0x78 => {
                 let rel = bytes
@@ -1315,6 +1325,13 @@ impl Decoder {
                             self.decode_modrm_operands(&bytes[offset..], prefix)?;
                         offset += consumed;
                         (Opcode::CMOVNE, vec![reg_op, rm_op])
+                    }
+                    0x46 => {
+                        // CMOVBE r, r/m - Conditional move if below or equal (CF=1 OR ZF=1)
+                        let (rm_op, reg_op, consumed) =
+                            self.decode_modrm_operands(&bytes[offset..], prefix)?;
+                        offset += consumed;
+                        (Opcode::CMOVBE, vec![reg_op, rm_op])
                     }
                     0x4F => {
                         // CMOVG r, r/m - Conditional move if greater (ZF=0 AND SF=OF)
