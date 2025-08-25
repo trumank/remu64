@@ -226,6 +226,15 @@ impl Engine {
                 Ok(())
             }
             Opcode::SYSCALL => self.execute_syscall(inst),
+            Opcode::MOVAPS => self.execute_movaps(inst),
+            Opcode::MOVUPS => self.execute_movups(inst),
+            Opcode::ADDPS => self.execute_addps(inst),
+            Opcode::SUBPS => self.execute_subps(inst),
+            Opcode::MULPS => self.execute_mulps(inst),
+            Opcode::DIVPS => self.execute_divps(inst),
+            Opcode::XORPS => self.execute_xorps(inst),
+            Opcode::ANDPS => self.execute_andps(inst),
+            Opcode::ORPS => self.execute_orps(inst),
             _ => {
                 self.hooks.run_invalid_hooks(&mut self.cpu, inst.address)?;
                 Err(EmulatorError::UnsupportedInstruction(format!("{:?}", inst.opcode)))
@@ -1322,5 +1331,190 @@ impl Engine {
     
     pub fn context_restore(&mut self, state: &CpuState) {
         self.cpu = state.clone();
+    }
+    
+    fn read_xmm_operand(&self, operand: &Operand) -> Result<u128> {
+        match operand {
+            Operand::Register(reg) => Ok(self.cpu.read_xmm(*reg)),
+            Operand::Memory { base, index, scale, displacement, size } => {
+                if *size != OperandSize::XmmWord {
+                    return Err(EmulatorError::InvalidOperand);
+                }
+                let address = self.calculate_address(*base, *index, *scale, *displacement)?;
+                let mut bytes = [0u8; 16];
+                self.memory.read(address, &mut bytes)?;
+                Ok(u128::from_le_bytes(bytes))
+            }
+            _ => Err(EmulatorError::InvalidOperand),
+        }
+    }
+    
+    fn write_xmm_operand(&mut self, operand: &Operand, value: u128) -> Result<()> {
+        match operand {
+            Operand::Register(reg) => {
+                self.cpu.write_xmm(*reg, value);
+                Ok(())
+            }
+            Operand::Memory { base, index, scale, displacement, size } => {
+                if *size != OperandSize::XmmWord {
+                    return Err(EmulatorError::InvalidOperand);
+                }
+                let address = self.calculate_address(*base, *index, *scale, *displacement)?;
+                let bytes = value.to_le_bytes();
+                self.memory.write(address, &bytes)?;
+                Ok(())
+            }
+            _ => Err(EmulatorError::InvalidOperand),
+        }
+    }
+    
+    fn execute_movaps(&mut self, inst: &Instruction) -> Result<()> {
+        if inst.operands.len() != 2 {
+            return Err(EmulatorError::InvalidInstruction(inst.address));
+        }
+        let value = self.read_xmm_operand(&inst.operands[1])?;
+        self.write_xmm_operand(&inst.operands[0], value)?;
+        Ok(())
+    }
+    
+    fn execute_movups(&mut self, inst: &Instruction) -> Result<()> {
+        if inst.operands.len() != 2 {
+            return Err(EmulatorError::InvalidInstruction(inst.address));
+        }
+        let value = self.read_xmm_operand(&inst.operands[1])?;
+        self.write_xmm_operand(&inst.operands[0], value)?;
+        Ok(())
+    }
+    
+    fn execute_addps(&mut self, inst: &Instruction) -> Result<()> {
+        if inst.operands.len() != 2 {
+            return Err(EmulatorError::InvalidInstruction(inst.address));
+        }
+        let src = self.read_xmm_operand(&inst.operands[1])?;
+        let dst = self.read_xmm_operand(&inst.operands[0])?;
+        
+        let result = self.simd_add_ps(dst, src);
+        self.write_xmm_operand(&inst.operands[0], result)?;
+        Ok(())
+    }
+    
+    fn execute_subps(&mut self, inst: &Instruction) -> Result<()> {
+        if inst.operands.len() != 2 {
+            return Err(EmulatorError::InvalidInstruction(inst.address));
+        }
+        let src = self.read_xmm_operand(&inst.operands[1])?;
+        let dst = self.read_xmm_operand(&inst.operands[0])?;
+        
+        let result = self.simd_sub_ps(dst, src);
+        self.write_xmm_operand(&inst.operands[0], result)?;
+        Ok(())
+    }
+    
+    fn execute_mulps(&mut self, inst: &Instruction) -> Result<()> {
+        if inst.operands.len() != 2 {
+            return Err(EmulatorError::InvalidInstruction(inst.address));
+        }
+        let src = self.read_xmm_operand(&inst.operands[1])?;
+        let dst = self.read_xmm_operand(&inst.operands[0])?;
+        
+        let result = self.simd_mul_ps(dst, src);
+        self.write_xmm_operand(&inst.operands[0], result)?;
+        Ok(())
+    }
+    
+    fn execute_divps(&mut self, inst: &Instruction) -> Result<()> {
+        if inst.operands.len() != 2 {
+            return Err(EmulatorError::InvalidInstruction(inst.address));
+        }
+        let src = self.read_xmm_operand(&inst.operands[1])?;
+        let dst = self.read_xmm_operand(&inst.operands[0])?;
+        
+        let result = self.simd_div_ps(dst, src);
+        self.write_xmm_operand(&inst.operands[0], result)?;
+        Ok(())
+    }
+    
+    fn execute_xorps(&mut self, inst: &Instruction) -> Result<()> {
+        if inst.operands.len() != 2 {
+            return Err(EmulatorError::InvalidInstruction(inst.address));
+        }
+        let src = self.read_xmm_operand(&inst.operands[1])?;
+        let dst = self.read_xmm_operand(&inst.operands[0])?;
+        
+        let result = dst ^ src;
+        self.write_xmm_operand(&inst.operands[0], result)?;
+        Ok(())
+    }
+    
+    fn execute_andps(&mut self, inst: &Instruction) -> Result<()> {
+        if inst.operands.len() != 2 {
+            return Err(EmulatorError::InvalidInstruction(inst.address));
+        }
+        let src = self.read_xmm_operand(&inst.operands[1])?;
+        let dst = self.read_xmm_operand(&inst.operands[0])?;
+        
+        let result = dst & src;
+        self.write_xmm_operand(&inst.operands[0], result)?;
+        Ok(())
+    }
+    
+    fn execute_orps(&mut self, inst: &Instruction) -> Result<()> {
+        if inst.operands.len() != 2 {
+            return Err(EmulatorError::InvalidInstruction(inst.address));
+        }
+        let src = self.read_xmm_operand(&inst.operands[1])?;
+        let dst = self.read_xmm_operand(&inst.operands[0])?;
+        
+        let result = dst | src;
+        self.write_xmm_operand(&inst.operands[0], result)?;
+        Ok(())
+    }
+    
+    fn simd_add_ps(&self, a: u128, b: u128) -> u128 {
+        let mut result = 0u128;
+        for i in 0..4 {
+            let offset = i * 32;
+            let a_float = f32::from_bits(((a >> offset) & 0xFFFFFFFF) as u32);
+            let b_float = f32::from_bits(((b >> offset) & 0xFFFFFFFF) as u32);
+            let sum = a_float + b_float;
+            result |= (sum.to_bits() as u128) << offset;
+        }
+        result
+    }
+    
+    fn simd_sub_ps(&self, a: u128, b: u128) -> u128 {
+        let mut result = 0u128;
+        for i in 0..4 {
+            let offset = i * 32;
+            let a_float = f32::from_bits(((a >> offset) & 0xFFFFFFFF) as u32);
+            let b_float = f32::from_bits(((b >> offset) & 0xFFFFFFFF) as u32);
+            let diff = a_float - b_float;
+            result |= (diff.to_bits() as u128) << offset;
+        }
+        result
+    }
+    
+    fn simd_mul_ps(&self, a: u128, b: u128) -> u128 {
+        let mut result = 0u128;
+        for i in 0..4 {
+            let offset = i * 32;
+            let a_float = f32::from_bits(((a >> offset) & 0xFFFFFFFF) as u32);
+            let b_float = f32::from_bits(((b >> offset) & 0xFFFFFFFF) as u32);
+            let product = a_float * b_float;
+            result |= (product.to_bits() as u128) << offset;
+        }
+        result
+    }
+    
+    fn simd_div_ps(&self, a: u128, b: u128) -> u128 {
+        let mut result = 0u128;
+        for i in 0..4 {
+            let offset = i * 32;
+            let a_float = f32::from_bits(((a >> offset) & 0xFFFFFFFF) as u32);
+            let b_float = f32::from_bits(((b >> offset) & 0xFFFFFFFF) as u32);
+            let quotient = a_float / b_float;
+            result |= (quotient.to_bits() as u128) << offset;
+        }
+        result
     }
 }
