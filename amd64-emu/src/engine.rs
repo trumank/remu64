@@ -416,7 +416,9 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             Opcode::MOVSXD => self.execute_movsxd(inst),
             Opcode::MOVZX => self.execute_movzx(inst),
             Opcode::SETBE => self.execute_setbe(inst),
+            Opcode::SETNE => self.execute_setne(inst),
             Opcode::CMOVAE => self.execute_cmovae(inst),
+            Opcode::CMOVE => self.execute_cmove(inst),
             Opcode::CMOVG => self.execute_cmovg(inst),
             Opcode::BT => self.execute_bt(inst),
             Opcode::BTS => self.execute_bts(inst),
@@ -2501,6 +2503,68 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         }
     }
 
+    fn execute_setne(&mut self, inst: &Instruction) -> Result<()> {
+        // SETNE: Set byte if not equal (ZF=0)
+        if inst.operands.len() != 1 {
+            return Err(EmulatorError::InvalidInstruction(inst.address));
+        }
+
+        // Check condition: ZF=0 (not equal)
+        let condition = !self.engine.cpu.rflags.contains(Flags::ZF);
+
+        // Set the byte operand to 1 if condition is true, 0 if false
+        let value = if condition { 1u64 } else { 0u64 };
+
+        // Write only to the low byte of the operand
+        match &inst.operands[0] {
+            Operand::Register(reg) => {
+                // For register operands, we need to preserve the upper bits and only set the low byte
+                let current_value = self.engine.cpu.read_reg(*reg);
+                let new_value = (current_value & !0xFF) | (value & 0xFF);
+                self.engine.cpu.write_reg(*reg, new_value);
+                Ok(())
+            }
+            Operand::Memory { .. } => {
+                // For memory operands, write just the byte using mem_write_u8
+                if let Operand::Memory {
+                    base,
+                    index,
+                    scale,
+                    displacement,
+                    ..
+                } = &inst.operands[0]
+                {
+                    let mut addr = *displacement as u64;
+                    if let Some(base_reg) = base {
+                        addr = addr.wrapping_add(self.engine.cpu.read_reg(*base_reg));
+                    }
+                    if let Some(index_reg) = index {
+                        addr = addr.wrapping_add(self.engine.cpu.read_reg(*index_reg) * (*scale as u64));
+                    }
+
+                    // Apply segment base if segment prefix is present
+                    if let Some(segment_reg) = inst.prefix.segment {
+                        let segment_base = match segment_reg {
+                            Register::CS => self.engine.cpu.segments.cs.base,
+                            Register::DS => self.engine.cpu.segments.ds.base,
+                            Register::ES => self.engine.cpu.segments.es.base,
+                            Register::FS => self.engine.cpu.segments.fs.base,
+                            Register::GS => self.engine.cpu.segments.gs.base,
+                            Register::SS => self.engine.cpu.segments.ss.base,
+                            _ => 0,
+                        };
+                        addr = addr.wrapping_add(segment_base);
+                    }
+
+                    self.mem_write_u8(addr, value as u8)
+                } else {
+                    Err(EmulatorError::InvalidOperand)
+                }
+            }
+            _ => Err(EmulatorError::InvalidOperand),
+        }
+    }
+
     fn execute_cmovae(&mut self, inst: &Instruction) -> Result<()> {
         // CMOVAE: Conditional move if above or equal (CF=0)
         if inst.operands.len() != 2 {
@@ -2518,6 +2582,26 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         // If condition is false, do nothing (don't modify destination)
 
         // CMOVAE doesn't affect any flags
+        Ok(())
+    }
+
+    fn execute_cmove(&mut self, inst: &Instruction) -> Result<()> {
+        // CMOVE: Conditional move if equal (ZF=1)
+        if inst.operands.len() != 2 {
+            return Err(EmulatorError::InvalidInstruction(inst.address));
+        }
+
+        // Check condition: ZF=1 (equal)
+        let condition = self.engine.cpu.rflags.contains(Flags::ZF);
+
+        if condition {
+            // Only move if condition is true
+            let value = self.read_operand(&inst.operands[1], inst)?;
+            self.write_operand(&inst.operands[0], value, inst)?;
+        }
+        // If condition is false, do nothing (don't modify destination)
+
+        // CMOVE doesn't affect any flags
         Ok(())
     }
 

@@ -124,7 +124,9 @@ pub enum Opcode {
     MOVSXD,
     MOVZX,
     SETBE,
+    SETNE,
     CMOVAE,
+    CMOVE,
     CMOVG,
     BT,
     BTS,
@@ -598,6 +600,14 @@ impl Decoder {
                     .ok_or(EmulatorError::InvalidInstruction(0))? as i8;
                 offset += 1;
                 (Opcode::JS, vec![Operand::Relative(rel as i64)])
+            }
+            0x72 => {
+                let rel = bytes
+                    .get(offset)
+                    .copied()
+                    .ok_or(EmulatorError::InvalidInstruction(0))? as i8;
+                offset += 1;
+                (Opcode::JB, vec![Operand::Relative(rel as i64)])
             }
             0x73 => {
                 let rel = bytes
@@ -1196,6 +1206,11 @@ impl Decoder {
                         };
                         (opcode, vec![dst, src, Operand::Immediate(imm)])
                     }
+                    0x82 => {
+                        let rel = self.decode_immediate(&bytes[offset..], OperandSize::DWord)?;
+                        offset += 4;
+                        (Opcode::JB, vec![Operand::Relative(rel)])
+                    }
                     0x84 => {
                         let rel = self.decode_immediate(&bytes[offset..], OperandSize::DWord)?;
                         offset += 4;
@@ -1205,6 +1220,11 @@ impl Decoder {
                         let rel = self.decode_immediate(&bytes[offset..], OperandSize::DWord)?;
                         offset += 4;
                         (Opcode::JNZ, vec![Operand::Relative(rel)])
+                    }
+                    0x86 => {
+                        let rel = self.decode_immediate(&bytes[offset..], OperandSize::DWord)?;
+                        offset += 4;
+                        (Opcode::JBE, vec![Operand::Relative(rel)])
                     }
                     0x87 => {
                         let rel = self.decode_immediate(&bytes[offset..], OperandSize::DWord)?;
@@ -1232,12 +1252,26 @@ impl Decoder {
                         offset += consumed;
                         (Opcode::CMOVAE, vec![reg_op, rm_op])
                     }
+                    0x44 => {
+                        // CMOVE r, r/m - Conditional move if equal (ZF=1)
+                        let (rm_op, reg_op, consumed) =
+                            self.decode_modrm_operands(&bytes[offset..], prefix)?;
+                        offset += consumed;
+                        (Opcode::CMOVE, vec![reg_op, rm_op])
+                    }
                     0x4F => {
                         // CMOVG r, r/m - Conditional move if greater (ZF=0 AND SF=OF)
                         let (rm_op, reg_op, consumed) =
                             self.decode_modrm_operands(&bytes[offset..], prefix)?;
                         offset += consumed;
                         (Opcode::CMOVG, vec![reg_op, rm_op])
+                    }
+                    0x95 => {
+                        // SETNE r/m8 - Set byte if not equal (ZF=0)
+                        let (rm_op, _, consumed) =
+                            self.decode_modrm_operands(&bytes[offset..], prefix)?;
+                        offset += consumed;
+                        (Opcode::SETNE, vec![rm_op])
                     }
                     0x96 => {
                         // SETBE r/m8 - Set byte if below or equal (CF=1 or ZF=1)
