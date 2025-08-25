@@ -14,16 +14,13 @@ fn test_movaps() {
     
     // Set XMM1 to a test value
     let test_value = 0x0123456789ABCDEF0123456789ABCDEFu128;
-    engine.context_save().xmm_regs[1] = test_value;
-    let mut state = engine.context_save();
-    state.xmm_regs[1] = test_value;
-    engine.context_restore(&state);
+    engine.xmm_write(Register::XMM1, test_value).unwrap();
     
     engine.reg_write(Register::RIP, base).unwrap();
     engine.emu_start(base, base + code.len() as u64, 0, 0).unwrap();
     
     // Check that XMM0 now contains the value from XMM1
-    assert_eq!(engine.context_save().xmm_regs[0], test_value);
+    assert_eq!(engine.xmm_read(Register::XMM0).unwrap(), test_value);
 }
 
 #[test]
@@ -39,15 +36,13 @@ fn test_xorps() {
     engine.mem_write(base, &code).unwrap();
     
     // Set XMM0 to a non-zero value
-    let mut state = engine.context_save();
-    state.xmm_regs[0] = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFu128;
-    engine.context_restore(&state);
+    engine.xmm_write(Register::XMM0, 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFu128).unwrap();
     
     engine.reg_write(Register::RIP, base).unwrap();
     engine.emu_start(base, base + code.len() as u64, 0, 0).unwrap();
     
     // Check that XMM0 is now zero
-    assert_eq!(engine.context_save().xmm_regs[0], 0);
+    assert_eq!(engine.xmm_read(Register::XMM0).unwrap(), 0);
 }
 
 #[test]
@@ -87,7 +82,7 @@ fn test_addps() {
     engine.emu_start(base, base + code.len() as u64, 0, 0).unwrap();
     
     // Check results: XMM0 should now contain [6.0, 8.0, 10.0, 12.0]
-    let result = engine.context_save().xmm_regs[0];
+    let result = engine.xmm_read(Register::XMM0).unwrap();
     assert_eq!(f32::from_bits((result & 0xFFFFFFFF) as u32), 6.0);
     assert_eq!(f32::from_bits(((result >> 32) & 0xFFFFFFFF) as u32), 8.0);
     assert_eq!(f32::from_bits(((result >> 64) & 0xFFFFFFFF) as u32), 10.0);
@@ -131,7 +126,7 @@ fn test_subps() {
     engine.emu_start(base, base + code.len() as u64, 0, 0).unwrap();
     
     // Check results: XMM0 should now contain [5.0, 10.0, 15.0, 20.0]
-    let result = engine.context_save().xmm_regs[0];
+    let result = engine.xmm_read(Register::XMM0).unwrap();
     assert_eq!(f32::from_bits((result & 0xFFFFFFFF) as u32), 5.0);
     assert_eq!(f32::from_bits(((result >> 32) & 0xFFFFFFFF) as u32), 10.0);
     assert_eq!(f32::from_bits(((result >> 64) & 0xFFFFFFFF) as u32), 15.0);
@@ -175,7 +170,7 @@ fn test_mulps() {
     engine.emu_start(base, base + code.len() as u64, 0, 0).unwrap();
     
     // Check results: XMM0 should now contain [6.0, 12.0, 20.0, 30.0]
-    let result = engine.context_save().xmm_regs[0];
+    let result = engine.xmm_read(Register::XMM0).unwrap();
     assert_eq!(f32::from_bits((result & 0xFFFFFFFF) as u32), 6.0);
     assert_eq!(f32::from_bits(((result >> 32) & 0xFFFFFFFF) as u32), 12.0);
     assert_eq!(f32::from_bits(((result >> 64) & 0xFFFFFFFF) as u32), 20.0);
@@ -219,7 +214,7 @@ fn test_divps() {
     engine.emu_start(base, base + code.len() as u64, 0, 0).unwrap();
     
     // Check results: XMM0 should now contain [5.0, 5.0, 6.0, 5.0]
-    let result = engine.context_save().xmm_regs[0];
+    let result = engine.xmm_read(Register::XMM0).unwrap();
     assert_eq!(f32::from_bits((result & 0xFFFFFFFF) as u32), 5.0);
     assert_eq!(f32::from_bits(((result >> 32) & 0xFFFFFFFF) as u32), 5.0);
     assert_eq!(f32::from_bits(((result >> 64) & 0xFFFFFFFF) as u32), 6.0);
@@ -239,18 +234,14 @@ fn test_andps() {
     engine.mem_write(base, &code).unwrap();
     
     // Set up test values for bitwise operations
-    let mut state = engine.context_save();
-    
-    state.xmm_regs[0] = 0xFFFFFFFF00000000FFFFFFFF00000000u128;
-    state.xmm_regs[1] = 0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAu128;
-    
-    engine.context_restore(&state);
+    engine.xmm_write(Register::XMM0, 0xFFFFFFFF00000000FFFFFFFF00000000u128).unwrap();
+    engine.xmm_write(Register::XMM1, 0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAu128).unwrap();
     
     engine.reg_write(Register::RIP, base).unwrap();
     engine.emu_start(base, base + code.len() as u64, 0, 0).unwrap();
     
     // Check result
-    let result = engine.context_save().xmm_regs[0];
+    let result = engine.xmm_read(Register::XMM0).unwrap();
     assert_eq!(result, 0xAAAAAAAA00000000AAAAAAAA00000000u128);
 }
 
@@ -267,17 +258,13 @@ fn test_orps() {
     engine.mem_write(base, &code).unwrap();
     
     // Set up test values for bitwise operations
-    let mut state = engine.context_save();
-    
-    state.xmm_regs[0] = 0xFF00FF00FF00FF00FF00FF00FF00FF00u128;
-    state.xmm_regs[1] = 0x00FF00FF00FF00FF00FF00FF00FF00FFu128;
-    
-    engine.context_restore(&state);
+    engine.xmm_write(Register::XMM0, 0xFF00FF00FF00FF00FF00FF00FF00FF00u128).unwrap();
+    engine.xmm_write(Register::XMM1, 0x00FF00FF00FF00FF00FF00FF00FF00FFu128).unwrap();
     
     engine.reg_write(Register::RIP, base).unwrap();
     engine.emu_start(base, base + code.len() as u64, 0, 0).unwrap();
     
     // Check result
-    let result = engine.context_save().xmm_regs[0];
+    let result = engine.xmm_read(Register::XMM0).unwrap();
     assert_eq!(result, 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFu128);
 }

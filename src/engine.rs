@@ -1345,6 +1345,15 @@ impl Engine {
         self.cpu = state.clone();
     }
     
+    pub fn xmm_read(&self, reg: Register) -> Result<u128> {
+        Ok(self.cpu.read_xmm(reg))
+    }
+    
+    pub fn xmm_write(&mut self, reg: Register, value: u128) -> Result<()> {
+        self.cpu.write_xmm(reg, value);
+        Ok(())
+    }
+    
     fn calculate_address(
         &self,
         base: Option<Register>,
