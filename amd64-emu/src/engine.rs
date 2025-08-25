@@ -289,6 +289,7 @@ impl Engine {
             Opcode::MOVSXD => self.execute_movsxd(inst),
             Opcode::MOVZX => self.execute_movzx(inst),
             Opcode::SETBE => self.execute_setbe(inst),
+            Opcode::CMOVAE => self.execute_cmovae(inst),
             _ => {
                 self.hooks.run_invalid_hooks(&mut self.cpu, inst.address)?;
                 Err(EmulatorError::UnsupportedInstruction(format!("{:?}", inst.opcode)))
@@ -2123,5 +2124,25 @@ impl Engine {
             }
             _ => Err(EmulatorError::InvalidOperand),
         }
+    }
+    
+    fn execute_cmovae(&mut self, inst: &Instruction) -> Result<()> {
+        // CMOVAE: Conditional move if above or equal (CF=0)
+        if inst.operands.len() != 2 {
+            return Err(EmulatorError::InvalidInstruction(inst.address));
+        }
+        
+        // Check condition: CF=0 (above or equal for unsigned comparison)
+        let condition = !self.cpu.rflags.contains(Flags::CF);
+        
+        if condition {
+            // Only move if condition is true
+            let value = self.read_operand(&inst.operands[1])?;
+            self.write_operand(&inst.operands[0], value)?;
+        }
+        // If condition is false, do nothing (don't modify destination)
+        
+        // CMOVAE doesn't affect any flags
+        Ok(())
     }
 }

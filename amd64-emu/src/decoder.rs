@@ -124,6 +124,7 @@ pub enum Opcode {
     MOVSXD,
     MOVZX,
     SETBE,
+    CMOVAE,
 }
 
 #[derive(Debug, Clone)]
@@ -922,6 +923,12 @@ impl Decoder {
                         let (rm_op, reg_op, consumed) = self.decode_modrm_operands(&bytes[offset..], prefix)?;
                         offset += consumed;
                         (Opcode::MOVZX, vec![reg_op, rm_op])
+                    }
+                    0x43 => {
+                        // CMOVAE r, r/m - Conditional move if above or equal (CF=0)
+                        let (rm_op, reg_op, consumed) = self.decode_modrm_operands(&bytes[offset..], prefix)?;
+                        offset += consumed;
+                        (Opcode::CMOVAE, vec![reg_op, rm_op])
                     }
                     0x96 => {
                         // SETBE r/m8 - Set byte if below or equal (CF=1 or ZF=1)
