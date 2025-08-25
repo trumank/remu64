@@ -151,6 +151,10 @@ impl FunctionExecutor {
         // Set RIP to function start
         self.engine.reg_write(Register::RIP, function_address)?;
 
+        // Get TEB address from minidump thread stream
+        let teb_address = self.memory_manager.get_loader().get_teb_address()?;
+        self.engine.set_gs_base(teb_address);
+
         // Create execution hooks
         let max_instructions = 1000000u64;
 

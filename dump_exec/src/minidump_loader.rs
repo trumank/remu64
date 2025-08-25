@@ -113,4 +113,24 @@ impl MinidumpLoader {
             }
         })
     }
+
+    pub fn get_teb_address(&self) -> Result<u64> {
+        let thread_list = self
+            .dump
+            .get_stream::<MinidumpThreadList>()
+            .with_context(|| "Failed to get thread list from minidump")?;
+
+        if thread_list.threads.is_empty() {
+            anyhow::bail!("No threads found in minidump");
+        }
+
+        // Use the first thread's TEB address
+        let teb_address = thread_list.threads[0].raw.teb;
+        println!(
+            "Using TEB address 0x{:x} from thread {}",
+            teb_address, thread_list.threads[0].raw.thread_id
+        );
+
+        Ok(teb_address)
+    }
 }
