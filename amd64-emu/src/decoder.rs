@@ -475,6 +475,33 @@ impl Decoder {
                 offset += 1;
                 (Opcode::JNZ, vec![Operand::Relative(rel as i64)])
             }
+            0x81 => {
+                // Arithmetic group with 32-bit immediate
+                if bytes.len() <= offset {
+                    return Err(EmulatorError::InvalidInstruction(0));
+                }
+                let modrm = bytes[offset];
+                let reg_bits = (modrm >> 3) & 0x07;
+                let (rm_op, _, consumed) = self.decode_modrm_operands(&bytes[offset..], prefix)?;
+                offset += consumed;
+                
+                // Get the 32-bit immediate value (sign-extended to 64-bit)
+                let imm = self.decode_immediate(&bytes[offset..], OperandSize::DWord)?;
+                offset += 4;
+                
+                let opcode = match reg_bits {
+                    0 => Opcode::ADD,  // ADD r/m, imm32
+                    1 => Opcode::OR,   // OR r/m, imm32
+                    2 => Opcode::ADC,  // ADC r/m, imm32
+                    3 => Opcode::SBB,  // SBB r/m, imm32
+                    4 => Opcode::AND,  // AND r/m, imm32
+                    5 => Opcode::SUB,  // SUB r/m, imm32
+                    6 => Opcode::XOR,  // XOR r/m, imm32
+                    7 => Opcode::CMP,  // CMP r/m, imm32
+                    _ => unreachable!(),
+                };
+                (opcode, vec![rm_op, Operand::Immediate(imm)])
+            }
             0x83 => {
                 // Arithmetic group with 8-bit immediate
                 if bytes.len() <= offset {
@@ -492,8 +519,8 @@ impl Decoder {
                 let opcode = match reg_bits {
                     0 => Opcode::ADD,  // ADD r/m, imm8
                     1 => Opcode::OR,   // OR r/m, imm8
-                    2 => return Err(EmulatorError::UnsupportedInstruction("ADC".into())), // ADC r/m, imm8
-                    3 => return Err(EmulatorError::UnsupportedInstruction("SBB".into())), // SBB r/m, imm8
+                    2 => Opcode::ADC,  // ADC r/m, imm8 (now supported)
+                    3 => Opcode::SBB,  // SBB r/m, imm8 (now supported)
                     4 => Opcode::AND,  // AND r/m, imm8
                     5 => Opcode::SUB,  // SUB r/m, imm8
                     6 => Opcode::XOR,  // XOR r/m, imm8
