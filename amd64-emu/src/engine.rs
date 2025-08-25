@@ -253,6 +253,10 @@ impl Engine {
             Opcode::XORPS => self.execute_xorps(inst),
             Opcode::ANDPS => self.execute_andps(inst),
             Opcode::ORPS => self.execute_orps(inst),
+            Opcode::CMPPS => self.execute_cmpps(inst),
+            Opcode::CMPSS => self.execute_cmpss(inst),
+            Opcode::COMISS => self.execute_comiss(inst),
+            Opcode::UCOMISS => self.execute_ucomiss(inst),
             _ => {
                 self.hooks.run_invalid_hooks(&mut self.cpu, inst.address)?;
                 Err(EmulatorError::UnsupportedInstruction(format!("{:?}", inst.opcode)))
@@ -1709,6 +1713,166 @@ impl Engine {
         let result = dst | src;
         self.write_xmm_operand(&inst.operands[0], result)?;
         Ok(())
+    }
+    
+    fn execute_cmpps(&mut self, inst: &Instruction) -> Result<()> {
+        if inst.operands.len() != 3 {
+            return Err(EmulatorError::InvalidInstruction(inst.address));
+        }
+        
+        let dst = self.read_xmm_operand(&inst.operands[0])?;
+        let src = self.read_xmm_operand(&inst.operands[1])?;
+        let imm = match &inst.operands[2] {
+            Operand::Immediate(imm) => *imm as u8,
+            _ => return Err(EmulatorError::InvalidOperand),
+        };
+        
+        let result = self.simd_cmp_ps(dst, src, imm);
+        self.write_xmm_operand(&inst.operands[0], result)?;
+        Ok(())
+    }
+    
+    fn execute_cmpss(&mut self, inst: &Instruction) -> Result<()> {
+        if inst.operands.len() != 3 {
+            return Err(EmulatorError::InvalidInstruction(inst.address));
+        }
+        
+        let mut dst = self.read_xmm_operand(&inst.operands[0])?;
+        let src = self.read_xmm_operand(&inst.operands[1])?;
+        let imm = match &inst.operands[2] {
+            Operand::Immediate(imm) => *imm as u8,
+            _ => return Err(EmulatorError::InvalidOperand),
+        };
+        
+        // Only compare and update the lowest 32 bits
+        let dst_float = f32::from_bits((dst & 0xFFFFFFFF) as u32);
+        let src_float = f32::from_bits((src & 0xFFFFFFFF) as u32);
+        let result = self.compare_scalar_ps(dst_float, src_float, imm);
+        
+        // Clear lower 32 bits and set result
+        dst = (dst & !0xFFFFFFFF) | (result as u128);
+        self.write_xmm_operand(&inst.operands[0], dst)?;
+        Ok(())
+    }
+    
+    fn execute_comiss(&mut self, inst: &Instruction) -> Result<()> {
+        if inst.operands.len() != 2 {
+            return Err(EmulatorError::InvalidInstruction(inst.address));
+        }
+        
+        let dst = self.read_xmm_operand(&inst.operands[0])?;
+        let src = self.read_xmm_operand(&inst.operands[1])?;
+        
+        // Extract lowest 32-bit floats
+        let dst_float = f32::from_bits((dst & 0xFFFFFFFF) as u32);
+        let src_float = f32::from_bits((src & 0xFFFFFFFF) as u32);
+        
+        // Update EFLAGS based on comparison
+        self.update_flags_comiss(dst_float, src_float);
+        Ok(())
+    }
+    
+    fn execute_ucomiss(&mut self, inst: &Instruction) -> Result<()> {
+        if inst.operands.len() != 2 {
+            return Err(EmulatorError::InvalidInstruction(inst.address));
+        }
+        
+        let dst = self.read_xmm_operand(&inst.operands[0])?;
+        let src = self.read_xmm_operand(&inst.operands[1])?;
+        
+        // Extract lowest 32-bit floats
+        let dst_float = f32::from_bits((dst & 0xFFFFFFFF) as u32);
+        let src_float = f32::from_bits((src & 0xFFFFFFFF) as u32);
+        
+        // Update EFLAGS based on unordered comparison
+        self.update_flags_ucomiss(dst_float, src_float);
+        Ok(())
+    }
+    
+    fn simd_cmp_ps(&self, a: u128, b: u128, imm: u8) -> u128 {
+        let mut result = 0u128;
+        for i in 0..4 {
+            let offset = i * 32;
+            let a_float = f32::from_bits(((a >> offset) & 0xFFFFFFFF) as u32);
+            let b_float = f32::from_bits(((b >> offset) & 0xFFFFFFFF) as u32);
+            
+            let cmp_result = self.compare_scalar_ps(a_float, b_float, imm);
+            result |= (cmp_result as u128) << offset;
+        }
+        result
+    }
+    
+    fn compare_scalar_ps(&self, a: f32, b: f32, imm: u8) -> u32 {
+        let result = match imm & 0x7 {
+            0 => a == b,           // EQ
+            1 => a < b,            // LT
+            2 => a <= b,           // LE
+            3 => a.is_nan() || b.is_nan(), // UNORD
+            4 => a != b,           // NEQ
+            5 => !(a < b),         // NLT (a >= b or unordered)
+            6 => !(a <= b),        // NLE (a > b or unordered)
+            7 => !a.is_nan() && !b.is_nan(), // ORD
+            _ => false,
+        };
+        
+        if result {
+            0xFFFFFFFF
+        } else {
+            0
+        }
+    }
+    
+    fn update_flags_comiss(&mut self, a: f32, b: f32) {
+        // COMISS sets ZF, PF, CF according to comparison
+        // Signals invalid if either operand is SNaN
+        if a.is_nan() || b.is_nan() {
+            // Unordered result
+            self.cpu.rflags.set(Flags::ZF, true);
+            self.cpu.rflags.set(Flags::PF, true);
+            self.cpu.rflags.set(Flags::CF, true);
+        } else if a > b {
+            self.cpu.rflags.set(Flags::ZF, false);
+            self.cpu.rflags.set(Flags::PF, false);
+            self.cpu.rflags.set(Flags::CF, false);
+        } else if a < b {
+            self.cpu.rflags.set(Flags::ZF, false);
+            self.cpu.rflags.set(Flags::PF, false);
+            self.cpu.rflags.set(Flags::CF, true);
+        } else { // a == b
+            self.cpu.rflags.set(Flags::ZF, true);
+            self.cpu.rflags.set(Flags::PF, false);
+            self.cpu.rflags.set(Flags::CF, false);
+        }
+        
+        // Clear OF and SF
+        self.cpu.rflags.set(Flags::OF, false);
+        self.cpu.rflags.set(Flags::SF, false);
+    }
+    
+    fn update_flags_ucomiss(&mut self, a: f32, b: f32) {
+        // UCOMISS is similar to COMISS but doesn't signal on QNaN
+        if a.is_nan() || b.is_nan() {
+            // Unordered result
+            self.cpu.rflags.set(Flags::ZF, true);
+            self.cpu.rflags.set(Flags::PF, true);
+            self.cpu.rflags.set(Flags::CF, true);
+        } else if a > b {
+            self.cpu.rflags.set(Flags::ZF, false);
+            self.cpu.rflags.set(Flags::PF, false);
+            self.cpu.rflags.set(Flags::CF, false);
+        } else if a < b {
+            self.cpu.rflags.set(Flags::ZF, false);
+            self.cpu.rflags.set(Flags::PF, false);
+            self.cpu.rflags.set(Flags::CF, true);
+        } else { // a == b
+            self.cpu.rflags.set(Flags::ZF, true);
+            self.cpu.rflags.set(Flags::PF, false);
+            self.cpu.rflags.set(Flags::CF, false);
+        }
+        
+        // Clear OF and SF
+        self.cpu.rflags.set(Flags::OF, false);
+        self.cpu.rflags.set(Flags::SF, false);
     }
     
     fn simd_add_ps(&self, a: u128, b: u128) -> u128 {
