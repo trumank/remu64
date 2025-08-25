@@ -64,6 +64,7 @@ pub enum Opcode {
     ROL,
     ROR,
     XCHG,
+    XADD,
     MUL,
     DIV,
     IMUL,
@@ -128,6 +129,7 @@ pub struct InstructionPrefix {
     pub address_size_override: bool,
     pub segment: Option<Register>,
     pub rep: Option<RepPrefix>,
+    pub lock: bool,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -179,6 +181,7 @@ impl Decoder {
                 0x3E => prefix.segment = Some(Register::DS),
                 0x64 => prefix.segment = Some(Register::FS),
                 0x65 => prefix.segment = Some(Register::GS),
+                0xF0 => prefix.lock = true,
                 0xF2 => prefix.rep = Some(RepPrefix::RepNZ),
                 0xF3 => prefix.rep = Some(RepPrefix::RepZ),
                 0x40..=0x4F if matches!(self.mode, DecoderMode::Mode64) => {
@@ -619,6 +622,12 @@ impl Decoder {
                         let rel = self.decode_immediate(&bytes[offset..], OperandSize::DWord)?;
                         offset += 4;
                         (Opcode::JNZ, vec![Operand::Relative(rel)])
+                    }
+                    0xC1 => {
+                        // XADD r/m, r
+                        let (rm_op, reg_op, consumed) = self.decode_modrm_operands(&bytes[offset..], prefix)?;
+                        offset += consumed;
+                        (Opcode::XADD, vec![rm_op, reg_op])
                     }
                     _ => return Err(EmulatorError::UnsupportedInstruction(format!("0F {:02X}", secondary))),
                 }

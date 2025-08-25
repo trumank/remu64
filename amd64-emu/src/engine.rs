@@ -204,6 +204,7 @@ impl Engine {
             Opcode::ROL => self.execute_rol(inst),
             Opcode::ROR => self.execute_ror(inst),
             Opcode::XCHG => self.execute_xchg(inst),
+            Opcode::XADD => self.execute_xadd(inst),
             Opcode::MUL => self.execute_mul(inst),
             Opcode::DIV => self.execute_div(inst),
             Opcode::IMUL => self.execute_imul(inst),
@@ -626,6 +627,29 @@ impl Engine {
         self.write_operand(&inst.operands[1], value1)?;
         
         // XCHG doesn't affect any flags
+        Ok(())
+    }
+    
+    fn execute_xadd(&mut self, inst: &Instruction) -> Result<()> {
+        if inst.operands.len() != 2 {
+            return Err(EmulatorError::InvalidInstruction(inst.address));
+        }
+        
+        // XADD: Exchange and Add
+        // Exchanges the destination and source operands, then adds the original source value to the destination
+        let dst = self.read_operand(&inst.operands[0])?;
+        let src = self.read_operand(&inst.operands[1])?;
+        
+        // Store original destination in source
+        self.write_operand(&inst.operands[1], dst)?;
+        
+        // Add original source to original destination and store in destination
+        let result = dst.wrapping_add(src);
+        self.write_operand(&inst.operands[0], result)?;
+        
+        // Update flags based on the addition result
+        self.update_flags_arithmetic(dst, src, result, false);
+        
         Ok(())
     }
     
