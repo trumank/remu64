@@ -6,7 +6,7 @@ use iced_x86::{
     Decoder, DecoderOptions, Formatter, FormatterOutput, FormatterTextKind, Instruction,
     IntelFormatter,
 };
-use std::io::Write;
+use std::{collections::HashSet, io::Write};
 
 struct ColorFormatterOutput {
     result: String,
@@ -123,22 +123,22 @@ impl InstructionTracer {
         let colored_disasm = self.formatter_output.get_result();
 
         // Get register values
-        let rax = engine.reg_read(Register::RAX).unwrap_or(0);
-        let rcx = engine.reg_read(Register::RCX).unwrap_or(0);
-        let rdx = engine.reg_read(Register::RDX).unwrap_or(0);
-        let rbx = engine.reg_read(Register::RBX).unwrap_or(0);
-        let rsp = engine.reg_read(Register::RSP).unwrap_or(0);
-        let rbp = engine.reg_read(Register::RBP).unwrap_or(0);
-        let rsi = engine.reg_read(Register::RSI).unwrap_or(0);
-        let rdi = engine.reg_read(Register::RDI).unwrap_or(0);
-        let r8 = engine.reg_read(Register::R8).unwrap_or(0);
-        let r9 = engine.reg_read(Register::R9).unwrap_or(0);
-        let r10 = engine.reg_read(Register::R10).unwrap_or(0);
-        let r11 = engine.reg_read(Register::R11).unwrap_or(0);
-        let r12 = engine.reg_read(Register::R12).unwrap_or(0);
-        let r13 = engine.reg_read(Register::R13).unwrap_or(0);
-        let r14 = engine.reg_read(Register::R14).unwrap_or(0);
-        let r15 = engine.reg_read(Register::R15).unwrap_or(0);
+        let rax = engine.reg_read(Register::RAX);
+        let rcx = engine.reg_read(Register::RCX);
+        let rdx = engine.reg_read(Register::RDX);
+        let rbx = engine.reg_read(Register::RBX);
+        let rsp = engine.reg_read(Register::RSP);
+        let rbp = engine.reg_read(Register::RBP);
+        let rsi = engine.reg_read(Register::RSI);
+        let rdi = engine.reg_read(Register::RDI);
+        let r8 = engine.reg_read(Register::R8);
+        let r9 = engine.reg_read(Register::R9);
+        let r10 = engine.reg_read(Register::R10);
+        let r11 = engine.reg_read(Register::R11);
+        let r12 = engine.reg_read(Register::R12);
+        let r13 = engine.reg_read(Register::R13);
+        let r14 = engine.reg_read(Register::R14);
+        let r15 = engine.reg_read(Register::R15);
 
         // Check if RIP is in a known module
         let module_info = loader.and_then(|l| l.find_module_for_address(rip));

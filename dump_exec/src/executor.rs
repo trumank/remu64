@@ -11,8 +11,6 @@ struct ExecutionHooks<'a> {
     memory_manager: &'a mut MemoryManager,
     tracer: &'a mut InstructionTracer,
     instruction_count: u64,
-    max_instructions: u64,
-    return_address: u64,
 }
 
 impl<'a> HookManager for ExecutionHooks<'a> {
@@ -68,24 +66,6 @@ impl<'a> HookManager for ExecutionHooks<'a> {
     }
 
     fn on_code(&mut self, engine: &mut Engine, address: u64, size: usize) -> amd64_emu::Result<()> {
-        // Check instruction count limit
-        self.instruction_count += 1;
-        if self.instruction_count > self.max_instructions {
-            return Err(EmulatorError::UnsupportedInstruction(
-                "Execution exceeded maximum instruction count".to_string(),
-            ));
-        }
-
-        // Check for return to exit execution
-        if address == self.return_address {
-            if self.tracer.is_enabled() {
-                // Trace the return - we can't easily get RAX here, so we'll handle it outside
-            }
-            return Err(EmulatorError::UnsupportedInstruction(
-                "FUNCTION_RETURN".to_string(),
-            ));
-        }
-
         // Handle instruction tracing
         if self.tracer.is_enabled() {
             let mut instruction_bytes = vec![0; size];
@@ -156,13 +136,18 @@ impl FunctionExecutor {
         let mut engine = Engine::new(EngineMode::Mode64);
         let mut memory_manager = MemoryManager::with_minidump(minidump_loader);
 
+        let stack_size = 0x10;
         let stack_base = memory_manager
-            .allocate_stack(0x10000)
+            .allocate_stack(stack_size)
             .context("Failed to allocate stack")?;
 
         // Map stack memory in engine
         engine
-            .mem_map(stack_base - 0x10000, 0x10000, Permission::ALL)
+            .mem_map(
+                stack_base - stack_size,
+                stack_size as usize,
+                Permission::ALL,
+            )
             .context("Failed to map stack memory")?;
 
         let tracer = InstructionTracer::new(false);
@@ -182,28 +167,24 @@ impl FunctionExecutor {
         function_address: u64,
         args: Vec<ArgumentType>,
     ) -> Result<()> {
-        let return_address = 0; // TODO this indicates never stop, which is fine since there will be other issues before the function returns at the moment
+        // Use a canary return address that we can detect
+        let return_address = 0xDEADBEEFCAFEBABE_u64;
 
         // Setup calling convention
         CallingConvention::setup_fastcall(&mut self.engine, args, self.stack_base, return_address)?;
-        CallingConvention::setup_shadow_space(&mut self.engine)?;
+        CallingConvention::setup_shadow_space(&mut self.engine);
 
         // Set RIP to function start
-        self.engine.reg_write(Register::RIP, function_address)?;
+        self.engine.reg_write(Register::RIP, function_address);
 
         // Get TEB address from minidump thread stream
         let teb_address = self.memory_manager.get_loader().get_teb_address()?;
         self.engine.set_gs_base(teb_address);
 
-        // Create execution hooks
-        let max_instructions = 1000000u64;
-
         let mut hooks = ExecutionHooks {
             memory_manager: &mut self.memory_manager,
             tracer: &mut self.tracer,
             instruction_count: 0,
-            max_instructions,
-            return_address,
         };
 
         // Execute the function
@@ -217,7 +198,7 @@ impl FunctionExecutor {
             Err(EmulatorError::UnsupportedInstruction(msg)) if msg == "FUNCTION_RETURN" => {
                 // Function returned normally - handle tracing and cleanup
                 if hooks.tracer.is_enabled() {
-                    let rax = self.engine.reg_read(Register::RAX)?;
+                    let rax = self.engine.reg_read(Register::RAX);
                     hooks.tracer.trace_return(return_address, rax)?;
                 }
             }
@@ -229,17 +210,8 @@ impl FunctionExecutor {
                 ));
             }
             Err(e) => {
-                // Get current RIP for better error reporting
-                let rip = match self.engine.reg_read(Register::RIP) {
-                    Ok(rip) => rip,
-                    Err(_) => 0, // Fallback if we can't read RIP
-                };
-
-                // Try to read instruction bytes at the current RIP
-                let instruction_bytes =
-                    self.read_instruction_at(rip).unwrap_or_else(|_| vec![0x90]); // NOP as fallback
-
-                // Use the enhanced error reporting
+                let rip = self.engine.reg_read(Register::RIP);
+                let instruction_bytes = self.read_instruction_at(rip).unwrap_or(vec![]);
                 return self.report_instruction_error(rip, &instruction_bytes, e);
             }
         }
@@ -313,8 +285,8 @@ impl FunctionExecutor {
         Ok(())
     }
 
-    pub fn get_return_value(&self) -> Result<u64> {
-        Ok(self.engine.reg_read(Register::RAX)?)
+    pub fn get_return_value(&self) -> u64 {
+        self.engine.reg_read(Register::RAX)
     }
 
     pub fn get_engine(&self) -> &Engine {
@@ -333,12 +305,12 @@ impl FunctionExecutor {
         self.memory_manager.write_memory(address, data)
     }
 
-    pub fn set_register(&mut self, register: Register, value: u64) -> Result<()> {
-        Ok(self.engine.reg_write(register, value)?)
+    pub fn set_register(&mut self, register: Register, value: u64) {
+        self.engine.reg_write(register, value)
     }
 
-    pub fn get_register(&self, register: Register) -> Result<u64> {
-        Ok(self.engine.reg_read(register)?)
+    pub fn get_register(&self, register: Register) -> u64 {
+        self.engine.reg_read(register)
     }
 
     pub fn enable_tracing(&mut self, enabled: bool) {

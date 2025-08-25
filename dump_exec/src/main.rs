@@ -103,15 +103,11 @@ fn main() -> Result<()> {
     );
 
     match executor.execute_function(function_address, function_args) {
-        Ok(_) => match executor.get_return_value() {
-            Ok(return_value) => {
-                println!("Function executed successfully!");
-                println!("Return value: 0x{:x} ({})", return_value, return_value);
-            }
-            Err(e) => {
-                println!("Function executed, but failed to read return value: {}", e);
-            }
-        },
+        Ok(_) => {
+            let return_value = executor.get_return_value();
+            println!("Function executed successfully!");
+            println!("Return value: 0x{:x} ({})", return_value, return_value);
+        }
         Err(e) => {
             eprintln!("Function execution failed: {}", e);
             std::process::exit(1);

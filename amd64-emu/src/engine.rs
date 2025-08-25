@@ -92,13 +92,12 @@ impl Engine {
         }
     }
 
-    pub fn reg_read(&self, reg: Register) -> Result<u64> {
-        Ok(self.cpu.read_reg(reg))
+    pub fn reg_read(&self, reg: Register) -> u64 {
+        self.cpu.read_reg(reg)
     }
 
-    pub fn reg_write(&mut self, reg: Register, value: u64) -> Result<()> {
-        self.cpu.write_reg(reg, value);
-        Ok(())
+    pub fn reg_write(&mut self, reg: Register, value: u64) {
+        self.cpu.write_reg(reg, value)
     }
 
     pub fn flags_read(&self) -> Flags {
@@ -1152,11 +1151,11 @@ impl<H: HookManager> ExecutionContext<'_, H> {
                     OperandSize::QWord => 64,
                     _ => 64,
                 };
-                
+
                 let max_positive = (1i128 << (dest_size - 1)) - 1;
                 let min_negative = -(1i128 << (dest_size - 1));
                 let overflow = result > max_positive || result < min_negative;
-                
+
                 self.engine.cpu.rflags.set(Flags::CF, overflow);
                 self.engine.cpu.rflags.set(Flags::OF, overflow);
             }
@@ -1177,11 +1176,11 @@ impl<H: HookManager> ExecutionContext<'_, H> {
                     OperandSize::QWord => 64,
                     _ => 64,
                 };
-                
+
                 let max_positive = (1i128 << (dest_size - 1)) - 1;
                 let min_negative = -(1i128 << (dest_size - 1));
                 let overflow = result > max_positive || result < min_negative;
-                
+
                 self.engine.cpu.rflags.set(Flags::CF, overflow);
                 self.engine.cpu.rflags.set(Flags::OF, overflow);
             }
@@ -1826,12 +1825,18 @@ impl<H: HookManager> ExecutionContext<'_, H> {
     fn write_operand(&mut self, operand: &Operand, value: u64, inst: &Instruction) -> Result<()> {
         match operand {
             Operand::Register(reg) => {
-                // Handle 32-bit writes to 64-bit registers - in x86-64, writing to 32-bit 
+                // Handle 32-bit writes to 64-bit registers - in x86-64, writing to 32-bit
                 // reg should zero the upper 32 bits of the corresponding 64-bit reg
                 if inst.operand_size == OperandSize::DWord {
                     match reg {
-                        Register::R8 | Register::R9 | Register::R10 | Register::R11 |
-                        Register::R12 | Register::R13 | Register::R14 | Register::R15 => {
+                        Register::R8
+                        | Register::R9
+                        | Register::R10
+                        | Register::R11
+                        | Register::R12
+                        | Register::R13
+                        | Register::R14
+                        | Register::R15 => {
                             // For R8-R15, zero upper 32 bits when writing 32-bit value
                             self.engine.cpu.write_reg(*reg, value & 0xFFFFFFFF);
                         }
@@ -1898,15 +1903,15 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         // Use a simple fake timestamp that increments with each instruction
         // In a real CPU, this would be a high-resolution timestamp
         let timestamp = self.engine.instruction_count * 1000; // Simple fake timestamp
-        
+
         // Split the 64-bit timestamp into high and low 32-bit parts
         let low_part = timestamp as u32;
         let high_part = (timestamp >> 32) as u32;
-        
+
         // Store in EAX (low part) and EDX (high part)
         self.engine.cpu.write_reg(Register::EAX, low_part as u64);
         self.engine.cpu.write_reg(Register::EDX, high_part as u64);
-        
+
         Ok(())
     }
 
@@ -1917,7 +1922,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         if !inst.operands.is_empty() {
             return Err(EmulatorError::InvalidInstruction(inst.address));
         }
-        
+
         // MONITORX uses EAX for the address to monitor, but we don't need to
         // actually implement the monitoring functionality for emulation
         Ok(())
@@ -1929,7 +1934,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         if inst.operands.len() != 1 {
             return Err(EmulatorError::InvalidInstruction(inst.address));
         }
-        
+
         // We don't need to actually do anything - it's just a cache hint
         // The operand specifies which memory address to prefetch, but we ignore it
         Ok(())
@@ -1946,7 +1951,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
 
         let dest_value = self.read_operand(&inst.operands[0], inst)?;
         let src_value = self.read_operand(&inst.operands[1], inst)?;
-        
+
         // Determine operand size from the first operand
         let operand_size = self.get_operand_size(&inst.operands[0]);
         let mask = match operand_size {
@@ -1957,7 +1962,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             OperandSize::XmmWord => return Err(EmulatorError::InvalidInstruction(inst.address)),
             OperandSize::YmmWord => return Err(EmulatorError::InvalidInstruction(inst.address)),
         };
-        
+
         // Get the appropriate accumulator register
         let acc_reg = match operand_size {
             OperandSize::Byte => Register::AL,
@@ -1967,10 +1972,10 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             OperandSize::XmmWord => return Err(EmulatorError::InvalidInstruction(inst.address)),
             OperandSize::YmmWord => return Err(EmulatorError::InvalidInstruction(inst.address)),
         };
-        
+
         let acc_value = self.engine.cpu.read_reg(acc_reg) & mask;
         let dest_masked = dest_value & mask;
-        
+
         if acc_value == dest_masked {
             // Equal: Set ZF=1 and destination = source
             self.engine.cpu.rflags.set(Flags::ZF, true);
@@ -1980,7 +1985,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             self.engine.cpu.rflags.set(Flags::ZF, false);
             self.engine.cpu.write_reg(acc_reg, dest_masked);
         }
-        
+
         Ok(())
     }
 
@@ -1991,10 +1996,10 @@ impl<H: HookManager> ExecutionContext<'_, H> {
 
         let bit_base = self.read_operand(&inst.operands[0], inst)?;
         let bit_offset = self.read_operand(&inst.operands[1], inst)? & 0x3F; // Mask to 6 bits for 64-bit
-        
+
         let bit_value = (bit_base >> bit_offset) & 1;
         self.engine.cpu.rflags.set(Flags::CF, bit_value != 0);
-        
+
         Ok(())
     }
 
@@ -2005,13 +2010,13 @@ impl<H: HookManager> ExecutionContext<'_, H> {
 
         let bit_base = self.read_operand(&inst.operands[0], inst)?;
         let bit_offset = self.read_operand(&inst.operands[1], inst)? & 0x3F; // Mask to 6 bits for 64-bit
-        
+
         let bit_value = (bit_base >> bit_offset) & 1;
         self.engine.cpu.rflags.set(Flags::CF, bit_value != 0);
-        
+
         let new_value = bit_base | (1 << bit_offset);
         self.write_operand(&inst.operands[0], new_value, inst)?;
-        
+
         Ok(())
     }
 
@@ -2022,13 +2027,13 @@ impl<H: HookManager> ExecutionContext<'_, H> {
 
         let bit_base = self.read_operand(&inst.operands[0], inst)?;
         let bit_offset = self.read_operand(&inst.operands[1], inst)? & 0x3F; // Mask to 6 bits for 64-bit
-        
+
         let bit_value = (bit_base >> bit_offset) & 1;
         self.engine.cpu.rflags.set(Flags::CF, bit_value != 0);
-        
+
         let new_value = bit_base & !(1 << bit_offset);
         self.write_operand(&inst.operands[0], new_value, inst)?;
-        
+
         Ok(())
     }
 
@@ -2039,13 +2044,13 @@ impl<H: HookManager> ExecutionContext<'_, H> {
 
         let bit_base = self.read_operand(&inst.operands[0], inst)?;
         let bit_offset = self.read_operand(&inst.operands[1], inst)? & 0x3F; // Mask to 6 bits for 64-bit
-        
+
         let bit_value = (bit_base >> bit_offset) & 1;
         self.engine.cpu.rflags.set(Flags::CF, bit_value != 0);
-        
+
         let new_value = bit_base ^ (1 << bit_offset);
         self.write_operand(&inst.operands[0], new_value, inst)?;
-        
+
         Ok(())
     }
 
@@ -2233,14 +2238,14 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         if inst.operands.len() != 2 {
             return Err(EmulatorError::InvalidInstruction(inst.address));
         }
-        
+
         // Check if we're dealing with YMM or XMM registers
         let is_ymm = match &inst.operands[1] {
             Operand::Register(reg) => reg.is_ymm(),
             Operand::Memory { size, .. } => *size == OperandSize::YmmWord,
             _ => false,
         };
-        
+
         if is_ymm {
             // YMM operation (256-bit)
             let value = self.read_ymm_operand(&inst.operands[1])?;
@@ -2848,7 +2853,8 @@ impl<H: HookManager> ExecutionContext<'_, H> {
                         addr = addr.wrapping_add(self.engine.cpu.read_reg(*base_reg));
                     }
                     if let Some(index_reg) = index {
-                        addr = addr.wrapping_add(self.engine.cpu.read_reg(*index_reg) * (*scale as u64));
+                        addr = addr
+                            .wrapping_add(self.engine.cpu.read_reg(*index_reg) * (*scale as u64));
                     }
 
                     // Apply segment base if segment prefix is present
@@ -2941,8 +2947,8 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         }
 
         // Check condition: CF=1 OR ZF=1 (below or equal)
-        let condition = self.engine.cpu.rflags.contains(Flags::CF) || 
-                       self.engine.cpu.rflags.contains(Flags::ZF);
+        let condition = self.engine.cpu.rflags.contains(Flags::CF)
+            || self.engine.cpu.rflags.contains(Flags::ZF);
 
         if condition {
             // Only move if condition is true
@@ -3051,7 +3057,8 @@ impl<H: HookManager> ExecutionContext<'_, H> {
 
         // Perform the insertion based on the immediate value
         let mut result = src1_value;
-        match imm & 1 {  // Only bit 0 is significant for VINSERTF128
+        match imm & 1 {
+            // Only bit 0 is significant for VINSERTF128
             0 => {
                 // Insert into lower 128 bits (bits 127:0)
                 result[0] = src2_value;
