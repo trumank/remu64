@@ -189,8 +189,17 @@ impl FunctionExecutor {
                 ));
             }
             Err(e) => {
-                // Other errors are fatal
-                return Err(anyhow::anyhow!("Execution failed: {:?}", e));
+                // Get current RIP for better error reporting
+                let rip = match self.engine.reg_read(Register::RIP) {
+                    Ok(rip) => rip,
+                    Err(_) => 0, // Fallback if we can't read RIP
+                };
+                
+                // Try to read instruction bytes at the current RIP
+                let instruction_bytes = self.read_instruction_at(rip).unwrap_or_else(|_| vec![0x90]); // NOP as fallback
+                
+                // Use the enhanced error reporting
+                return self.report_instruction_error(rip, &instruction_bytes, e);
             }
         }
 
