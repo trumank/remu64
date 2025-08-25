@@ -4,6 +4,7 @@ use crate::minidump_loader::MinidumpLoader;
 use crate::memory_manager::MemoryManager;
 use crate::fastcall::{ArgumentType, CallingConvention};
 use crate::tracer::InstructionTracer;
+use iced_x86::{Decoder, DecoderOptions, Formatter, IntelFormatter, Instruction};
 
 pub struct FunctionExecutor {
     engine: Engine,
@@ -83,7 +84,55 @@ impl FunctionExecutor {
             }
             
             // Execute single instruction
-            self.engine.emu_start(rip, rip + 15, 0, 1)?;
+            if let Err(e) = self.engine.emu_start(rip, rip + 15, 0, 1) {
+                // Enhanced error reporting with instruction details
+                let instruction_len = if instruction_bytes.len() >= 1 {
+                    // Try to decode to get actual length
+                    let mut decoder = iced_x86::Decoder::with_ip(64, &instruction_bytes, rip, iced_x86::DecoderOptions::NONE);
+                    let mut instruction = iced_x86::Instruction::default();
+                    decoder.decode_out(&mut instruction);
+                    instruction.len()
+                } else {
+                    1
+                };
+                
+                let actual_bytes = &instruction_bytes[..instruction_len.min(instruction_bytes.len())];
+                let hex_bytes = actual_bytes.iter()
+                    .map(|b| format!("{:02x}", b))
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                
+                // Try to disassemble for better error reporting
+                let disasm = if !actual_bytes.is_empty() {
+                    let mut decoder = iced_x86::Decoder::with_ip(64, actual_bytes, rip, iced_x86::DecoderOptions::NONE);
+                    let mut instruction = iced_x86::Instruction::default();
+                    decoder.decode_out(&mut instruction);
+                    let mut formatter = iced_x86::IntelFormatter::new();
+                    let mut output = String::new();
+                    formatter.format(&instruction, &mut output);
+                    output
+                } else {
+                    "<unable to decode>".to_string()
+                };
+                
+                // Check if RIP is in a known module
+                let module_info = self.memory_manager.get_loader().find_module_for_address(rip);
+                let address_str = match module_info {
+                    Some((module_name, _base, offset)) => {
+                        format!("{}+0x{:x}", module_name, offset)
+                    }
+                    None => format!("0x{:016x}", rip)
+                };
+                
+                anyhow::bail!(
+                    "Emulation failed at {}: {} [{}] ({} bytes)\nOriginal error: {}", 
+                    address_str,
+                    disasm,
+                    hex_bytes,
+                    instruction_len,
+                    e
+                );
+            }
             
             instruction_count += 1;
         }

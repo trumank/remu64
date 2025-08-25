@@ -95,6 +95,14 @@ impl InstructionTracer {
         let mut instruction = Instruction::default();
         decoder.decode_out(&mut instruction);
 
+        // Get instruction length and actual bytes
+        let instruction_len = instruction.len();
+        let actual_bytes = &instruction_bytes[..instruction_len.min(instruction_bytes.len())];
+        let hex_bytes = actual_bytes.iter()
+            .map(|b| format!("{:02x}", b))
+            .collect::<Vec<_>>()
+            .join(" ");
+
         // Format the disassembly with colors
         self.formatter_output.clear();
         self.formatter.format(&instruction, &mut self.formatter_output);
@@ -123,13 +131,15 @@ impl InstructionTracer {
             None => format!("0x{:016x}", rip).yellow().to_string()
         };
 
-        // Format the trace output
+        // Format the trace output with instruction length and hex bytes
         writeln!(
             self.output,
-            "{} {}: {} | {} {} {}",
+            "{} {}: {} [{}] ({} bytes) | {} {} {}",
             format!("[{:06}]", self.instruction_count).bright_black(),
             address_str,
             colored_disasm,
+            hex_bytes.bright_magenta(),
+            instruction_len,
             format!("RAX={:016x}", rax).bright_blue(),
             format!("RCX={:016x}", rcx).bright_blue(),
             format!("RDX={:016x}", rdx).bright_blue()
