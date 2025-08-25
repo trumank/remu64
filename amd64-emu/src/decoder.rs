@@ -715,6 +715,26 @@ impl Decoder {
                 (opcode, vec![rm_op, Operand::Immediate(imm as i64)])
             }
             0xC3 => (Opcode::RET, vec![]),
+            0xD1 => {
+                // Shift/rotate group with count of 1
+                if bytes.len() <= offset {
+                    return Err(EmulatorError::InvalidInstruction(0));
+                }
+                let modrm = bytes[offset];
+                let reg_bits = (modrm >> 3) & 0x07;
+                let (rm_op, _, consumed) = self.decode_modrm_operands(&bytes[offset..], prefix)?;
+                offset += consumed;
+                
+                let opcode = match reg_bits {
+                    0 => Opcode::ROL,  // ROL r/m, 1
+                    1 => Opcode::ROR,  // ROR r/m, 1
+                    4 => Opcode::SHL,  // SHL r/m, 1
+                    5 => Opcode::SHR,  // SHR r/m, 1
+                    7 => Opcode::SAR,  // SAR r/m, 1
+                    _ => return Err(EmulatorError::UnsupportedInstruction(format!("D1 /{}", reg_bits))),
+                };
+                (opcode, vec![rm_op, Operand::Immediate(1)])
+            }
             0xD3 => {
                 // Shift/rotate group with CL
                 if bytes.len() <= offset {
