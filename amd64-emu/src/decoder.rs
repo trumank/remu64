@@ -564,9 +564,9 @@ impl Decoder {
                         (Opcode::MOVUPS, vec![dst, src])
                     }
                     0x11 => {
-                        let (src, dst, consumed) = self.decode_modrm_xmm(&bytes[offset..], prefix)?;
+                        let (dst, src, consumed) = self.decode_modrm_xmm(&bytes[offset..], prefix)?;
                         offset += consumed;
-                        (Opcode::MOVUPS, vec![dst, src])
+                        (Opcode::MOVUPS, vec![src, dst])
                     }
                     0x28 => {
                         let (dst, src, consumed) = self.decode_modrm_xmm(&bytes[offset..], prefix)?;
@@ -574,9 +574,9 @@ impl Decoder {
                         (Opcode::MOVAPS, vec![dst, src])
                     }
                     0x29 => {
-                        let (src, dst, consumed) = self.decode_modrm_xmm(&bytes[offset..], prefix)?;
+                        let (dst, src, consumed) = self.decode_modrm_xmm(&bytes[offset..], prefix)?;
                         offset += consumed;
-                        (Opcode::MOVAPS, vec![dst, src])
+                        (Opcode::MOVAPS, vec![src, dst])
                     }
                     0x54 => {
                         let (dst, src, consumed) = self.decode_modrm_xmm(&bytes[offset..], prefix)?;
@@ -978,7 +978,7 @@ impl Decoder {
             }
         };
         
-        Ok((rm_operand, Operand::Register(reg_xmm), offset))
+        Ok((Operand::Register(reg_xmm), rm_operand, offset))
     }
     
     fn decode_xmm_register(&self, reg: u8, prefix: &InstructionPrefix) -> Register {
