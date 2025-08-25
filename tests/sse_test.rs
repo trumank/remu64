@@ -1,18 +1,16 @@
-use amd64_emu::{Engine, EngineMode, Register, Permission, Memory};
-use std::sync::{Arc, atomic::AtomicBool};
+use amd64_emu::{Engine, EngineMode, Register, Permission};
 
 #[test]
 fn test_movaps() {
-    let stop_flag = Arc::new(AtomicBool::new(false));
-    let mut engine = Engine::new(EngineMode::Mode64, stop_flag);
+    let mut engine = Engine::new(EngineMode::Mode64);
     
     let code = [
         0x0F, 0x28, 0xC1,  // movaps xmm0, xmm1
     ];
     
     let base = 0x1000;
-    engine.memory_map(base, 0x1000, Permission::READ | Permission::EXEC).unwrap();
-    engine.memory_write(base, &code).unwrap();
+    engine.mem_map(base, 0x1000, Permission::READ | Permission::EXEC).unwrap();
+    engine.mem_write(base, &code).unwrap();
     
     // Set XMM1 to a test value
     let test_value = 0x0123456789ABCDEF0123456789ABCDEFu128;
@@ -21,8 +19,8 @@ fn test_movaps() {
     state.xmm_regs[1] = test_value;
     engine.context_restore(&state);
     
-    engine.set_register(Register::RIP, base);
-    engine.execute(base, base + code.len() as u64).unwrap();
+    engine.reg_write(Register::RIP, base).unwrap();
+    engine.emu_start(base, base + code.len() as u64, 0, 0).unwrap();
     
     // Check that XMM0 now contains the value from XMM1
     assert_eq!(engine.context_save().xmm_regs[0], test_value);
@@ -30,24 +28,23 @@ fn test_movaps() {
 
 #[test]
 fn test_xorps() {
-    let stop_flag = Arc::new(AtomicBool::new(false));
-    let mut engine = Engine::new(EngineMode::Mode64, stop_flag);
+    let mut engine = Engine::new(EngineMode::Mode64);
     
     let code = [
         0x0F, 0x57, 0xC0,  // xorps xmm0, xmm0 (zero XMM0)
     ];
     
     let base = 0x1000;
-    engine.memory_map(base, 0x1000, Permission::READ | Permission::EXEC).unwrap();
-    engine.memory_write(base, &code).unwrap();
+    engine.mem_map(base, 0x1000, Permission::READ | Permission::EXEC).unwrap();
+    engine.mem_write(base, &code).unwrap();
     
     // Set XMM0 to a non-zero value
     let mut state = engine.context_save();
     state.xmm_regs[0] = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFu128;
     engine.context_restore(&state);
     
-    engine.set_register(Register::RIP, base);
-    engine.execute(base, base + code.len() as u64).unwrap();
+    engine.reg_write(Register::RIP, base).unwrap();
+    engine.emu_start(base, base + code.len() as u64, 0, 0).unwrap();
     
     // Check that XMM0 is now zero
     assert_eq!(engine.context_save().xmm_regs[0], 0);
@@ -55,16 +52,15 @@ fn test_xorps() {
 
 #[test]
 fn test_addps() {
-    let stop_flag = Arc::new(AtomicBool::new(false));
-    let mut engine = Engine::new(EngineMode::Mode64, stop_flag);
+    let mut engine = Engine::new(EngineMode::Mode64);
     
     let code = [
         0x0F, 0x58, 0xC1,  // addps xmm0, xmm1
     ];
     
     let base = 0x1000;
-    engine.memory_map(base, 0x1000, Permission::READ | Permission::EXEC).unwrap();
-    engine.memory_write(base, &code).unwrap();
+    engine.mem_map(base, 0x1000, Permission::READ | Permission::EXEC).unwrap();
+    engine.mem_write(base, &code).unwrap();
     
     // Set up test values (4 floats in each XMM register)
     // XMM0 = [1.0, 2.0, 3.0, 4.0]
@@ -87,8 +83,8 @@ fn test_addps() {
     
     engine.context_restore(&state);
     
-    engine.set_register(Register::RIP, base);
-    engine.execute(base, base + code.len() as u64).unwrap();
+    engine.reg_write(Register::RIP, base).unwrap();
+    engine.emu_start(base, base + code.len() as u64, 0, 0).unwrap();
     
     // Check results: XMM0 should now contain [6.0, 8.0, 10.0, 12.0]
     let result = engine.context_save().xmm_regs[0];
@@ -100,16 +96,15 @@ fn test_addps() {
 
 #[test]
 fn test_subps() {
-    let stop_flag = Arc::new(AtomicBool::new(false));
-    let mut engine = Engine::new(EngineMode::Mode64, stop_flag);
+    let mut engine = Engine::new(EngineMode::Mode64);
     
     let code = [
         0x0F, 0x5C, 0xC1,  // subps xmm0, xmm1
     ];
     
     let base = 0x1000;
-    engine.memory_map(base, 0x1000, Permission::READ | Permission::EXEC).unwrap();
-    engine.memory_write(base, &code).unwrap();
+    engine.mem_map(base, 0x1000, Permission::READ | Permission::EXEC).unwrap();
+    engine.mem_write(base, &code).unwrap();
     
     // Set up test values
     // XMM0 = [10.0, 20.0, 30.0, 40.0]
@@ -132,8 +127,8 @@ fn test_subps() {
     
     engine.context_restore(&state);
     
-    engine.set_register(Register::RIP, base);
-    engine.execute(base, base + code.len() as u64).unwrap();
+    engine.reg_write(Register::RIP, base).unwrap();
+    engine.emu_start(base, base + code.len() as u64, 0, 0).unwrap();
     
     // Check results: XMM0 should now contain [5.0, 10.0, 15.0, 20.0]
     let result = engine.context_save().xmm_regs[0];
@@ -145,16 +140,15 @@ fn test_subps() {
 
 #[test]
 fn test_mulps() {
-    let stop_flag = Arc::new(AtomicBool::new(false));
-    let mut engine = Engine::new(EngineMode::Mode64, stop_flag);
+    let mut engine = Engine::new(EngineMode::Mode64);
     
     let code = [
         0x0F, 0x59, 0xC1,  // mulps xmm0, xmm1
     ];
     
     let base = 0x1000;
-    engine.memory_map(base, 0x1000, Permission::READ | Permission::EXEC).unwrap();
-    engine.memory_write(base, &code).unwrap();
+    engine.mem_map(base, 0x1000, Permission::READ | Permission::EXEC).unwrap();
+    engine.mem_write(base, &code).unwrap();
     
     // Set up test values
     // XMM0 = [2.0, 3.0, 4.0, 5.0]
@@ -177,8 +171,8 @@ fn test_mulps() {
     
     engine.context_restore(&state);
     
-    engine.set_register(Register::RIP, base);
-    engine.execute(base, base + code.len() as u64).unwrap();
+    engine.reg_write(Register::RIP, base).unwrap();
+    engine.emu_start(base, base + code.len() as u64, 0, 0).unwrap();
     
     // Check results: XMM0 should now contain [6.0, 12.0, 20.0, 30.0]
     let result = engine.context_save().xmm_regs[0];
@@ -190,16 +184,15 @@ fn test_mulps() {
 
 #[test]
 fn test_divps() {
-    let stop_flag = Arc::new(AtomicBool::new(false));
-    let mut engine = Engine::new(EngineMode::Mode64, stop_flag);
+    let mut engine = Engine::new(EngineMode::Mode64);
     
     let code = [
         0x0F, 0x5E, 0xC1,  // divps xmm0, xmm1
     ];
     
     let base = 0x1000;
-    engine.memory_map(base, 0x1000, Permission::READ | Permission::EXEC).unwrap();
-    engine.memory_write(base, &code).unwrap();
+    engine.mem_map(base, 0x1000, Permission::READ | Permission::EXEC).unwrap();
+    engine.mem_write(base, &code).unwrap();
     
     // Set up test values
     // XMM0 = [10.0, 20.0, 30.0, 40.0]
@@ -222,8 +215,8 @@ fn test_divps() {
     
     engine.context_restore(&state);
     
-    engine.set_register(Register::RIP, base);
-    engine.execute(base, base + code.len() as u64).unwrap();
+    engine.reg_write(Register::RIP, base).unwrap();
+    engine.emu_start(base, base + code.len() as u64, 0, 0).unwrap();
     
     // Check results: XMM0 should now contain [5.0, 5.0, 6.0, 5.0]
     let result = engine.context_save().xmm_regs[0];
@@ -235,16 +228,15 @@ fn test_divps() {
 
 #[test]
 fn test_andps() {
-    let stop_flag = Arc::new(AtomicBool::new(false));
-    let mut engine = Engine::new(EngineMode::Mode64, stop_flag);
+    let mut engine = Engine::new(EngineMode::Mode64);
     
     let code = [
         0x0F, 0x54, 0xC1,  // andps xmm0, xmm1
     ];
     
     let base = 0x1000;
-    engine.memory_map(base, 0x1000, Permission::READ | Permission::EXEC).unwrap();
-    engine.memory_write(base, &code).unwrap();
+    engine.mem_map(base, 0x1000, Permission::READ | Permission::EXEC).unwrap();
+    engine.mem_write(base, &code).unwrap();
     
     // Set up test values for bitwise operations
     let mut state = engine.context_save();
@@ -254,8 +246,8 @@ fn test_andps() {
     
     engine.context_restore(&state);
     
-    engine.set_register(Register::RIP, base);
-    engine.execute(base, base + code.len() as u64).unwrap();
+    engine.reg_write(Register::RIP, base).unwrap();
+    engine.emu_start(base, base + code.len() as u64, 0, 0).unwrap();
     
     // Check result
     let result = engine.context_save().xmm_regs[0];
@@ -264,16 +256,15 @@ fn test_andps() {
 
 #[test]
 fn test_orps() {
-    let stop_flag = Arc::new(AtomicBool::new(false));
-    let mut engine = Engine::new(EngineMode::Mode64, stop_flag);
+    let mut engine = Engine::new(EngineMode::Mode64);
     
     let code = [
         0x0F, 0x56, 0xC1,  // orps xmm0, xmm1
     ];
     
     let base = 0x1000;
-    engine.memory_map(base, 0x1000, Permission::READ | Permission::EXEC).unwrap();
-    engine.memory_write(base, &code).unwrap();
+    engine.mem_map(base, 0x1000, Permission::READ | Permission::EXEC).unwrap();
+    engine.mem_write(base, &code).unwrap();
     
     // Set up test values for bitwise operations
     let mut state = engine.context_save();
@@ -283,8 +274,8 @@ fn test_orps() {
     
     engine.context_restore(&state);
     
-    engine.set_register(Register::RIP, base);
-    engine.execute(base, base + code.len() as u64).unwrap();
+    engine.reg_write(Register::RIP, base).unwrap();
+    engine.emu_start(base, base + code.len() as u64, 0, 0).unwrap();
     
     // Check result
     let result = engine.context_save().xmm_regs[0];
