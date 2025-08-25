@@ -1765,19 +1765,13 @@ impl Engine {
                 match reg {
                     Register::AL | Register::AH | Register::BL | Register::BH |
                     Register::CL | Register::CH | Register::DL | Register::DH |
-                    Register::SIL | Register::DIL | Register::SPL | Register::BPL |
-                    Register::R8B | Register::R9B | Register::R10B | Register::R11B |
-                    Register::R12B | Register::R13B | Register::R14B | Register::R15B => OperandSize::Byte,
+                    Register::SIL | Register::DIL | Register::SPL | Register::BPL => OperandSize::Byte,
                     
                     Register::AX | Register::BX | Register::CX | Register::DX |
-                    Register::SI | Register::DI | Register::SP | Register::BP |
-                    Register::R8W | Register::R9W | Register::R10W | Register::R11W |
-                    Register::R12W | Register::R13W | Register::R14W | Register::R15W => OperandSize::Word,
+                    Register::SI | Register::DI | Register::SP | Register::BP => OperandSize::Word,
                     
                     Register::EAX | Register::EBX | Register::ECX | Register::EDX |
-                    Register::ESI | Register::EDI | Register::ESP | Register::EBP |
-                    Register::R8D | Register::R9D | Register::R10D | Register::R11D |
-                    Register::R12D | Register::R13D | Register::R14D | Register::R15D => OperandSize::DWord,
+                    Register::ESI | Register::EDI | Register::ESP | Register::EBP => OperandSize::DWord,
                     
                     _ => OperandSize::QWord,
                 }
