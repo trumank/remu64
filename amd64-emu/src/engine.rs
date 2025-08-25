@@ -277,9 +277,37 @@ impl Engine {
         
         let dst = self.read_operand(&inst.operands[0])?;
         let src = self.read_operand(&inst.operands[1])?;
-        let result = dst.wrapping_add(src);
         
-        self.update_flags_arithmetic(dst, src, result, false);
+        // Determine the operation size based on the destination operand
+        let size = self.get_operand_size(&inst.operands[0]);
+        
+        // Mask values to the appropriate size
+        let (dst_masked, src_masked, result) = match size {
+            OperandSize::Byte => {
+                let d = dst as u8;
+                let s = src as u8;
+                let r = d.wrapping_add(s);
+                (d as u64, s as u64, r as u64)
+            }
+            OperandSize::Word => {
+                let d = dst as u16;
+                let s = src as u16;
+                let r = d.wrapping_add(s);
+                (d as u64, s as u64, r as u64)
+            }
+            OperandSize::DWord => {
+                let d = dst as u32;
+                let s = src as u32;
+                let r = d.wrapping_add(s);
+                (d as u64, s as u64, r as u64)
+            }
+            _ => {
+                let result = dst.wrapping_add(src);
+                (dst, src, result)
+            }
+        };
+        
+        self.update_flags_arithmetic_sized(dst_masked, src_masked, result, false, size);
         self.write_operand(&inst.operands[0], result)?;
         Ok(())
     }
@@ -291,9 +319,37 @@ impl Engine {
         
         let dst = self.read_operand(&inst.operands[0])?;
         let src = self.read_operand(&inst.operands[1])?;
-        let result = dst.wrapping_sub(src);
         
-        self.update_flags_arithmetic(dst, src, result, true);
+        // Determine the operation size based on the destination operand
+        let size = self.get_operand_size(&inst.operands[0]);
+        
+        // Mask values to the appropriate size
+        let (dst_masked, src_masked, result) = match size {
+            OperandSize::Byte => {
+                let d = dst as u8;
+                let s = src as u8;
+                let r = d.wrapping_sub(s);
+                (d as u64, s as u64, r as u64)
+            }
+            OperandSize::Word => {
+                let d = dst as u16;
+                let s = src as u16;
+                let r = d.wrapping_sub(s);
+                (d as u64, s as u64, r as u64)
+            }
+            OperandSize::DWord => {
+                let d = dst as u32;
+                let s = src as u32;
+                let r = d.wrapping_sub(s);
+                (d as u64, s as u64, r as u64)
+            }
+            _ => {
+                let result = dst.wrapping_sub(src);
+                (dst, src, result)
+            }
+        };
+        
+        self.update_flags_arithmetic_sized(dst_masked, src_masked, result, true, size);
         self.write_operand(&inst.operands[0], result)?;
         Ok(())
     }
@@ -307,26 +363,62 @@ impl Engine {
         let src = self.read_operand(&inst.operands[1])?;
         let carry = if self.cpu.rflags.contains(Flags::CF) { 1 } else { 0 };
         
-        // Add with carry: dst + src + CF
-        let result = dst.wrapping_add(src).wrapping_add(carry);
+        // Determine the operation size based on the destination operand
+        let size = self.get_operand_size(&inst.operands[0]);
         
-        // Update flags - need to check both additions for overflow/carry
-        let intermediate = dst.wrapping_add(src);
-        let carry_out = (dst > u64::MAX - src) || (intermediate > u64::MAX - carry);
+        // Perform the add with carry at the appropriate size
+        let (dst_masked, src_masked, result) = match size {
+            OperandSize::Byte => {
+                let d = dst as u8;
+                let s = src as u8;
+                let c = carry as u8;
+                let r = d.wrapping_add(s).wrapping_add(c);
+                (d as u64, s as u64, r as u64)
+            }
+            OperandSize::Word => {
+                let d = dst as u16;
+                let s = src as u16;
+                let c = carry as u16;
+                let r = d.wrapping_add(s).wrapping_add(c);
+                (d as u64, s as u64, r as u64)
+            }
+            OperandSize::DWord => {
+                let d = dst as u32;
+                let s = src as u32;
+                let c = carry as u32;
+                let r = d.wrapping_add(s).wrapping_add(c);
+                (d as u64, s as u64, r as u64)
+            }
+            _ => {
+                let result = dst.wrapping_add(src).wrapping_add(carry);
+                (dst, src, result)
+            }
+        };
+        
+        // Update flags with consideration for the carry
+        let intermediate = dst_masked.wrapping_add(src_masked);
+        let (max_val, sign_bit) = match size {
+            OperandSize::Byte => (0xFF_u64, 0x80_u64),
+            OperandSize::Word => (0xFFFF_u64, 0x8000_u64),
+            OperandSize::DWord => (0xFFFFFFFF_u64, 0x80000000_u64),
+            _ => (u64::MAX, 0x8000000000000000_u64),
+        };
+        
+        let result_masked = result & max_val;
+        let carry_out = (intermediate > max_val) || ((intermediate & max_val) + carry > max_val);
         
         self.cpu.rflags.set(Flags::CF, carry_out);
-        self.cpu.rflags.set(Flags::ZF, result == 0);
-        self.cpu.rflags.set(Flags::SF, (result as i64) < 0);
+        self.cpu.rflags.set(Flags::ZF, result_masked == 0);
+        self.cpu.rflags.set(Flags::SF, (result_masked & sign_bit) != 0);
         
-        // Overflow flag: sign change when adding values of same sign
-        let dst_sign = (dst as i64) < 0;
-        let src_sign = (src as i64) < 0;
-        let result_sign = (result as i64) < 0;
-        let overflow = (dst_sign == src_sign) && (dst_sign != result_sign);
-        self.cpu.rflags.set(Flags::OF, overflow);
+        // Overflow flag
+        let dst_sign = (dst_masked & sign_bit) != 0;
+        let src_sign = (src_masked & sign_bit) != 0;
+        let res_sign = (result_masked & sign_bit) != 0;
+        self.cpu.rflags.set(Flags::OF, dst_sign == src_sign && dst_sign != res_sign);
         
         // Parity flag
-        let parity = (result as u8).count_ones() % 2 == 0;
+        let parity = (result_masked as u8).count_ones() % 2 == 0;
         self.cpu.rflags.set(Flags::PF, parity);
         
         self.write_operand(&inst.operands[0], result)?;
@@ -1665,5 +1757,67 @@ impl Engine {
             result |= (quotient.to_bits() as u128) << offset;
         }
         result
+    }
+    
+    fn get_operand_size(&self, operand: &Operand) -> OperandSize {
+        match operand {
+            Operand::Register(reg) => {
+                match reg {
+                    Register::AL | Register::AH | Register::BL | Register::BH |
+                    Register::CL | Register::CH | Register::DL | Register::DH |
+                    Register::SIL | Register::DIL | Register::SPL | Register::BPL |
+                    Register::R8B | Register::R9B | Register::R10B | Register::R11B |
+                    Register::R12B | Register::R13B | Register::R14B | Register::R15B => OperandSize::Byte,
+                    
+                    Register::AX | Register::BX | Register::CX | Register::DX |
+                    Register::SI | Register::DI | Register::SP | Register::BP |
+                    Register::R8W | Register::R9W | Register::R10W | Register::R11W |
+                    Register::R12W | Register::R13W | Register::R14W | Register::R15W => OperandSize::Word,
+                    
+                    Register::EAX | Register::EBX | Register::ECX | Register::EDX |
+                    Register::ESI | Register::EDI | Register::ESP | Register::EBP |
+                    Register::R8D | Register::R9D | Register::R10D | Register::R11D |
+                    Register::R12D | Register::R13D | Register::R14D | Register::R15D => OperandSize::DWord,
+                    
+                    _ => OperandSize::QWord,
+                }
+            }
+            Operand::Memory { size, .. } => *size,
+            _ => OperandSize::QWord,
+        }
+    }
+    
+    fn update_flags_arithmetic_sized(&mut self, dst: u64, src: u64, result: u64, is_sub: bool, size: OperandSize) {
+        // Determine the bit width for overflow/carry calculations
+        let (max_val, sign_bit) = match size {
+            OperandSize::Byte => (0xFF_u64, 0x80_u64),
+            OperandSize::Word => (0xFFFF_u64, 0x8000_u64),
+            OperandSize::DWord => (0xFFFFFFFF_u64, 0x80000000_u64),
+            _ => (u64::MAX, 0x8000000000000000_u64),
+        };
+        
+        // Mask results to the appropriate size
+        let result_masked = result & max_val;
+        
+        self.cpu.rflags.set(Flags::ZF, result_masked == 0);
+        self.cpu.rflags.set(Flags::SF, (result_masked & sign_bit) != 0);
+        
+        if is_sub {
+            self.cpu.rflags.set(Flags::CF, dst < src);
+            let dst_sign = (dst & sign_bit) != 0;
+            let src_sign = (src & sign_bit) != 0;
+            let res_sign = (result_masked & sign_bit) != 0;
+            self.cpu.rflags.set(Flags::OF, dst_sign != src_sign && dst_sign != res_sign);
+        } else {
+            // For addition, carry occurs when the result is less than either operand (wrapped around)
+            self.cpu.rflags.set(Flags::CF, result_masked < (dst & max_val) || result_masked < (src & max_val));
+            let dst_sign = (dst & sign_bit) != 0;
+            let src_sign = (src & sign_bit) != 0;
+            let res_sign = (result_masked & sign_bit) != 0;
+            self.cpu.rflags.set(Flags::OF, dst_sign == src_sign && dst_sign != res_sign);
+        }
+        
+        let parity = (result_masked as u8).count_ones() % 2 == 0;
+        self.cpu.rflags.set(Flags::PF, parity);
     }
 }
