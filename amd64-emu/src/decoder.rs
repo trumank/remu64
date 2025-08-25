@@ -1528,15 +1528,21 @@ impl Decoder {
                     }
                     0xB6 => {
                         // MOVZX r, r/m8 - Move with Zero-Extend byte to word/dword/qword
-                        let (rm_op, reg_op, consumed) =
-                            self.decode_modrm_operands(&bytes[offset..], prefix)?;
+                        let (rm_op, reg_op, consumed) = self.decode_movzx_operands(
+                            &bytes[offset..],
+                            prefix,
+                            OperandSize::Byte,
+                        )?;
                         offset += consumed;
                         (Opcode::MOVZX, vec![reg_op, rm_op])
                     }
                     0xB7 => {
                         // MOVZX r, r/m16 - Move with Zero-Extend word to dword/qword
-                        let (rm_op, reg_op, consumed) =
-                            self.decode_modrm_operands(&bytes[offset..], prefix)?;
+                        let (rm_op, reg_op, consumed) = self.decode_movzx_operands(
+                            &bytes[offset..],
+                            prefix,
+                            OperandSize::Word,
+                        )?;
                         offset += consumed;
                         (Opcode::MOVZX, vec![reg_op, rm_op])
                     }
@@ -1741,6 +1747,68 @@ impl Decoder {
                     scale,
                     displacement,
                     size,
+                }
+            }
+        };
+
+        Ok((rm_operand, Operand::Register(reg), offset))
+    }
+
+    fn decode_movzx_operands(
+        &self,
+        bytes: &[u8],
+        prefix: &InstructionPrefix,
+        source_size: OperandSize,
+    ) -> Result<(Operand, Operand, usize)> {
+        if bytes.is_empty() {
+            return Err(EmulatorError::InvalidInstruction(0));
+        }
+
+        let modrm = bytes[0];
+        let mod_bits = (modrm >> 6) & 0x03;
+        let reg_bits = (modrm >> 3) & 0x07;
+        let rm_bits = modrm & 0x07;
+
+        // Destination register uses normal operand size
+        let dest_size = self.operand_size(prefix);
+        let reg = self.decode_register(reg_bits, prefix, dest_size);
+
+        let mut offset = 1;
+
+        let rm_operand = match mod_bits {
+            0x03 => {
+                // Source register uses the fixed source size
+                let rm_reg = self.decode_register(rm_bits, prefix, source_size);
+                Operand::Register(rm_reg)
+            }
+            _ => {
+                let (base, index, scale, consumed_and_disp_size) =
+                    self.decode_sib_and_displacement(mod_bits, rm_bits, &bytes[offset..], prefix)?;
+
+                // Extract SIB byte consumption (1 if SIB was present, 0 otherwise)
+                let sib_consumed = if rm_bits == 4 { 1 } else { 0 };
+                let disp_size = if rm_bits == 4 {
+                    consumed_and_disp_size - 1 // Subtract the SIB byte
+                } else {
+                    consumed_and_disp_size
+                };
+
+                offset += sib_consumed;
+
+                let displacement = if disp_size > 0 {
+                    let disp = self.decode_displacement(&bytes[offset..], disp_size)?;
+                    offset += disp_size;
+                    disp
+                } else {
+                    0
+                };
+
+                Operand::Memory {
+                    base,
+                    index,
+                    scale,
+                    displacement,
+                    size: source_size, // Use fixed source size for memory operand
                 }
             }
         };
