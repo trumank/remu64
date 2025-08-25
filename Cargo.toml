@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["amd64-emu"]
+members = ["amd64-emu", "dump_exec"]
 
 [workspace.package]
 version = "0.1.0"
