@@ -1092,13 +1092,55 @@ impl Decoder {
             let base = if base_bits == 5 && mod_bits == 0 {
                 None // [disp32] or [index*scale + disp32]
             } else {
-                Some(self.decode_register(base_bits, prefix, OperandSize::QWord))
+                // For SIB base register, use REX.B extension
+                let extended = prefix.rex.as_ref().map_or(false, |r| r.b);
+                let base_reg_num = if extended { base_bits + 8 } else { base_bits };
+                Some(match base_reg_num {
+                    0 => Register::RAX,
+                    1 => Register::RCX,
+                    2 => Register::RDX,
+                    3 => Register::RBX,
+                    4 => Register::RSP,
+                    5 => Register::RBP,
+                    6 => Register::RSI,
+                    7 => Register::RDI,
+                    8 => Register::R8,
+                    9 => Register::R9,
+                    10 => Register::R10,
+                    11 => Register::R11,
+                    12 => Register::R12,
+                    13 => Register::R13,
+                    14 => Register::R14,
+                    15 => Register::R15,
+                    _ => Register::RAX,
+                })
             };
             
             let index = if index_bits == 4 {
                 None // No index register (RSP can't be index)
             } else {
-                Some(self.decode_register(index_bits, prefix, OperandSize::QWord))
+                // For SIB index register, use REX.X extension
+                let extended = prefix.rex.as_ref().map_or(false, |r| r.x);
+                let index_reg_num = if extended { index_bits + 8 } else { index_bits };
+                Some(match index_reg_num {
+                    0 => Register::RAX,
+                    1 => Register::RCX,
+                    2 => Register::RDX,
+                    3 => Register::RBX,
+                    4 => Register::RSP,
+                    5 => Register::RBP,
+                    6 => Register::RSI,
+                    7 => Register::RDI,
+                    8 => Register::R8,
+                    9 => Register::R9,
+                    10 => Register::R10,
+                    11 => Register::R11,
+                    12 => Register::R12,
+                    13 => Register::R13,
+                    14 => Register::R14,
+                    15 => Register::R15,
+                    _ => Register::RAX,
+                })
             };
             
             let disp_size = match mod_bits {
