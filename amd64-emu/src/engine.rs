@@ -59,30 +59,19 @@ impl Engine {
         self.memory.write_bytes(address, data)
     }
 
-    fn mem_write_with_hooks(
-        &mut self,
-        address: u64,
-        data: &[u8],
-        hooks: Option<&mut HookManager>,
-    ) -> Result<()> {
-        if let Some(hooks) = hooks {
-            hooks.run_mem_write_hooks(&mut self.cpu, address, data.len())?;
-        }
-        self.memory.write_bytes(address, data)
-    }
-
     pub fn mem_read(&mut self, address: u64, buf: &mut [u8]) -> Result<()> {
         self.memory.read(address, buf)
     }
 
-    fn mem_read_with_hooks(
+    fn mem_read_with_hooks<Context>(
         &mut self,
         address: u64,
         buf: &mut [u8],
-        hooks: &mut Option<&mut HookManager>,
+        mut hooks: Option<&mut HookManager<Context>>,
+        mut context: Option<&mut Context>,
     ) -> Result<()> {
-        if let Some(ref mut hooks) = hooks {
-            hooks.run_mem_read_hooks(&mut self.cpu, address, buf.len())?;
+        if let (Some(hooks), Some(context)) = (hooks.as_deref_mut(), context.as_deref_mut()) {
+            hooks.run_mem_read_hook(&mut self.cpu, context, address, buf.len())?;
         }
 
         // Try to read memory, handle faults with hooks
@@ -90,8 +79,8 @@ impl Engine {
             Ok(()) => Ok(()),
             Err(EmulatorError::UnmappedMemory(_)) => {
                 // Try to handle the fault with memory fault hooks
-                if let Some(ref mut hooks) = hooks {
-                    if hooks.run_mem_fault_hooks(&mut self.cpu, address, buf.len())? {
+                if let (Some(hooks), Some(context)) = (hooks, context) {
+                    if hooks.run_mem_fault_hook(&mut self.cpu, context, address, buf.len())? {
                         // Hook handled the fault, try reading again
                         self.memory.read(address, buf)
                     } else {
@@ -104,98 +93,6 @@ impl Engine {
             }
             Err(e) => Err(e),
         }
-    }
-
-    fn mem_read_u8_with_hooks(
-        &mut self,
-        address: u64,
-        hooks: Option<&mut HookManager>,
-    ) -> Result<u8> {
-        if let Some(hooks) = hooks {
-            hooks.run_mem_read_hooks(&mut self.cpu, address, 1)?;
-        }
-        self.memory.read_u8(address)
-    }
-
-    fn mem_read_u16_with_hooks(
-        &mut self,
-        address: u64,
-        hooks: Option<&mut HookManager>,
-    ) -> Result<u16> {
-        if let Some(hooks) = hooks {
-            hooks.run_mem_read_hooks(&mut self.cpu, address, 2)?;
-        }
-        self.memory.read_u16(address)
-    }
-
-    fn mem_read_u32_with_hooks(
-        &mut self,
-        address: u64,
-        hooks: Option<&mut HookManager>,
-    ) -> Result<u32> {
-        if let Some(hooks) = hooks {
-            hooks.run_mem_read_hooks(&mut self.cpu, address, 4)?;
-        }
-        self.memory.read_u32(address)
-    }
-
-    fn mem_read_u64_with_hooks(
-        &mut self,
-        address: u64,
-        hooks: Option<&mut HookManager>,
-    ) -> Result<u64> {
-        if let Some(hooks) = hooks {
-            hooks.run_mem_read_hooks(&mut self.cpu, address, 8)?;
-        }
-        self.memory.read_u64(address)
-    }
-
-    fn mem_write_u8_with_hooks(
-        &mut self,
-        address: u64,
-        value: u8,
-        hooks: Option<&mut HookManager>,
-    ) -> Result<()> {
-        if let Some(hooks) = hooks {
-            hooks.run_mem_write_hooks(&mut self.cpu, address, 1)?;
-        }
-        self.memory.write_u8(address, value)
-    }
-
-    fn mem_write_u16_with_hooks(
-        &mut self,
-        address: u64,
-        value: u16,
-        hooks: Option<&mut HookManager>,
-    ) -> Result<()> {
-        if let Some(hooks) = hooks {
-            hooks.run_mem_write_hooks(&mut self.cpu, address, 2)?;
-        }
-        self.memory.write_u16(address, value)
-    }
-
-    fn mem_write_u32_with_hooks(
-        &mut self,
-        address: u64,
-        value: u32,
-        hooks: Option<&mut HookManager>,
-    ) -> Result<()> {
-        if let Some(hooks) = hooks {
-            hooks.run_mem_write_hooks(&mut self.cpu, address, 4)?;
-        }
-        self.memory.write_u32(address, value)
-    }
-
-    fn mem_write_u64_with_hooks(
-        &mut self,
-        address: u64,
-        value: u64,
-        hooks: Option<&mut HookManager>,
-    ) -> Result<()> {
-        if let Some(hooks) = hooks {
-            hooks.run_mem_write_hooks(&mut self.cpu, address, 8)?;
-        }
-        self.memory.write_u64(address, value)
     }
 
     pub fn reg_read(&self, reg: Register) -> Result<u64> {
@@ -211,13 +108,14 @@ impl Engine {
         self.cpu.rflags
     }
 
-    pub fn emu_start(
+    pub fn emu_start<Context>(
         &mut self,
         begin: u64,
         until: u64,
         timeout: u64,
         count: usize,
-        mut hooks: Option<&mut HookManager>,
+        mut hooks: Option<&mut HookManager<Context>>,
+        mut context: Option<&mut Context>,
     ) -> Result<()> {
         self.cpu.rip = begin;
         self.stop_requested.store(false, Ordering::SeqCst);
@@ -249,7 +147,7 @@ impl Engine {
                 }
             }
 
-            self.step(&mut hooks)?;
+            self.step(hooks.as_deref_mut(), context.as_deref_mut())?;
         }
 
         Ok(())
@@ -264,13 +162,22 @@ impl Engine {
         self.trace_enabled = enabled;
     }
 
-    fn step(&mut self, hooks: &mut Option<&mut HookManager>) -> Result<()> {
+    fn step<Context>(
+        &mut self,
+        mut hooks: Option<&mut HookManager<Context>>,
+        mut context: Option<&mut Context>,
+    ) -> Result<()> {
         let rip = self.cpu.rip;
 
         self.memory.check_exec(rip)?;
 
         let mut inst_bytes = vec![0u8; 15];
-        self.mem_read_with_hooks(rip, &mut inst_bytes, hooks)?;
+        self.mem_read_with_hooks(
+            rip,
+            &mut inst_bytes,
+            hooks.as_deref_mut(),
+            context.as_deref_mut(),
+        )?;
 
         let inst = self.decoder.decode(&inst_bytes, rip)?;
 
@@ -278,23 +185,24 @@ impl Engine {
             log::debug!("Executing at {:#x}: {:?}", rip, inst.opcode);
         }
 
-        if let Some(ref mut hooks) = hooks {
-            hooks.run_code_hooks(&mut self.cpu, rip, inst.size)?;
+        if let (Some(hooks), Some(context)) = (hooks.as_deref_mut(), context.as_deref_mut()) {
+            hooks.run_code_hook(&mut self.cpu, context, rip, inst.size)?;
         }
 
         self.cpu.rip = rip + inst.size as u64;
 
-        self.execute_instruction(&inst, hooks)?;
+        self.execute_instruction(&inst, hooks, context)?;
 
         self.instruction_count += 1;
 
         Ok(())
     }
 
-    fn execute_instruction(
+    fn execute_instruction<Context>(
         &mut self,
         inst: &Instruction,
-        hooks: &mut Option<&mut HookManager>,
+        mut hooks: Option<&mut HookManager<Context>>,
+        mut context: Option<&mut Context>,
     ) -> Result<()> {
         match inst.opcode {
             Opcode::MOV => self.execute_mov(inst),
@@ -383,7 +291,7 @@ impl Engine {
                 self.stop_requested.store(true, Ordering::SeqCst);
                 Ok(())
             }
-            Opcode::SYSCALL => self.execute_syscall(inst, hooks),
+            Opcode::SYSCALL => self.execute_syscall(inst, hooks, context),
             Opcode::MOVAPS => self.execute_movaps(inst),
             Opcode::MOVUPS => self.execute_movups(inst),
             Opcode::ADDPS => self.execute_addps(inst),
@@ -404,8 +312,8 @@ impl Engine {
             Opcode::CMOVAE => self.execute_cmovae(inst),
             Opcode::CMOVG => self.execute_cmovg(inst),
             _ => {
-                if let Some(ref mut hooks) = hooks {
-                    hooks.run_invalid_hooks(&mut self.cpu, inst.address)?;
+                if let (Some(hooks), Some(context)) = (hooks, context) {
+                    hooks.run_invalid_hook(&mut self.cpu, context, inst.address)?;
                 }
                 Err(EmulatorError::UnsupportedInstruction(format!(
                     "{:?}",
@@ -1198,13 +1106,14 @@ impl Engine {
         Ok(())
     }
 
-    fn execute_syscall(
+    fn execute_syscall<Context>(
         &mut self,
         _inst: &Instruction,
-        hooks: &mut Option<&mut HookManager>,
+        mut hooks: Option<&mut HookManager<Context>>,
+        mut context: Option<&mut Context>,
     ) -> Result<()> {
-        if let Some(ref mut hooks) = hooks {
-            hooks.run_interrupt_hooks(&mut self.cpu, 0x80)?;
+        if let (Some(hooks), Some(context)) = (hooks, context) {
+            hooks.run_interrupt_hook(&mut self.cpu, context, 0x80)?;
         }
         Ok(())
     }

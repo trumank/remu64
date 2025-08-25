@@ -2,10 +2,18 @@ use crate::fastcall::{ArgumentType, CallingConvention};
 use crate::memory_manager::MemoryManager;
 use crate::minidump_loader::MinidumpLoader;
 use crate::tracer::InstructionTracer;
-use amd64_emu::{EmulatorError, Engine, EngineMode, HookManager, HookType, Permission, Register};
+use amd64_emu::{EmulatorError, Engine, EngineMode, HookManager, Permission, Register};
 use anyhow::{Context, Result};
 use iced_x86::Formatter;
-use std::sync::{Arc, Mutex};
+
+// Context structure that gets passed to hooks
+struct ExecutionContext<'a> {
+    memory_manager: &'a mut MemoryManager,
+    tracer: &'a mut InstructionTracer,
+    instruction_count: u64,
+    max_instructions: u64,
+    return_address: u64,
+}
 
 pub struct FunctionExecutor {
     engine: Engine,
@@ -57,53 +65,44 @@ impl FunctionExecutor {
         // Set RIP to function start
         self.engine.reg_write(Register::RIP, function_address)?;
 
-        // Create hooks for memory fault handling and instruction tracing
-        let mut hooks = HookManager::new();
-
-        // Shared state for instruction counting and tracing
-        let instruction_count = Arc::new(Mutex::new(0u64));
+        // Create execution context and hooks
         let max_instructions = 1000000u64;
 
-        // Setup memory fault hook - we'll handle the actual memory mapping
-        // outside the hook to avoid unsafe pointer usage
-        let fault_addresses = Arc::new(Mutex::new(Vec::<u64>::new()));
-        let fault_addresses_clone = fault_addresses.clone();
+        let mut context = ExecutionContext {
+            memory_manager: &mut self.memory_manager,
+            tracer: &mut self.tracer,
+            instruction_count: 0,
+            max_instructions,
+            return_address,
+        };
 
-        hooks.add_hook(
-            HookType::MemFault,
-            0,
-            u64::MAX,
-            move |_cpu, address, _size| {
-                let page_base = address & !0xfff;
+        let mut hooks: HookManager<ExecutionContext> = HookManager::new();
 
-                // NEVER map the null page (address 0)
-                if page_base == 0 {
-                    return Ok(()); // Don't handle null page faults
-                }
+        // Setup memory fault hook
+        hooks.set_mem_fault_hook(|_cpu, context, address, _size| {
+            println!("!!mem fault hook");
+            let page_base = address & !0xfff;
 
-                // Record the fault address for handling outside the hook
-                fault_addresses_clone.lock().unwrap().push(page_base);
-                Ok(()) // Indicate we will handle this fault
-            },
-        );
-
-        // Setup code hook for instruction counting and return detection
-        let count_clone = instruction_count.clone();
-        let tracer_enabled = self.tracer.is_enabled();
-        let instruction_addresses = Arc::new(Mutex::new(Vec::<u64>::new()));
-        let instruction_addresses_clone = instruction_addresses.clone();
-
-        hooks.add_hook(HookType::Code, 0, u64::MAX, move |_cpu, address, _size| {
-            // Record instruction for tracing outside the hook
-            if tracer_enabled {
-                instruction_addresses_clone.lock().unwrap().push(address);
+            // NEVER map the null page (address 0)
+            if page_base == 0 {
+                return Ok(false); // Don't handle null page faults
             }
 
+            // Try to read from minidump - if successful, indicate we can handle the fault
+            if context.memory_manager.read_memory(page_base, 4096).is_ok() {
+                Ok(true) // Indicate we will handle this fault
+            } else {
+                Ok(false) // Can't handle this fault
+            }
+        });
+
+        // Setup code hook for instruction counting, tracing, and return detection
+        hooks.set_code_hook(|_cpu, context, address, _size| {
+            println!("!!code hook");
             // Check instruction count limit
             {
-                let mut count = count_clone.lock().unwrap();
-                *count += 1;
-                if *count > max_instructions {
+                context.instruction_count += 1;
+                if context.instruction_count > context.max_instructions {
                     return Err(EmulatorError::UnsupportedInstruction(
                         "Execution exceeded maximum instruction count".to_string(),
                     ));
@@ -111,119 +110,83 @@ impl FunctionExecutor {
             }
 
             // Check for return to exit execution
-            if address == return_address {
+            if address == context.return_address {
+                if context.tracer.is_enabled() {
+                    // Trace the return - we can't easily get RAX here, so we'll handle it outside
+                }
                 return Err(EmulatorError::UnsupportedInstruction(
                     "FUNCTION_RETURN".to_string(),
                 ));
             }
 
+            // Handle instruction tracing
+            if context.tracer.is_enabled() {
+                // We'll handle detailed tracing outside the hook due to complexity
+                // For now, just track that we executed an instruction
+            }
+
             Ok(())
         });
 
-        // Execute with retry logic for memory faults
-        let mut retry_count = 0;
-        const MAX_RETRIES: u32 = 100;
-
-        loop {
-            // Clear fault and instruction tracking for this execution attempt
-            fault_addresses.lock().unwrap().clear();
-            instruction_addresses.lock().unwrap().clear();
-
-            // Execute the function
-            match self
-                .engine
-                .emu_start(function_address, return_address, 0, 0, Some(&mut hooks))
-            {
-                Ok(()) => {
-                    // Normal completion - function reached end address
-                    break;
-                }
-                Err(EmulatorError::UnsupportedInstruction(msg)) if msg == "FUNCTION_RETURN" => {
-                    // Function returned normally - handle tracing and cleanup
-                    if self.tracer.is_enabled() {
-                        let rax = self.engine.reg_read(Register::RAX)?;
-                        self.tracer.trace_return(return_address, rax)?;
-                    }
-                    break;
-                }
-                Err(EmulatorError::UnmappedMemory(addr)) => {
-                    // Handle memory fault by mapping the required pages
-                    if retry_count >= MAX_RETRIES {
-                        return Err(anyhow::anyhow!(
-                            "Too many memory fault retries at 0x{:x}",
-                            addr
-                        ));
-                    }
-
-                    // Collect all fault addresses that need mapping
-                    let mut addresses_to_map = fault_addresses.lock().unwrap().clone();
-                    addresses_to_map.push(addr & !0xfff);
-                    addresses_to_map.sort_unstable();
-                    addresses_to_map.dedup();
-
-                    let mut mapped_any = false;
-                    for page_base in addresses_to_map {
-                        if page_base == 0 {
-                            continue; // Never map null page
-                        }
-
-                        if let Ok(page_data) = self.memory_manager.read_memory(page_base, 4096) {
-                            if self
-                                .engine
-                                .mem_map(page_base, 4096, Permission::ALL)
-                                .is_ok()
-                            {
-                                self.engine.mem_write(page_base, &page_data)?;
-                                mapped_any = true;
-                            }
-                        }
-                    }
-
-                    if !mapped_any {
-                        return Err(anyhow::anyhow!(
-                            "Failed to map memory at address 0x{:x}",
-                            addr
-                        ));
-                    }
-
-                    retry_count += 1;
-                    // Continue loop to retry execution
-                }
-                Err(e) => {
-                    // Other errors are fatal
-                    return Err(anyhow::anyhow!("Execution failed: {:?}", e));
+        // Execute the function
+        match self.engine.emu_start(
+            function_address,
+            return_address,
+            0,
+            0,
+            Some(&mut hooks),
+            Some(&mut context),
+        ) {
+            Ok(()) => {
+                // Normal completion - function reached end address
+            }
+            Err(EmulatorError::UnsupportedInstruction(msg)) if msg == "FUNCTION_RETURN" => {
+                // Function returned normally - handle tracing and cleanup
+                if context.tracer.is_enabled() {
+                    let rax = self.engine.reg_read(Register::RAX)?;
+                    context.tracer.trace_return(return_address, rax)?;
                 }
             }
+            Err(EmulatorError::UnmappedMemory(addr)) => {
+                // Handle memory fault by mapping the required page
+                return Err(anyhow::anyhow!(
+                    "Attempted to access unmapped page at 0x{:x}",
+                    addr
+                ));
 
-            // Handle instruction tracing for the addresses we collected
-            if self.tracer.is_enabled() {
-                let traced_addresses = instruction_addresses.lock().unwrap().clone();
-                for address in traced_addresses {
-                    if address == return_address {
-                        continue; // Skip tracing the return address itself
-                    }
-
-                    // Try to read instruction bytes for tracing
-                    if let Ok(inst_bytes) = self.read_instruction_bytes_for_tracing(address) {
-                        if let Err(e) = self.tracer.trace_instruction(
-                            address,
-                            &inst_bytes,
-                            &self.engine,
-                            Some(self.memory_manager.get_loader()),
-                        ) {
-                            eprintln!(
-                                "Warning: Failed to trace instruction at 0x{:x}: {}",
-                                address, e
-                            );
-                        }
-                    }
-                }
+                // TODO disabled: should happen inside hook
+                // // Try to map the memory from minidump
+                // if let Ok(page_data) = context.memory_manager.read_memory(page_base, 4096) {
+                //     match self.engine.mem_map(page_base, 4096, Permission::ALL) {
+                //         Ok(()) => {
+                //             self.engine.mem_write(page_base, &page_data)?;
+                //         }
+                //         Err(e) => {
+                //             return Err(anyhow::anyhow!(
+                //                 "Failed to map memory at 0x{:x}: {:?}",
+                //                 page_base,
+                //                 e
+                //             ));
+                //         }
+                //     }
+                // } else {
+                //     return Err(anyhow::anyhow!(
+                //         "Failed to read memory from minidump at 0x{:x}",
+                //         page_base
+                //     ));
+                // }
+            }
+            Err(e) => {
+                // Other errors are fatal
+                return Err(anyhow::anyhow!("Execution failed: {:?}", e));
             }
         }
 
-        if self.tracer.is_enabled() {
-            let final_count = *instruction_count.lock().unwrap();
-            println!("\n[TRACE] Executed {} instructions", final_count);
+        if context.tracer.is_enabled() {
+            println!(
+                "\n[TRACE] Executed {} instructions",
+                context.instruction_count
+            );
         }
 
         Ok(())

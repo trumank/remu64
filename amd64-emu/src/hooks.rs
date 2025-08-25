@@ -1,9 +1,5 @@
 use crate::cpu::CpuState;
 use crate::error::Result;
-use std::collections::HashMap;
-
-pub type HookId = usize;
-pub type HookCallback = dyn FnMut(&mut CpuState, u64, usize) -> Result<()>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum HookType {
@@ -16,180 +12,179 @@ pub enum HookType {
     Invalid,
 }
 
-pub struct Hook<'a> {
-    pub hook_type: HookType,
-    pub callback: Box<dyn FnMut(&mut CpuState, u64, usize) -> Result<()> + 'a>,
-    pub begin: u64,
-    pub end: u64,
+pub struct HookManager<Context> {
+    pub code_hook: Option<Box<dyn FnMut(&mut CpuState, &mut Context, u64, usize) -> Result<()>>>,
+    pub mem_read_hook:
+        Option<Box<dyn FnMut(&mut CpuState, &mut Context, u64, usize) -> Result<()>>>,
+    pub mem_write_hook:
+        Option<Box<dyn FnMut(&mut CpuState, &mut Context, u64, usize) -> Result<()>>>,
+    pub mem_access_hook:
+        Option<Box<dyn FnMut(&mut CpuState, &mut Context, u64, usize) -> Result<()>>>,
+    pub mem_fault_hook:
+        Option<Box<dyn FnMut(&mut CpuState, &mut Context, u64, usize) -> Result<bool>>>,
+    pub interrupt_hook:
+        Option<Box<dyn FnMut(&mut CpuState, &mut Context, u64, usize) -> Result<()>>>,
+    pub invalid_hook: Option<Box<dyn FnMut(&mut CpuState, &mut Context, u64, usize) -> Result<()>>>,
 }
 
-pub struct HookManager<'a> {
-    hooks: HashMap<HookId, Hook<'a>>,
-    next_id: HookId,
-    by_type: HashMap<HookType, Vec<HookId>>,
-}
-
-impl Default for HookManager<'_> {
+impl<Context> Default for HookManager<Context> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<'a> HookManager<'a> {
+impl<Context> HookManager<Context> {
     pub fn new() -> Self {
-        let mut by_type = HashMap::new();
-        by_type.insert(HookType::Code, Vec::new());
-        by_type.insert(HookType::MemRead, Vec::new());
-        by_type.insert(HookType::MemWrite, Vec::new());
-        by_type.insert(HookType::MemAccess, Vec::new());
-        by_type.insert(HookType::MemFault, Vec::new());
-        by_type.insert(HookType::Interrupt, Vec::new());
-        by_type.insert(HookType::Invalid, Vec::new());
-
         Self {
-            hooks: HashMap::new(),
-            next_id: 1,
-            by_type,
+            code_hook: None,
+            mem_read_hook: None,
+            mem_write_hook: None,
+            mem_access_hook: None,
+            mem_fault_hook: None,
+            interrupt_hook: None,
+            invalid_hook: None,
         }
     }
 
-    pub fn add_hook<F: 'a>(
-        &mut self,
-        hook_type: HookType,
-        begin: u64,
-        end: u64,
-        callback: F,
-    ) -> HookId
+    pub fn set_code_hook<F>(&mut self, hook: F)
     where
-        F: FnMut(&mut CpuState, u64, usize) -> Result<()> + 'a,
+        F: FnMut(&mut CpuState, &mut Context, u64, usize) -> Result<()> + 'static,
     {
-        let id = self.next_id;
-        self.next_id += 1;
-
-        let hook = Hook {
-            hook_type,
-            callback: Box::new(callback),
-            begin,
-            end,
-        };
-
-        self.hooks.insert(id, hook);
-        self.by_type.get_mut(&hook_type).unwrap().push(id);
-
-        id
+        self.code_hook = Some(Box::new(hook));
     }
 
-    pub fn remove_hook(&mut self, id: HookId) -> bool {
-        if let Some(hook) = self.hooks.remove(&id) {
-            if let Some(ids) = self.by_type.get_mut(&hook.hook_type) {
-                ids.retain(|&x| x != id);
-            }
-            true
-        } else {
-            false
-        }
+    pub fn set_mem_read_hook<F>(&mut self, hook: F)
+    where
+        F: FnMut(&mut CpuState, &mut Context, u64, usize) -> Result<()> + 'static,
+    {
+        self.mem_read_hook = Some(Box::new(hook));
     }
 
-    pub fn run_code_hooks(&mut self, cpu: &mut CpuState, address: u64, size: usize) -> Result<()> {
-        if let Some(ids) = self.by_type.get(&HookType::Code) {
-            for &id in ids {
-                if let Some(hook) = self.hooks.get_mut(&id) {
-                    if address >= hook.begin && address < hook.end {
-                        (hook.callback)(cpu, address, size)?;
-                    }
-                }
-            }
-        }
-        Ok(())
+    pub fn set_mem_write_hook<F>(&mut self, hook: F)
+    where
+        F: FnMut(&mut CpuState, &mut Context, u64, usize) -> Result<()> + 'static,
+    {
+        self.mem_write_hook = Some(Box::new(hook));
     }
 
-    pub fn run_mem_read_hooks(
+    pub fn set_mem_access_hook<F>(&mut self, hook: F)
+    where
+        F: FnMut(&mut CpuState, &mut Context, u64, usize) -> Result<()> + 'static,
+    {
+        self.mem_access_hook = Some(Box::new(hook));
+    }
+
+    pub fn set_mem_fault_hook<F>(&mut self, hook: F)
+    where
+        F: FnMut(&mut CpuState, &mut Context, u64, usize) -> Result<bool> + 'static,
+    {
+        self.mem_fault_hook = Some(Box::new(hook));
+    }
+
+    pub fn set_interrupt_hook<F>(&mut self, hook: F)
+    where
+        F: FnMut(&mut CpuState, &mut Context, u64, usize) -> Result<()> + 'static,
+    {
+        self.interrupt_hook = Some(Box::new(hook));
+    }
+
+    pub fn set_invalid_hook<F>(&mut self, hook: F)
+    where
+        F: FnMut(&mut CpuState, &mut Context, u64, usize) -> Result<()> + 'static,
+    {
+        self.invalid_hook = Some(Box::new(hook));
+    }
+
+    pub fn run_code_hook(
         &mut self,
         cpu: &mut CpuState,
+        context: &mut Context,
         address: u64,
         size: usize,
     ) -> Result<()> {
-        for hook_type in [HookType::MemRead, HookType::MemAccess] {
-            if let Some(ids) = self.by_type.get(&hook_type) {
-                for &id in ids {
-                    if let Some(hook) = self.hooks.get_mut(&id) {
-                        if address >= hook.begin && address < hook.end {
-                            (hook.callback)(cpu, address, size)?;
-                        }
-                    }
-                }
-            }
+        if let Some(hook) = &mut self.code_hook {
+            hook(cpu, context, address, size)?;
         }
         Ok(())
     }
 
-    pub fn run_mem_write_hooks(
+    pub fn run_mem_read_hook(
         &mut self,
         cpu: &mut CpuState,
+        context: &mut Context,
         address: u64,
         size: usize,
     ) -> Result<()> {
-        for hook_type in [HookType::MemWrite, HookType::MemAccess] {
-            if let Some(ids) = self.by_type.get(&hook_type) {
-                for &id in ids {
-                    if let Some(hook) = self.hooks.get_mut(&id) {
-                        if address >= hook.begin && address < hook.end {
-                            (hook.callback)(cpu, address, size)?;
-                        }
-                    }
-                }
-            }
+        if let Some(hook) = &mut self.mem_read_hook {
+            hook(cpu, context, address, size)?;
+        }
+        if let Some(hook) = &mut self.mem_access_hook {
+            hook(cpu, context, address, size)?;
         }
         Ok(())
     }
 
-    pub fn run_interrupt_hooks(&mut self, cpu: &mut CpuState, intno: u64) -> Result<()> {
-        if let Some(ids) = self.by_type.get(&HookType::Interrupt) {
-            for &id in ids {
-                if let Some(hook) = self.hooks.get_mut(&id) {
-                    (hook.callback)(cpu, intno, 0)?;
-                }
-            }
-        }
-        Ok(())
-    }
-
-    pub fn run_invalid_hooks(&mut self, cpu: &mut CpuState, address: u64) -> Result<()> {
-        if let Some(ids) = self.by_type.get(&HookType::Invalid) {
-            for &id in ids {
-                if let Some(hook) = self.hooks.get_mut(&id) {
-                    (hook.callback)(cpu, address, 0)?;
-                }
-            }
-        }
-        Ok(())
-    }
-
-    pub fn run_mem_fault_hooks(
+    pub fn run_mem_write_hook(
         &mut self,
         cpu: &mut CpuState,
+        context: &mut Context,
+        address: u64,
+        size: usize,
+    ) -> Result<()> {
+        if let Some(hook) = &mut self.mem_write_hook {
+            hook(cpu, context, address, size)?;
+        }
+        if let Some(hook) = &mut self.mem_access_hook {
+            hook(cpu, context, address, size)?;
+        }
+        Ok(())
+    }
+
+    pub fn run_interrupt_hook(
+        &mut self,
+        cpu: &mut CpuState,
+        context: &mut Context,
+        intno: u64,
+    ) -> Result<()> {
+        if let Some(hook) = &mut self.interrupt_hook {
+            hook(cpu, context, intno, 0)?;
+        }
+        Ok(())
+    }
+
+    pub fn run_invalid_hook(
+        &mut self,
+        cpu: &mut CpuState,
+        context: &mut Context,
+        address: u64,
+    ) -> Result<()> {
+        if let Some(hook) = &mut self.invalid_hook {
+            hook(cpu, context, address, 0)?;
+        }
+        Ok(())
+    }
+
+    pub fn run_mem_fault_hook(
+        &mut self,
+        cpu: &mut CpuState,
+        context: &mut Context,
         address: u64,
         size: usize,
     ) -> Result<bool> {
-        let mut handled = false;
-        if let Some(ids) = self.by_type.get(&HookType::MemFault) {
-            for &id in ids {
-                if let Some(hook) = self.hooks.get_mut(&id) {
-                    if address >= hook.begin && address < hook.end {
-                        (hook.callback)(cpu, address, size)?;
-                        handled = true;
-                    }
-                }
-            }
+        if let Some(hook) = &mut self.mem_fault_hook {
+            hook(cpu, context, address, size)
+        } else {
+            Ok(false)
         }
-        Ok(handled)
     }
 
     pub fn clear(&mut self) {
-        self.hooks.clear();
-        for ids in self.by_type.values_mut() {
-            ids.clear();
-        }
-        self.next_id = 1;
+        self.code_hook = None;
+        self.mem_read_hook = None;
+        self.mem_write_hook = None;
+        self.mem_access_hook = None;
+        self.mem_fault_hook = None;
+        self.interrupt_hook = None;
+        self.invalid_hook = None;
     }
 }
