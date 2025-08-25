@@ -105,6 +105,10 @@ impl Engine {
         self.cpu.rflags
     }
 
+    pub fn set_gs_base(&mut self, base: u64) {
+        self.cpu.segments.gs.base = base;
+    }
+
     pub fn emu_start<H: HookManager>(
         &mut self,
         begin: u64,
@@ -431,8 +435,8 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             return Err(EmulatorError::InvalidInstruction(inst.address));
         }
 
-        let value = self.read_operand(&inst.operands[1])?;
-        self.write_operand(&inst.operands[0], value)?;
+        let value = self.read_operand(&inst.operands[1], inst)?;
+        self.write_operand(&inst.operands[0], value, inst)?;
         Ok(())
     }
 
@@ -441,8 +445,8 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             return Err(EmulatorError::InvalidInstruction(inst.address));
         }
 
-        let dst = self.read_operand(&inst.operands[0])?;
-        let src = self.read_operand(&inst.operands[1])?;
+        let dst = self.read_operand(&inst.operands[0], inst)?;
+        let src = self.read_operand(&inst.operands[1], inst)?;
 
         // Determine the operation size based on the destination operand
         let size = self.get_operand_size(&inst.operands[0]);
@@ -474,7 +478,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         };
 
         self.update_flags_arithmetic_sized(dst_masked, src_masked, result, false, size);
-        self.write_operand(&inst.operands[0], result)?;
+        self.write_operand(&inst.operands[0], result, inst)?;
         Ok(())
     }
 
@@ -483,8 +487,8 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             return Err(EmulatorError::InvalidInstruction(inst.address));
         }
 
-        let dst = self.read_operand(&inst.operands[0])?;
-        let src = self.read_operand(&inst.operands[1])?;
+        let dst = self.read_operand(&inst.operands[0], inst)?;
+        let src = self.read_operand(&inst.operands[1], inst)?;
 
         // Determine the operation size based on the destination operand
         let size = self.get_operand_size(&inst.operands[0]);
@@ -516,7 +520,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         };
 
         self.update_flags_arithmetic_sized(dst_masked, src_masked, result, true, size);
-        self.write_operand(&inst.operands[0], result)?;
+        self.write_operand(&inst.operands[0], result, inst)?;
         Ok(())
     }
 
@@ -525,8 +529,8 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             return Err(EmulatorError::InvalidInstruction(inst.address));
         }
 
-        let dst = self.read_operand(&inst.operands[0])?;
-        let src = self.read_operand(&inst.operands[1])?;
+        let dst = self.read_operand(&inst.operands[0], inst)?;
+        let src = self.read_operand(&inst.operands[1], inst)?;
         let carry = if self.engine.cpu.rflags.contains(Flags::CF) {
             1
         } else {
@@ -597,7 +601,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         let parity = (result_masked as u8).count_ones().is_multiple_of(2);
         self.engine.cpu.rflags.set(Flags::PF, parity);
 
-        self.write_operand(&inst.operands[0], result)?;
+        self.write_operand(&inst.operands[0], result, inst)?;
         Ok(())
     }
 
@@ -606,8 +610,8 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             return Err(EmulatorError::InvalidInstruction(inst.address));
         }
 
-        let dst = self.read_operand(&inst.operands[0])?;
-        let src = self.read_operand(&inst.operands[1])?;
+        let dst = self.read_operand(&inst.operands[0], inst)?;
+        let src = self.read_operand(&inst.operands[1], inst)?;
         let borrow = if self.engine.cpu.rflags.contains(Flags::CF) {
             1
         } else {
@@ -636,7 +640,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         let parity = (result as u8).count_ones().is_multiple_of(2);
         self.engine.cpu.rflags.set(Flags::PF, parity);
 
-        self.write_operand(&inst.operands[0], result)?;
+        self.write_operand(&inst.operands[0], result, inst)?;
         Ok(())
     }
 
@@ -645,12 +649,12 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             return Err(EmulatorError::InvalidInstruction(inst.address));
         }
 
-        let dst = self.read_operand(&inst.operands[0])?;
-        let src = self.read_operand(&inst.operands[1])?;
+        let dst = self.read_operand(&inst.operands[0], inst)?;
+        let src = self.read_operand(&inst.operands[1], inst)?;
         let result = dst ^ src;
 
         self.update_flags_logical(result);
-        self.write_operand(&inst.operands[0], result)?;
+        self.write_operand(&inst.operands[0], result, inst)?;
         Ok(())
     }
 
@@ -659,12 +663,12 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             return Err(EmulatorError::InvalidInstruction(inst.address));
         }
 
-        let dst = self.read_operand(&inst.operands[0])?;
-        let src = self.read_operand(&inst.operands[1])?;
+        let dst = self.read_operand(&inst.operands[0], inst)?;
+        let src = self.read_operand(&inst.operands[1], inst)?;
         let result = dst & src;
 
         self.update_flags_logical(result);
-        self.write_operand(&inst.operands[0], result)?;
+        self.write_operand(&inst.operands[0], result, inst)?;
         Ok(())
     }
 
@@ -673,12 +677,12 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             return Err(EmulatorError::InvalidInstruction(inst.address));
         }
 
-        let dst = self.read_operand(&inst.operands[0])?;
-        let src = self.read_operand(&inst.operands[1])?;
+        let dst = self.read_operand(&inst.operands[0], inst)?;
+        let src = self.read_operand(&inst.operands[1], inst)?;
         let result = dst | src;
 
         self.update_flags_logical(result);
-        self.write_operand(&inst.operands[0], result)?;
+        self.write_operand(&inst.operands[0], result, inst)?;
         Ok(())
     }
 
@@ -687,8 +691,8 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             return Err(EmulatorError::InvalidInstruction(inst.address));
         }
 
-        let dst = self.read_operand(&inst.operands[0])?;
-        let src = self.read_operand(&inst.operands[1])?;
+        let dst = self.read_operand(&inst.operands[0], inst)?;
+        let src = self.read_operand(&inst.operands[1], inst)?;
         let result = dst.wrapping_sub(src);
 
         self.update_flags_arithmetic(dst, src, result, true);
@@ -700,8 +704,8 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             return Err(EmulatorError::InvalidInstruction(inst.address));
         }
 
-        let dst = self.read_operand(&inst.operands[0])?;
-        let src = self.read_operand(&inst.operands[1])?;
+        let dst = self.read_operand(&inst.operands[0], inst)?;
+        let src = self.read_operand(&inst.operands[1], inst)?;
         let result = dst & src;
 
         self.update_flags_logical(result);
@@ -713,7 +717,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             return Err(EmulatorError::InvalidInstruction(inst.address));
         }
 
-        let value = self.read_operand(&inst.operands[0])?;
+        let value = self.read_operand(&inst.operands[0], inst)?;
         let result = value.wrapping_add(1);
 
         // INC doesn't affect CF flag, only other arithmetic flags
@@ -721,7 +725,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         self.update_flags_arithmetic(value, 1, result, false);
         self.engine.cpu.rflags.set(Flags::CF, cf);
 
-        self.write_operand(&inst.operands[0], result)?;
+        self.write_operand(&inst.operands[0], result, inst)?;
         Ok(())
     }
 
@@ -730,7 +734,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             return Err(EmulatorError::InvalidInstruction(inst.address));
         }
 
-        let value = self.read_operand(&inst.operands[0])?;
+        let value = self.read_operand(&inst.operands[0], inst)?;
         let result = value.wrapping_sub(1);
 
         // DEC doesn't affect CF flag, only other arithmetic flags
@@ -738,7 +742,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         self.update_flags_arithmetic(value, 1, result, true);
         self.engine.cpu.rflags.set(Flags::CF, cf);
 
-        self.write_operand(&inst.operands[0], result)?;
+        self.write_operand(&inst.operands[0], result, inst)?;
         Ok(())
     }
 
@@ -747,7 +751,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             return Err(EmulatorError::InvalidInstruction(inst.address));
         }
 
-        let value = self.read_operand(&inst.operands[0])?;
+        let value = self.read_operand(&inst.operands[0], inst)?;
         let result = 0u64.wrapping_sub(value);
 
         // NEG sets CF to 0 if operand is 0, otherwise 1
@@ -756,7 +760,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         // Update other arithmetic flags
         self.update_flags_arithmetic(0, value, result, true);
 
-        self.write_operand(&inst.operands[0], result)?;
+        self.write_operand(&inst.operands[0], result, inst)?;
         Ok(())
     }
 
@@ -765,12 +769,12 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             return Err(EmulatorError::InvalidInstruction(inst.address));
         }
 
-        let value = self.read_operand(&inst.operands[0])?;
+        let value = self.read_operand(&inst.operands[0], inst)?;
         let result = !value;
 
         // NOT doesn't affect any flags
 
-        self.write_operand(&inst.operands[0], result)?;
+        self.write_operand(&inst.operands[0], result, inst)?;
         Ok(())
     }
 
@@ -779,8 +783,8 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             return Err(EmulatorError::InvalidInstruction(inst.address));
         }
 
-        let value = self.read_operand(&inst.operands[0])?;
-        let count = (self.read_operand(&inst.operands[1])? & 0x3F) as u32; // Mask to 6 bits for 64-bit mode
+        let value = self.read_operand(&inst.operands[0], inst)?;
+        let count = (self.read_operand(&inst.operands[1], inst)? & 0x3F) as u32; // Mask to 6 bits for 64-bit mode
 
         if count == 0 {
             return Ok(());
@@ -805,7 +809,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         // Update SF, ZF, PF based on result
         self.update_flags_logical(result);
 
-        self.write_operand(&inst.operands[0], result)?;
+        self.write_operand(&inst.operands[0], result, inst)?;
         Ok(())
     }
 
@@ -814,8 +818,8 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             return Err(EmulatorError::InvalidInstruction(inst.address));
         }
 
-        let value = self.read_operand(&inst.operands[0])?;
-        let count = (self.read_operand(&inst.operands[1])? & 0x3F) as u32;
+        let value = self.read_operand(&inst.operands[0], inst)?;
+        let count = (self.read_operand(&inst.operands[1], inst)? & 0x3F) as u32;
 
         if count == 0 {
             return Ok(());
@@ -842,7 +846,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         // Update SF, ZF, PF based on result
         self.update_flags_logical(result);
 
-        self.write_operand(&inst.operands[0], result)?;
+        self.write_operand(&inst.operands[0], result, inst)?;
         Ok(())
     }
 
@@ -851,8 +855,8 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             return Err(EmulatorError::InvalidInstruction(inst.address));
         }
 
-        let value = self.read_operand(&inst.operands[0])? as i64;
-        let count = (self.read_operand(&inst.operands[1])? & 0x3F) as u32;
+        let value = self.read_operand(&inst.operands[0], inst)? as i64;
+        let count = (self.read_operand(&inst.operands[1], inst)? & 0x3F) as u32;
 
         if count == 0 {
             return Ok(());
@@ -877,7 +881,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         // Update SF, ZF, PF based on result
         self.update_flags_logical(result);
 
-        self.write_operand(&inst.operands[0], result)?;
+        self.write_operand(&inst.operands[0], result, inst)?;
         Ok(())
     }
 
@@ -927,8 +931,8 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             return Err(EmulatorError::InvalidInstruction(inst.address));
         }
 
-        let value = self.read_operand(&inst.operands[0])?;
-        let count = (self.read_operand(&inst.operands[1])? & 0x3F) as u32;
+        let value = self.read_operand(&inst.operands[0], inst)?;
+        let count = (self.read_operand(&inst.operands[1], inst)? & 0x3F) as u32;
 
         if count == 0 {
             return Ok(());
@@ -947,7 +951,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             self.engine.cpu.rflags.set(Flags::OF, sign_changed);
         }
 
-        self.write_operand(&inst.operands[0], result)?;
+        self.write_operand(&inst.operands[0], result, inst)?;
         Ok(())
     }
 
@@ -956,8 +960,8 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             return Err(EmulatorError::InvalidInstruction(inst.address));
         }
 
-        let value = self.read_operand(&inst.operands[0])?;
-        let count = (self.read_operand(&inst.operands[1])? & 0x3F) as u32;
+        let value = self.read_operand(&inst.operands[0], inst)?;
+        let count = (self.read_operand(&inst.operands[1], inst)? & 0x3F) as u32;
 
         if count == 0 {
             return Ok(());
@@ -980,7 +984,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             self.engine.cpu.rflags.set(Flags::OF, msb != next_msb);
         }
 
-        self.write_operand(&inst.operands[0], result)?;
+        self.write_operand(&inst.operands[0], result, inst)?;
         Ok(())
     }
 
@@ -990,12 +994,12 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         }
 
         // Read both values
-        let value1 = self.read_operand(&inst.operands[0])?;
-        let value2 = self.read_operand(&inst.operands[1])?;
+        let value1 = self.read_operand(&inst.operands[0], inst)?;
+        let value2 = self.read_operand(&inst.operands[1], inst)?;
 
         // Exchange them
-        self.write_operand(&inst.operands[0], value2)?;
-        self.write_operand(&inst.operands[1], value1)?;
+        self.write_operand(&inst.operands[0], value2, inst)?;
+        self.write_operand(&inst.operands[1], value1, inst)?;
 
         // XCHG doesn't affect any flags
         Ok(())
@@ -1008,15 +1012,15 @@ impl<H: HookManager> ExecutionContext<'_, H> {
 
         // XADD: Exchange and Add
         // Exchanges the destination and source operands, then adds the original source value to the destination
-        let dst = self.read_operand(&inst.operands[0])?;
-        let src = self.read_operand(&inst.operands[1])?;
+        let dst = self.read_operand(&inst.operands[0], inst)?;
+        let src = self.read_operand(&inst.operands[1], inst)?;
 
         // Store original destination in source
-        self.write_operand(&inst.operands[1], dst)?;
+        self.write_operand(&inst.operands[1], dst, inst)?;
 
         // Add original source to original destination and store in destination
         let result = dst.wrapping_add(src);
-        self.write_operand(&inst.operands[0], result)?;
+        self.write_operand(&inst.operands[0], result, inst)?;
 
         // Update flags based on the addition result
         self.update_flags_arithmetic(dst, src, result, false);
@@ -1032,7 +1036,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         // MUL performs unsigned multiplication
         // For 64-bit operand: RDX:RAX = RAX * operand
         let multiplicand = self.engine.cpu.read_reg(Register::RAX);
-        let multiplier = self.read_operand(&inst.operands[0])?;
+        let multiplier = self.read_operand(&inst.operands[0], inst)?;
 
         let result = (multiplicand as u128) * (multiplier as u128);
 
@@ -1063,7 +1067,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         let dividend_low = self.engine.cpu.read_reg(Register::RAX);
         let dividend_high = self.engine.cpu.read_reg(Register::RDX);
         let dividend = ((dividend_high as u128) << 64) | (dividend_low as u128);
-        let divisor = self.read_operand(&inst.operands[0])? as u128;
+        let divisor = self.read_operand(&inst.operands[0], inst)? as u128;
 
         if divisor == 0 {
             // Division by zero - should trigger exception
@@ -1094,7 +1098,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
 
         // Single operand form: RDX:RAX = RAX * operand (signed)
         let multiplicand = self.engine.cpu.read_reg(Register::RAX) as i64;
-        let multiplier = self.read_operand(&inst.operands[0])? as i64;
+        let multiplier = self.read_operand(&inst.operands[0], inst)? as i64;
 
         let result = (multiplicand as i128) * (multiplier as i128);
 
@@ -1122,7 +1126,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         let dividend_low = self.engine.cpu.read_reg(Register::RAX) as i64;
         let dividend_high = self.engine.cpu.read_reg(Register::RDX) as i64;
         let dividend = ((dividend_high as i128) << 64) | (dividend_low as u64 as i128);
-        let divisor = self.read_operand(&inst.operands[0])? as i64 as i128;
+        let divisor = self.read_operand(&inst.operands[0], inst)? as i64 as i128;
 
         if divisor == 0 {
             return Err(EmulatorError::DivisionByZero);
@@ -1147,7 +1151,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             return Err(EmulatorError::InvalidInstruction(inst.address));
         }
 
-        let value = self.read_operand(&inst.operands[0])?;
+        let value = self.read_operand(&inst.operands[0], inst)?;
         let rsp = self.engine.cpu.read_reg(Register::RSP);
         let new_rsp = rsp.wrapping_sub(8);
         self.engine.cpu.write_reg(Register::RSP, new_rsp);
@@ -1162,7 +1166,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
 
         let rsp = self.engine.cpu.read_reg(Register::RSP);
         let value = self.mem_read_u64(rsp)?;
-        self.write_operand(&inst.operands[0], value)?;
+        self.write_operand(&inst.operands[0], value, inst)?;
         self.engine
             .cpu
             .write_reg(Register::RSP, rsp.wrapping_add(8));
@@ -1184,7 +1188,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
                 self.engine.cpu.rip = (self.engine.cpu.rip as i64 + offset) as u64;
             }
             _ => {
-                let target = self.read_operand(&inst.operands[0])?;
+                let target = self.read_operand(&inst.operands[0], inst)?;
                 self.engine.cpu.rip = target;
             }
         }
@@ -1211,7 +1215,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
                 self.engine.cpu.rip = (self.engine.cpu.rip as i64 + offset) as u64;
             }
             _ => {
-                let target = self.read_operand(&inst.operands[0])?;
+                let target = self.read_operand(&inst.operands[0], inst)?;
                 self.engine.cpu.rip = target;
             }
         }
@@ -1686,7 +1690,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         Ok(())
     }
 
-    fn read_operand(&mut self, operand: &Operand) -> Result<u64> {
+    fn read_operand(&mut self, operand: &Operand, inst: &Instruction) -> Result<u64> {
         match operand {
             Operand::Register(reg) => Ok(self.engine.cpu.read_reg(*reg)),
             Operand::Immediate(val) => Ok(*val as u64),
@@ -1706,6 +1710,20 @@ impl<H: HookManager> ExecutionContext<'_, H> {
                         addr.wrapping_add(self.engine.cpu.read_reg(*index_reg) * (*scale as u64));
                 }
 
+                // Apply segment base if segment prefix is present
+                if let Some(segment_reg) = inst.prefix.segment {
+                    let segment_base = match segment_reg {
+                        Register::CS => self.engine.cpu.segments.cs.base,
+                        Register::DS => self.engine.cpu.segments.ds.base,
+                        Register::ES => self.engine.cpu.segments.es.base,
+                        Register::FS => self.engine.cpu.segments.fs.base,
+                        Register::GS => self.engine.cpu.segments.gs.base,
+                        Register::SS => self.engine.cpu.segments.ss.base,
+                        _ => 0, // Should not happen for segment registers
+                    };
+                    addr = addr.wrapping_add(segment_base);
+                }
+
                 match size {
                     OperandSize::Byte => self.mem_read_u8(addr).map(|v| v as u64),
                     OperandSize::Word => self.mem_read_u16(addr).map(|v| v as u64),
@@ -1718,7 +1736,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         }
     }
 
-    fn write_operand(&mut self, operand: &Operand, value: u64) -> Result<()> {
+    fn write_operand(&mut self, operand: &Operand, value: u64, inst: &Instruction) -> Result<()> {
         match operand {
             Operand::Register(reg) => {
                 self.engine.cpu.write_reg(*reg, value);
@@ -1738,6 +1756,20 @@ impl<H: HookManager> ExecutionContext<'_, H> {
                 if let Some(index_reg) = index {
                     addr =
                         addr.wrapping_add(self.engine.cpu.read_reg(*index_reg) * (*scale as u64));
+                }
+
+                // Apply segment base if segment prefix is present
+                if let Some(segment_reg) = inst.prefix.segment {
+                    let segment_base = match segment_reg {
+                        Register::CS => self.engine.cpu.segments.cs.base,
+                        Register::DS => self.engine.cpu.segments.ds.base,
+                        Register::ES => self.engine.cpu.segments.es.base,
+                        Register::FS => self.engine.cpu.segments.fs.base,
+                        Register::GS => self.engine.cpu.segments.gs.base,
+                        Register::SS => self.engine.cpu.segments.ss.base,
+                        _ => 0, // Should not happen for segment registers
+                    };
+                    addr = addr.wrapping_add(segment_base);
                 }
 
                 match size {
@@ -2300,13 +2332,13 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         }
 
         // Read the source as a 32-bit value
-        let src_value = self.read_operand(&inst.operands[1])? as u32 as i32;
+        let src_value = self.read_operand(&inst.operands[1], inst)? as u32 as i32;
 
         // Sign-extend to 64 bits
         let dest_value = src_value as i64 as u64;
 
         // Write to the destination register (always 64-bit)
-        self.write_operand(&inst.operands[0], dest_value)?;
+        self.write_operand(&inst.operands[0], dest_value, inst)?;
 
         // MOVSXD doesn't affect any flags
         Ok(())
@@ -2320,7 +2352,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         }
 
         // Determine source size based on the source operand or instruction context
-        let src_value = self.read_operand(&inst.operands[1])?;
+        let src_value = self.read_operand(&inst.operands[1], inst)?;
 
         // For MOVZX, we need to determine if it's byte-to-larger or word-to-larger
         // This can be inferred from the operand or we may need additional context
@@ -2343,7 +2375,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         };
 
         // Write to the destination register
-        self.write_operand(&inst.operands[0], dest_value)?;
+        self.write_operand(&inst.operands[0], dest_value, inst)?;
 
         // MOVZX doesn't affect any flags
         Ok(())
@@ -2411,8 +2443,8 @@ impl<H: HookManager> ExecutionContext<'_, H> {
 
         if condition {
             // Only move if condition is true
-            let value = self.read_operand(&inst.operands[1])?;
-            self.write_operand(&inst.operands[0], value)?;
+            let value = self.read_operand(&inst.operands[1], inst)?;
+            self.write_operand(&inst.operands[0], value, inst)?;
         }
         // If condition is false, do nothing (don't modify destination)
 
@@ -2434,8 +2466,8 @@ impl<H: HookManager> ExecutionContext<'_, H> {
 
         if condition {
             // Only move if condition is true
-            let value = self.read_operand(&inst.operands[1])?;
-            self.write_operand(&inst.operands[0], value)?;
+            let value = self.read_operand(&inst.operands[1], inst)?;
+            self.write_operand(&inst.operands[0], value, inst)?;
         }
         // If condition is false, do nothing (don't modify destination)
 
