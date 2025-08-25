@@ -934,6 +934,7 @@ impl Engine {
             OperandSize::Word => self.memory.read_u16(rsi)? as u64,
             OperandSize::DWord => self.memory.read_u32(rsi)? as u64,
             OperandSize::QWord => self.memory.read_u64(rsi)?,
+            OperandSize::XmmWord => return Err(EmulatorError::InvalidOperand),
         };
         
         // Write to [RDI]
@@ -942,6 +943,7 @@ impl Engine {
             OperandSize::Word => self.memory.write_u16(rdi, value as u16)?,
             OperandSize::DWord => self.memory.write_u32(rdi, value as u32)?,
             OperandSize::QWord => self.memory.write_u64(rdi, value)?,
+            OperandSize::XmmWord => return Err(EmulatorError::InvalidOperand),
         };
         
         // Update RSI and RDI based on direction flag
@@ -1017,6 +1019,7 @@ impl Engine {
             OperandSize::Word => self.memory.read_u16(rsi)? as u64,
             OperandSize::DWord => self.memory.read_u32(rsi)? as u64,
             OperandSize::QWord => self.memory.read_u64(rsi)?,
+            OperandSize::XmmWord => return Err(EmulatorError::InvalidOperand),
         };
         
         let src2 = match size {
@@ -1024,6 +1027,7 @@ impl Engine {
             OperandSize::Word => self.memory.read_u16(rdi)? as u64,
             OperandSize::DWord => self.memory.read_u32(rdi)? as u64,
             OperandSize::QWord => self.memory.read_u64(rdi)?,
+            OperandSize::XmmWord => return Err(EmulatorError::InvalidOperand),
         };
         
         // Compare src1 - src2
@@ -1102,6 +1106,7 @@ impl Engine {
             OperandSize::Word => self.cpu.read_reg(Register::AX),
             OperandSize::DWord => self.cpu.read_reg(Register::EAX),
             OperandSize::QWord => self.cpu.read_reg(Register::RAX),
+            OperandSize::XmmWord => return Err(EmulatorError::InvalidOperand),
         };
         
         // Read from [RDI]
@@ -1164,6 +1169,7 @@ impl Engine {
             OperandSize::Word => self.cpu.read_reg(Register::AX),
             OperandSize::DWord => self.cpu.read_reg(Register::EAX),
             OperandSize::QWord => self.cpu.read_reg(Register::RAX),
+            OperandSize::XmmWord => return Err(EmulatorError::InvalidOperand),
         };
         
         // Write to [RDI]
@@ -1172,6 +1178,7 @@ impl Engine {
             OperandSize::Word => self.memory.write_u16(rdi, acc as u16)?,
             OperandSize::DWord => self.memory.write_u32(rdi, acc as u32)?,
             OperandSize::QWord => self.memory.write_u64(rdi, acc)?,
+            OperandSize::XmmWord => return Err(EmulatorError::InvalidOperand),
         };
         
         // Update RDI based on direction flag
@@ -1222,6 +1229,7 @@ impl Engine {
             OperandSize::Word => self.memory.read_u16(rsi)? as u64,
             OperandSize::DWord => self.memory.read_u32(rsi)? as u64,
             OperandSize::QWord => self.memory.read_u64(rsi)?,
+            OperandSize::XmmWord => return Err(EmulatorError::InvalidOperand),
         };
         
         // Store in accumulator
@@ -1230,6 +1238,7 @@ impl Engine {
             OperandSize::Word => self.cpu.write_reg(Register::AX, value),
             OperandSize::DWord => self.cpu.write_reg(Register::EAX, value),
             OperandSize::QWord => self.cpu.write_reg(Register::RAX, value),
+            OperandSize::XmmWord => return Err(EmulatorError::InvalidOperand),
         };
         
         // Update RSI based on direction flag
@@ -1261,6 +1270,7 @@ impl Engine {
                     OperandSize::Word => self.memory.read_u16(addr).map(|v| v as u64),
                     OperandSize::DWord => self.memory.read_u32(addr).map(|v| v as u64),
                     OperandSize::QWord => self.memory.read_u64(addr),
+                    OperandSize::XmmWord => Err(EmulatorError::InvalidOperand),
                 }
             }
             Operand::Relative(offset) => Ok((self.cpu.rip as i64 + offset) as u64),
@@ -1287,6 +1297,7 @@ impl Engine {
                     OperandSize::Word => self.memory.write_u16(addr, value as u16),
                     OperandSize::DWord => self.memory.write_u32(addr, value as u32),
                     OperandSize::QWord => self.memory.write_u64(addr, value),
+                    OperandSize::XmmWord => Err(EmulatorError::InvalidOperand),
                 }
             }
             _ => Err(EmulatorError::InvalidInstruction(0)),

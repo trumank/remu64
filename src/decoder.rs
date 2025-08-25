@@ -786,6 +786,25 @@ impl Decoder {
                 15 => Register::R15,
                 _ => Register::RAX,
             },
+            OperandSize::XmmWord => match reg_num {
+                0 => Register::XMM0,
+                1 => Register::XMM1,
+                2 => Register::XMM2,
+                3 => Register::XMM3,
+                4 => Register::XMM4,
+                5 => Register::XMM5,
+                6 => Register::XMM6,
+                7 => Register::XMM7,
+                8 => Register::XMM8,
+                9 => Register::XMM9,
+                10 => Register::XMM10,
+                11 => Register::XMM11,
+                12 => Register::XMM12,
+                13 => Register::XMM13,
+                14 => Register::XMM14,
+                15 => Register::XMM15,
+                _ => Register::XMM0,
+            },
         }
     }
     
@@ -836,6 +855,9 @@ impl Decoder {
                     bytes[0], bytes[1], bytes[2], bytes[3],
                     bytes[4], bytes[5], bytes[6], bytes[7],
                 ]))
+            }
+            OperandSize::XmmWord => {
+                Err(EmulatorError::InvalidInstruction(0))
             }
         }
     }
