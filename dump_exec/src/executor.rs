@@ -79,8 +79,8 @@ impl FunctionExecutor {
         let mut hooks: HookManager<ExecutionContext> = HookManager::new();
 
         // Setup memory fault hook
-        hooks.set_mem_fault_hook(|_engine, context, address, _size| {
-            println!("!!mem fault hook");
+        hooks.set_mem_fault_hook(|engine, context, address, _size| {
+            println!("!!mem fault hook at 0x{:x}", address);
             let page_base = address & !0xfff;
 
             // NEVER map the null page (address 0)
@@ -88,17 +88,48 @@ impl FunctionExecutor {
                 return Ok(false); // Don't handle null page faults
             }
 
-            // Try to read from minidump - if successful, indicate we can handle the fault
-            if context.memory_manager.read_memory(page_base, 4096).is_ok() {
-                Ok(true) // Indicate we will handle this fault
+            // Try to read from minidump and map it in the engine
+            if let Ok(page_data) = context.memory_manager.read_memory(page_base, 4096) {
+                // Map the page in the engine
+                match engine.mem_map(page_base, 4096, Permission::ALL) {
+                    Ok(()) => {
+                        // Write the data to the mapped page
+                        match engine.mem_write(page_base, &page_data) {
+                            Ok(()) => {
+                                println!("Successfully mapped and wrote page at 0x{:x}", page_base);
+                                Ok(true) // Successfully handled the fault
+                            }
+                            Err(_) => {
+                                println!(
+                                    "Failed to write data to mapped page at 0x{:x}",
+                                    page_base
+                                );
+                                Ok(false) // Failed to write data
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        // Page might already be mapped, try to write anyway
+                        match engine.mem_write(page_base, &page_data) {
+                            Ok(()) => {
+                                println!("Page already mapped, wrote data at 0x{:x}", page_base);
+                                Ok(true) // Successfully handled the fault
+                            }
+                            Err(_) => {
+                                println!("Failed to map or write page at 0x{:x}", page_base);
+                                Ok(false) // Failed to handle
+                            }
+                        }
+                    }
+                }
             } else {
-                Ok(false) // Can't handle this fault
+                println!("No data in minidump for page at 0x{:x}", page_base);
+                Ok(false) // Can't handle this fault - no data in minidump
             }
         });
 
         // Setup code hook for instruction counting, tracing, and return detection
-        hooks.set_code_hook(|_engine, context, address, _size| {
-            println!("!!code hook");
+        hooks.set_code_hook(|engine, context, address, size| {
             // Check instruction count limit
             {
                 context.instruction_count += 1;
@@ -121,8 +152,17 @@ impl FunctionExecutor {
 
             // Handle instruction tracing
             if context.tracer.is_enabled() {
-                // We'll handle detailed tracing outside the hook due to complexity
-                // For now, just track that we executed an instruction
+                let mut instruction_bytes = vec![0; size];
+                engine.mem_read(address, &mut instruction_bytes).unwrap();
+                context
+                    .tracer
+                    .trace_instruction(
+                        address,
+                        &instruction_bytes,
+                        engine,
+                        Some(context.memory_manager.get_loader()),
+                    )
+                    .unwrap();
             }
 
             Ok(())

@@ -169,7 +169,28 @@ impl Engine {
     ) -> Result<()> {
         let rip = self.cpu.rip;
 
-        self.memory.check_exec(rip)?;
+        // Check if we can execute at this address, but allow memory fault hooks to handle unmapped memory
+        match self.memory.check_exec(rip) {
+            Ok(()) => {} // Memory is mapped and executable, continue
+            Err(EmulatorError::UnmappedMemory(_)) => {
+                // Memory is unmapped, try to handle with memory fault hooks
+                if let (Some(hooks), Some(context)) = (hooks.as_deref_mut(), context.as_deref_mut())
+                {
+                    // Try to let the memory fault hook handle this
+                    let dummy_buf = [0u8; 1]; // Minimal buffer for the hook
+                    if !hooks.run_mem_fault_hook(self, context, rip, 1)? {
+                        // Hook couldn't handle it, return the original error
+                        return Err(EmulatorError::UnmappedMemory(rip));
+                    }
+                    // Hook handled it, try check_exec again
+                    self.memory.check_exec(rip)?;
+                } else {
+                    // No hooks available, return the error
+                    return Err(EmulatorError::UnmappedMemory(rip));
+                }
+            }
+            Err(e) => return Err(e), // Other errors (like permission denied) are fatal
+        }
 
         let mut inst_bytes = vec![0u8; 15];
         self.mem_read_with_hooks(
@@ -201,8 +222,8 @@ impl Engine {
     fn execute_instruction<Context>(
         &mut self,
         inst: &Instruction,
-        mut hooks: Option<&mut HookManager<Context>>,
-        mut context: Option<&mut Context>,
+        hooks: Option<&mut HookManager<Context>>,
+        context: Option<&mut Context>,
     ) -> Result<()> {
         match inst.opcode {
             Opcode::MOV => self.execute_mov(inst),
@@ -1109,8 +1130,8 @@ impl Engine {
     fn execute_syscall<Context>(
         &mut self,
         _inst: &Instruction,
-        mut hooks: Option<&mut HookManager<Context>>,
-        mut context: Option<&mut Context>,
+        hooks: Option<&mut HookManager<Context>>,
+        context: Option<&mut Context>,
     ) -> Result<()> {
         if let (Some(hooks), Some(context)) = (hooks, context) {
             hooks.run_interrupt_hook(self, context, 0x80)?;
