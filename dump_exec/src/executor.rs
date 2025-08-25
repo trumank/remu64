@@ -6,13 +6,102 @@ use amd64_emu::{EmulatorError, Engine, EngineMode, HookManager, Permission, Regi
 use anyhow::{Context, Result};
 use iced_x86::Formatter;
 
-// Context structure that gets passed to hooks
-struct ExecutionContext<'a> {
+// Hook implementation that contains the context
+struct ExecutionHooks<'a> {
     memory_manager: &'a mut MemoryManager,
     tracer: &'a mut InstructionTracer,
     instruction_count: u64,
     max_instructions: u64,
     return_address: u64,
+}
+
+impl<'a> HookManager for ExecutionHooks<'a> {
+    fn on_mem_fault(
+        &mut self,
+        engine: &mut Engine,
+        address: u64,
+        _size: usize,
+    ) -> amd64_emu::Result<bool> {
+        println!("!!mem fault hook at 0x{:x}", address);
+        let page_base = address & !0xfff;
+
+        // NEVER map the null page (address 0)
+        if page_base == 0 {
+            return Ok(false); // Don't handle null page faults
+        }
+
+        // Try to read from minidump and map it in the engine
+        if let Ok(page_data) = self.memory_manager.read_memory(page_base, 4096) {
+            // Map the page in the engine
+            match engine.mem_map(page_base, 4096, Permission::ALL) {
+                Ok(()) => {
+                    // Write the data to the mapped page
+                    match engine.mem_write(page_base, &page_data) {
+                        Ok(()) => {
+                            println!("Successfully mapped and wrote page at 0x{:x}", page_base);
+                            Ok(true) // Successfully handled the fault
+                        }
+                        Err(_) => {
+                            println!("Failed to write data to mapped page at 0x{:x}", page_base);
+                            Ok(false) // Failed to write data
+                        }
+                    }
+                }
+                Err(_) => {
+                    // Page might already be mapped, try to write anyway
+                    match engine.mem_write(page_base, &page_data) {
+                        Ok(()) => {
+                            println!("Page already mapped, wrote data at 0x{:x}", page_base);
+                            Ok(true) // Successfully handled the fault
+                        }
+                        Err(_) => {
+                            println!("Failed to map or write page at 0x{:x}", page_base);
+                            Ok(false) // Failed to handle
+                        }
+                    }
+                }
+            }
+        } else {
+            println!("No data in minidump for page at 0x{:x}", page_base);
+            Ok(false) // Can't handle this fault - no data in minidump
+        }
+    }
+
+    fn on_code(&mut self, engine: &mut Engine, address: u64, size: usize) -> amd64_emu::Result<()> {
+        // Check instruction count limit
+        self.instruction_count += 1;
+        if self.instruction_count > self.max_instructions {
+            return Err(EmulatorError::UnsupportedInstruction(
+                "Execution exceeded maximum instruction count".to_string(),
+            ));
+        }
+
+        // Check for return to exit execution
+        if address == self.return_address {
+            if self.tracer.is_enabled() {
+                // Trace the return - we can't easily get RAX here, so we'll handle it outside
+            }
+            return Err(EmulatorError::UnsupportedInstruction(
+                "FUNCTION_RETURN".to_string(),
+            ));
+        }
+
+        // Handle instruction tracing
+        if self.tracer.is_enabled() {
+            let mut instruction_bytes = vec![0; size];
+            engine.mem_read(address, &mut instruction_bytes).unwrap();
+            self.tracer
+                .trace_instruction(
+                    address,
+                    &instruction_bytes,
+                    engine,
+                    Some(self.memory_manager.get_loader()),
+                )
+                .unwrap();
+        }
+
+        Ok(())
+    }
 }
 
 pub struct FunctionExecutor {
@@ -38,15 +127,12 @@ impl FunctionExecutor {
 
         let tracer = InstructionTracer::new(false);
 
-        let mut executor = FunctionExecutor {
+        let executor = FunctionExecutor {
             engine,
             memory_manager,
             stack_base,
             tracer,
         };
-
-        // Set up memory fault hook for automatic minidump loading
-        executor.setup_memory_fault_hook()?;
 
         Ok(executor)
     }
@@ -65,10 +151,10 @@ impl FunctionExecutor {
         // Set RIP to function start
         self.engine.reg_write(Register::RIP, function_address)?;
 
-        // Create execution context and hooks
+        // Create execution hooks
         let max_instructions = 1000000u64;
 
-        let mut context = ExecutionContext {
+        let mut hooks = ExecutionHooks {
             memory_manager: &mut self.memory_manager,
             tracer: &mut self.tracer,
             instruction_count: 0,
@@ -76,115 +162,19 @@ impl FunctionExecutor {
             return_address,
         };
 
-        let mut hooks: HookManager<ExecutionContext> = HookManager::new();
-
-        // Setup memory fault hook
-        hooks.set_mem_fault_hook(|engine, context, address, _size| {
-            println!("!!mem fault hook at 0x{:x}", address);
-            let page_base = address & !0xfff;
-
-            // NEVER map the null page (address 0)
-            if page_base == 0 {
-                return Ok(false); // Don't handle null page faults
-            }
-
-            // Try to read from minidump and map it in the engine
-            if let Ok(page_data) = context.memory_manager.read_memory(page_base, 4096) {
-                // Map the page in the engine
-                match engine.mem_map(page_base, 4096, Permission::ALL) {
-                    Ok(()) => {
-                        // Write the data to the mapped page
-                        match engine.mem_write(page_base, &page_data) {
-                            Ok(()) => {
-                                println!("Successfully mapped and wrote page at 0x{:x}", page_base);
-                                Ok(true) // Successfully handled the fault
-                            }
-                            Err(_) => {
-                                println!(
-                                    "Failed to write data to mapped page at 0x{:x}",
-                                    page_base
-                                );
-                                Ok(false) // Failed to write data
-                            }
-                        }
-                    }
-                    Err(_) => {
-                        // Page might already be mapped, try to write anyway
-                        match engine.mem_write(page_base, &page_data) {
-                            Ok(()) => {
-                                println!("Page already mapped, wrote data at 0x{:x}", page_base);
-                                Ok(true) // Successfully handled the fault
-                            }
-                            Err(_) => {
-                                println!("Failed to map or write page at 0x{:x}", page_base);
-                                Ok(false) // Failed to handle
-                            }
-                        }
-                    }
-                }
-            } else {
-                println!("No data in minidump for page at 0x{:x}", page_base);
-                Ok(false) // Can't handle this fault - no data in minidump
-            }
-        });
-
-        // Setup code hook for instruction counting, tracing, and return detection
-        hooks.set_code_hook(|engine, context, address, size| {
-            // Check instruction count limit
-            {
-                context.instruction_count += 1;
-                if context.instruction_count > context.max_instructions {
-                    return Err(EmulatorError::UnsupportedInstruction(
-                        "Execution exceeded maximum instruction count".to_string(),
-                    ));
-                }
-            }
-
-            // Check for return to exit execution
-            if address == context.return_address {
-                if context.tracer.is_enabled() {
-                    // Trace the return - we can't easily get RAX here, so we'll handle it outside
-                }
-                return Err(EmulatorError::UnsupportedInstruction(
-                    "FUNCTION_RETURN".to_string(),
-                ));
-            }
-
-            // Handle instruction tracing
-            if context.tracer.is_enabled() {
-                let mut instruction_bytes = vec![0; size];
-                engine.mem_read(address, &mut instruction_bytes).unwrap();
-                context
-                    .tracer
-                    .trace_instruction(
-                        address,
-                        &instruction_bytes,
-                        engine,
-                        Some(context.memory_manager.get_loader()),
-                    )
-                    .unwrap();
-            }
-
-            Ok(())
-        });
-
         // Execute the function
-        match self.engine.emu_start(
-            function_address,
-            return_address,
-            0,
-            0,
-            Some(&mut hooks),
-            Some(&mut context),
-        ) {
+        match self
+            .engine
+            .emu_start(function_address, return_address, 0, 0, Some(&mut hooks))
+        {
             Ok(()) => {
                 // Normal completion - function reached end address
             }
             Err(EmulatorError::UnsupportedInstruction(msg)) if msg == "FUNCTION_RETURN" => {
                 // Function returned normally - handle tracing and cleanup
-                if context.tracer.is_enabled() {
+                if hooks.tracer.is_enabled() {
                     let rax = self.engine.reg_read(Register::RAX)?;
-                    context.tracer.trace_return(return_address, rax)?;
+                    hooks.tracer.trace_return(return_address, rax)?;
                 }
             }
             Err(EmulatorError::UnmappedMemory(addr)) => {
@@ -193,28 +183,6 @@ impl FunctionExecutor {
                     "Attempted to access unmapped page at 0x{:x}",
                     addr
                 ));
-
-                // TODO disabled: should happen inside hook
-                // // Try to map the memory from minidump
-                // if let Ok(page_data) = context.memory_manager.read_memory(page_base, 4096) {
-                //     match self.engine.mem_map(page_base, 4096, Permission::ALL) {
-                //         Ok(()) => {
-                //             self.engine.mem_write(page_base, &page_data)?;
-                //         }
-                //         Err(e) => {
-                //             return Err(anyhow::anyhow!(
-                //                 "Failed to map memory at 0x{:x}: {:?}",
-                //                 page_base,
-                //                 e
-                //             ));
-                //         }
-                //     }
-                // } else {
-                //     return Err(anyhow::anyhow!(
-                //         "Failed to read memory from minidump at 0x{:x}",
-                //         page_base
-                //     ));
-                // }
             }
             Err(e) => {
                 // Other errors are fatal
@@ -222,10 +190,10 @@ impl FunctionExecutor {
             }
         }
 
-        if context.tracer.is_enabled() {
+        if hooks.tracer.is_enabled() {
             println!(
                 "\n[TRACE] Executed {} instructions",
-                context.instruction_count
+                hooks.instruction_count
             );
         }
 
@@ -333,13 +301,6 @@ impl FunctionExecutor {
 
     pub fn get_instruction_count(&self) -> usize {
         self.tracer.get_instruction_count()
-    }
-
-    fn setup_memory_fault_hook(&mut self) -> Result<()> {
-        // For now, we'll handle memory faults in the mem_read override
-        // The engine's hook system will call back to handle_memory_fault
-        // when an unmapped memory access occurs
-        Ok(())
     }
 
     pub fn handle_memory_fault(&mut self, address: u64, _size: usize) -> Result<bool> {

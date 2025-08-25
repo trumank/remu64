@@ -12,176 +12,39 @@ pub enum HookType {
     Invalid,
 }
 
-pub struct HookManager<Context> {
-    pub code_hook: Option<Box<dyn FnMut(&mut Engine, &mut Context, u64, usize) -> Result<()>>>,
-    pub mem_read_hook: Option<Box<dyn FnMut(&mut Engine, &mut Context, u64, usize) -> Result<()>>>,
-    pub mem_write_hook: Option<Box<dyn FnMut(&mut Engine, &mut Context, u64, usize) -> Result<()>>>,
-    pub mem_access_hook:
-        Option<Box<dyn FnMut(&mut Engine, &mut Context, u64, usize) -> Result<()>>>,
-    pub mem_fault_hook:
-        Option<Box<dyn FnMut(&mut Engine, &mut Context, u64, usize) -> Result<bool>>>,
-    pub interrupt_hook: Option<Box<dyn FnMut(&mut Engine, &mut Context, u64, usize) -> Result<()>>>,
-    pub invalid_hook: Option<Box<dyn FnMut(&mut Engine, &mut Context, u64, usize) -> Result<()>>>,
-}
-
-impl<Context> Default for HookManager<Context> {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl<Context> HookManager<Context> {
-    pub fn new() -> Self {
-        Self {
-            code_hook: None,
-            mem_read_hook: None,
-            mem_write_hook: None,
-            mem_access_hook: None,
-            mem_fault_hook: None,
-            interrupt_hook: None,
-            invalid_hook: None,
-        }
-    }
-
-    pub fn set_code_hook<F>(&mut self, hook: F)
-    where
-        F: FnMut(&mut Engine, &mut Context, u64, usize) -> Result<()> + 'static,
-    {
-        self.code_hook = Some(Box::new(hook));
-    }
-
-    pub fn set_mem_read_hook<F>(&mut self, hook: F)
-    where
-        F: FnMut(&mut Engine, &mut Context, u64, usize) -> Result<()> + 'static,
-    {
-        self.mem_read_hook = Some(Box::new(hook));
-    }
-
-    pub fn set_mem_write_hook<F>(&mut self, hook: F)
-    where
-        F: FnMut(&mut Engine, &mut Context, u64, usize) -> Result<()> + 'static,
-    {
-        self.mem_write_hook = Some(Box::new(hook));
-    }
-
-    pub fn set_mem_access_hook<F>(&mut self, hook: F)
-    where
-        F: FnMut(&mut Engine, &mut Context, u64, usize) -> Result<()> + 'static,
-    {
-        self.mem_access_hook = Some(Box::new(hook));
-    }
-
-    pub fn set_mem_fault_hook<F>(&mut self, hook: F)
-    where
-        F: FnMut(&mut Engine, &mut Context, u64, usize) -> Result<bool> + 'static,
-    {
-        self.mem_fault_hook = Some(Box::new(hook));
-    }
-
-    pub fn set_interrupt_hook<F>(&mut self, hook: F)
-    where
-        F: FnMut(&mut Engine, &mut Context, u64, usize) -> Result<()> + 'static,
-    {
-        self.interrupt_hook = Some(Box::new(hook));
-    }
-
-    pub fn set_invalid_hook<F>(&mut self, hook: F)
-    where
-        F: FnMut(&mut Engine, &mut Context, u64, usize) -> Result<()> + 'static,
-    {
-        self.invalid_hook = Some(Box::new(hook));
-    }
-
-    pub fn run_code_hook(
-        &mut self,
-        engine: &mut Engine,
-        context: &mut Context,
-        address: u64,
-        size: usize,
-    ) -> Result<()> {
-        if let Some(hook) = &mut self.code_hook {
-            hook(engine, context, address, size)?;
-        }
+pub trait HookManager {
+    fn on_code(&mut self, engine: &mut Engine, address: u64, size: usize) -> Result<()> {
+        let _ = (engine, address, size);
         Ok(())
     }
 
-    pub fn run_mem_read_hook(
-        &mut self,
-        engine: &mut Engine,
-        context: &mut Context,
-        address: u64,
-        size: usize,
-    ) -> Result<()> {
-        if let Some(hook) = &mut self.mem_read_hook {
-            hook(engine, context, address, size)?;
-        }
-        if let Some(hook) = &mut self.mem_access_hook {
-            hook(engine, context, address, size)?;
-        }
+    fn on_mem_read(&mut self, engine: &mut Engine, address: u64, size: usize) -> Result<()> {
+        let _ = (engine, address, size);
         Ok(())
     }
 
-    pub fn run_mem_write_hook(
-        &mut self,
-        engine: &mut Engine,
-        context: &mut Context,
-        address: u64,
-        size: usize,
-    ) -> Result<()> {
-        if let Some(hook) = &mut self.mem_write_hook {
-            hook(engine, context, address, size)?;
-        }
-        if let Some(hook) = &mut self.mem_access_hook {
-            hook(engine, context, address, size)?;
-        }
+    fn on_mem_write(&mut self, engine: &mut Engine, address: u64, size: usize) -> Result<()> {
+        let _ = (engine, address, size);
         Ok(())
     }
 
-    pub fn run_interrupt_hook(
-        &mut self,
-        engine: &mut Engine,
-        context: &mut Context,
-        intno: u64,
-    ) -> Result<()> {
-        if let Some(hook) = &mut self.interrupt_hook {
-            hook(engine, context, intno, 0)?;
-        }
+    fn on_mem_access(&mut self, engine: &mut Engine, address: u64, size: usize) -> Result<()> {
+        let _ = (engine, address, size);
         Ok(())
     }
 
-    pub fn run_invalid_hook(
-        &mut self,
-        engine: &mut Engine,
-        context: &mut Context,
-        address: u64,
-    ) -> Result<()> {
-        if let Some(hook) = &mut self.invalid_hook {
-            hook(engine, context, address, 0)?;
-        }
+    fn on_mem_fault(&mut self, engine: &mut Engine, address: u64, size: usize) -> Result<bool> {
+        let _ = (engine, address, size);
+        Ok(false)
+    }
+
+    fn on_interrupt(&mut self, engine: &mut Engine, intno: u64, size: usize) -> Result<()> {
+        let _ = (engine, intno, size);
         Ok(())
     }
 
-    pub fn run_mem_fault_hook(
-        &mut self,
-        engine: &mut Engine,
-        context: &mut Context,
-        address: u64,
-        size: usize,
-    ) -> Result<bool> {
-        if let Some(hook) = &mut self.mem_fault_hook {
-            hook(engine, context, address, size)
-        } else {
-            Ok(false)
-        }
-    }
-
-    pub fn clear(&mut self) {
-        self.code_hook = None;
-        self.mem_read_hook = None;
-        self.mem_write_hook = None;
-        self.mem_access_hook = None;
-        self.mem_fault_hook = None;
-        self.interrupt_hook = None;
-        self.invalid_hook = None;
+    fn on_invalid(&mut self, engine: &mut Engine, address: u64, size: usize) -> Result<()> {
+        let _ = (engine, address, size);
+        Ok(())
     }
 }

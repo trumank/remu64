@@ -63,15 +63,14 @@ impl Engine {
         self.memory.read(address, buf)
     }
 
-    fn mem_read_with_hooks<Context>(
+    fn mem_read_with_hooks<H: HookManager>(
         &mut self,
         address: u64,
         buf: &mut [u8],
-        mut hooks: Option<&mut HookManager<Context>>,
-        mut context: Option<&mut Context>,
+        mut hooks: Option<&mut H>,
     ) -> Result<()> {
-        if let (Some(hooks), Some(context)) = (hooks.as_deref_mut(), context.as_deref_mut()) {
-            hooks.run_mem_read_hook(self, context, address, buf.len())?;
+        if let Some(hooks) = hooks.as_deref_mut() {
+            hooks.on_mem_read(self, address, buf.len())?;
         }
 
         // Try to read memory, handle faults with hooks
@@ -79,8 +78,8 @@ impl Engine {
             Ok(()) => Ok(()),
             Err(EmulatorError::UnmappedMemory(_)) => {
                 // Try to handle the fault with memory fault hooks
-                if let (Some(hooks), Some(context)) = (hooks, context) {
-                    if hooks.run_mem_fault_hook(self, context, address, buf.len())? {
+                if let Some(hooks) = hooks {
+                    if hooks.on_mem_fault(self, address, buf.len())? {
                         // Hook handled the fault, try reading again
                         self.memory.read(address, buf)
                     } else {
@@ -108,14 +107,13 @@ impl Engine {
         self.cpu.rflags
     }
 
-    pub fn emu_start<Context>(
+    pub fn emu_start<H: HookManager>(
         &mut self,
         begin: u64,
         until: u64,
         timeout: u64,
         count: usize,
-        mut hooks: Option<&mut HookManager<Context>>,
-        mut context: Option<&mut Context>,
+        mut hooks: Option<&mut H>,
     ) -> Result<()> {
         self.cpu.rip = begin;
         self.stop_requested.store(false, Ordering::SeqCst);
@@ -147,7 +145,7 @@ impl Engine {
                 }
             }
 
-            self.step(hooks.as_deref_mut(), context.as_deref_mut())?;
+            self.step(hooks.as_deref_mut())?;
         }
 
         Ok(())
@@ -162,11 +160,7 @@ impl Engine {
         self.trace_enabled = enabled;
     }
 
-    fn step<Context>(
-        &mut self,
-        mut hooks: Option<&mut HookManager<Context>>,
-        mut context: Option<&mut Context>,
-    ) -> Result<()> {
+    fn step<H: HookManager>(&mut self, mut hooks: Option<&mut H>) -> Result<()> {
         let rip = self.cpu.rip;
 
         // Check if we can execute at this address, but allow memory fault hooks to handle unmapped memory
@@ -174,11 +168,10 @@ impl Engine {
             Ok(()) => {} // Memory is mapped and executable, continue
             Err(EmulatorError::UnmappedMemory(_)) => {
                 // Memory is unmapped, try to handle with memory fault hooks
-                if let (Some(hooks), Some(context)) = (hooks.as_deref_mut(), context.as_deref_mut())
-                {
+                if let Some(hooks) = hooks.as_deref_mut() {
                     // Try to let the memory fault hook handle this
-                    let dummy_buf = [0u8; 1]; // Minimal buffer for the hook
-                    if !hooks.run_mem_fault_hook(self, context, rip, 1)? {
+                    // TODO refactor the decoder to do memory reads instead of operate on a slice of data
+                    if !hooks.on_mem_fault(self, rip, 1)? {
                         // Hook couldn't handle it, return the original error
                         return Err(EmulatorError::UnmappedMemory(rip));
                     }
@@ -193,12 +186,7 @@ impl Engine {
         }
 
         let mut inst_bytes = vec![0u8; 15];
-        self.mem_read_with_hooks(
-            rip,
-            &mut inst_bytes,
-            hooks.as_deref_mut(),
-            context.as_deref_mut(),
-        )?;
+        self.mem_read_with_hooks(rip, &mut inst_bytes, hooks.as_deref_mut())?;
 
         let inst = self.decoder.decode(&inst_bytes, rip)?;
 
@@ -206,24 +194,23 @@ impl Engine {
             log::debug!("Executing at {:#x}: {:?}", rip, inst.opcode);
         }
 
-        if let (Some(hooks), Some(context)) = (hooks.as_deref_mut(), context.as_deref_mut()) {
-            hooks.run_code_hook(self, context, rip, inst.size)?;
+        if let Some(hooks) = hooks.as_deref_mut() {
+            hooks.on_code(self, rip, inst.size)?;
         }
 
         self.cpu.rip = rip + inst.size as u64;
 
-        self.execute_instruction(&inst, hooks, context)?;
+        self.execute_instruction(&inst, hooks)?;
 
         self.instruction_count += 1;
 
         Ok(())
     }
 
-    fn execute_instruction<Context>(
+    fn execute_instruction<H: HookManager>(
         &mut self,
         inst: &Instruction,
-        hooks: Option<&mut HookManager<Context>>,
-        context: Option<&mut Context>,
+        hooks: Option<&mut H>,
     ) -> Result<()> {
         match inst.opcode {
             Opcode::MOV => self.execute_mov(inst),
@@ -312,7 +299,7 @@ impl Engine {
                 self.stop_requested.store(true, Ordering::SeqCst);
                 Ok(())
             }
-            Opcode::SYSCALL => self.execute_syscall(inst, hooks, context),
+            Opcode::SYSCALL => self.execute_syscall(inst, hooks),
             Opcode::MOVAPS => self.execute_movaps(inst),
             Opcode::MOVUPS => self.execute_movups(inst),
             Opcode::ADDPS => self.execute_addps(inst),
@@ -333,8 +320,8 @@ impl Engine {
             Opcode::CMOVAE => self.execute_cmovae(inst),
             Opcode::CMOVG => self.execute_cmovg(inst),
             _ => {
-                if let (Some(hooks), Some(context)) = (hooks, context) {
-                    hooks.run_invalid_hook(self, context, inst.address)?;
+                if let Some(hooks) = hooks {
+                    hooks.on_invalid(self, inst.address, 0)?;
                 }
                 Err(EmulatorError::UnsupportedInstruction(format!(
                     "{:?}",
@@ -1127,14 +1114,13 @@ impl Engine {
         Ok(())
     }
 
-    fn execute_syscall<Context>(
+    fn execute_syscall<H: HookManager>(
         &mut self,
         _inst: &Instruction,
-        hooks: Option<&mut HookManager<Context>>,
-        context: Option<&mut Context>,
+        hooks: Option<&mut H>,
     ) -> Result<()> {
-        if let (Some(hooks), Some(context)) = (hooks, context) {
-            hooks.run_interrupt_hook(self, context, 0x80)?;
+        if let Some(hooks) = hooks {
+            hooks.on_interrupt(self, 0x80, 0)?;
         }
         Ok(())
     }
