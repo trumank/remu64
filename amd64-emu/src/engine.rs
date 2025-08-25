@@ -262,6 +262,7 @@ impl Engine {
             Opcode::COMISS => self.execute_comiss(inst),
             Opcode::UCOMISS => self.execute_ucomiss(inst),
             Opcode::CDQ => self.execute_cdq(inst),
+            Opcode::MOVSXD => self.execute_movsxd(inst),
             _ => {
                 self.hooks.run_invalid_hooks(&mut self.cpu, inst.address)?;
                 Err(EmulatorError::UnsupportedInstruction(format!("{:?}", inst.opcode)))
@@ -1996,6 +1997,26 @@ impl Engine {
         self.cpu.write_reg(Register::EDX, edx);
         
         // CDQ doesn't affect any flags
+        Ok(())
+    }
+    
+    fn execute_movsxd(&mut self, inst: &Instruction) -> Result<()> {
+        // MOVSXD: Move with Sign-Extend Doubleword
+        // Takes a 32-bit source operand, sign-extends it to 64 bits, and stores in 64-bit destination
+        if inst.operands.len() != 2 {
+            return Err(EmulatorError::InvalidInstruction(inst.address));
+        }
+        
+        // Read the source as a 32-bit value
+        let src_value = self.read_operand(&inst.operands[1])? as u32 as i32;
+        
+        // Sign-extend to 64 bits
+        let dest_value = src_value as i64 as u64;
+        
+        // Write to the destination register (always 64-bit)
+        self.write_operand(&inst.operands[0], dest_value)?;
+        
+        // MOVSXD doesn't affect any flags
         Ok(())
     }
 }

@@ -121,6 +121,7 @@ pub enum Opcode {
     UCOMISS,
     COMISD,
     UCOMISD,
+    MOVSXD,
 }
 
 #[derive(Debug, Clone)]
@@ -464,6 +465,12 @@ impl Decoder {
             0x58..=0x5F => {
                 let reg = self.decode_register_from_opcode(opcode_byte - 0x58, prefix, OperandSize::QWord);
                 (Opcode::POP, vec![Operand::Register(reg)])
+            }
+            0x63 => {
+                // MOVSXD - Move with Sign-Extend Doubleword
+                let (rm_op, reg_op, consumed) = self.decode_modrm_operands(&bytes[offset..], prefix)?;
+                offset += consumed;
+                (Opcode::MOVSXD, vec![reg_op, rm_op])
             }
             0x74 => {
                 let rel = bytes.get(offset).copied().ok_or(EmulatorError::InvalidInstruction(0))? as i8;
