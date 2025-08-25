@@ -288,6 +288,7 @@ impl Engine {
             Opcode::CDQ => self.execute_cdq(inst),
             Opcode::MOVSXD => self.execute_movsxd(inst),
             Opcode::MOVZX => self.execute_movzx(inst),
+            Opcode::SETBE => self.execute_setbe(inst),
             _ => {
                 self.hooks.run_invalid_hooks(&mut self.cpu, inst.address)?;
                 Err(EmulatorError::UnsupportedInstruction(format!("{:?}", inst.opcode)))
@@ -2080,5 +2081,47 @@ impl Engine {
         
         // MOVZX doesn't affect any flags
         Ok(())
+    }
+    
+    fn execute_setbe(&mut self, inst: &Instruction) -> Result<()> {
+        // SETBE: Set byte if below or equal (CF=1 or ZF=1)
+        if inst.operands.len() != 1 {
+            return Err(EmulatorError::InvalidInstruction(inst.address));
+        }
+        
+        // Check condition: CF=1 or ZF=1 (below or equal for unsigned comparison)
+        let condition = self.cpu.rflags.contains(Flags::CF) || self.cpu.rflags.contains(Flags::ZF);
+        
+        // Set the byte operand to 1 if condition is true, 0 if false
+        let value = if condition { 1u64 } else { 0u64 };
+        
+        // Write only to the low byte of the operand
+        match &inst.operands[0] {
+            Operand::Register(reg) => {
+                // For register operands, we need to preserve the upper bits and only set the low byte
+                let current_value = self.cpu.read_reg(*reg);
+                let new_value = (current_value & !0xFF) | (value & 0xFF);
+                self.cpu.write_reg(*reg, new_value);
+                Ok(())
+            }
+            Operand::Memory { .. } => {
+                // For memory operands, write just the byte
+                // But we need to use a different approach since write_operand expects full size
+                // Let's force the operand to be treated as a byte
+                if let Operand::Memory { base, index, scale, displacement, .. } = &inst.operands[0] {
+                    let mut addr = *displacement as u64;
+                    if let Some(base_reg) = base {
+                        addr = addr.wrapping_add(self.cpu.read_reg(*base_reg));
+                    }
+                    if let Some(index_reg) = index {
+                        addr = addr.wrapping_add(self.cpu.read_reg(*index_reg) * (*scale as u64));
+                    }
+                    self.memory.write_u8(addr, value as u8)
+                } else {
+                    Err(EmulatorError::InvalidOperand)
+                }
+            }
+            _ => Err(EmulatorError::InvalidOperand),
+        }
     }
 }

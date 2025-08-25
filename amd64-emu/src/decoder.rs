@@ -123,6 +123,7 @@ pub enum Opcode {
     UCOMISD,
     MOVSXD,
     MOVZX,
+    SETBE,
 }
 
 #[derive(Debug, Clone)]
@@ -921,6 +922,12 @@ impl Decoder {
                         let (rm_op, reg_op, consumed) = self.decode_modrm_operands(&bytes[offset..], prefix)?;
                         offset += consumed;
                         (Opcode::MOVZX, vec![reg_op, rm_op])
+                    }
+                    0x96 => {
+                        // SETBE r/m8 - Set byte if below or equal (CF=1 or ZF=1)
+                        let (rm_op, _, consumed) = self.decode_modrm_operands(&bytes[offset..], prefix)?;
+                        offset += consumed;
+                        (Opcode::SETBE, vec![rm_op])
                     }
                     0xC1 => {
                         // XADD r/m, r
