@@ -2,9 +2,10 @@ use crate::fastcall::{ArgumentType, CallingConvention};
 use crate::memory_manager::MemoryManager;
 use crate::minidump_loader::MinidumpLoader;
 use crate::tracer::InstructionTracer;
-use amd64_emu::{EmulatorError, Engine, EngineMode, Permission, Register};
+use amd64_emu::{EmulatorError, Engine, EngineMode, HookManager, HookType, Permission, Register};
 use anyhow::{Context, Result};
 use iced_x86::Formatter;
+use std::sync::{Arc, Mutex};
 
 pub struct FunctionExecutor {
     engine: Engine,
@@ -51,76 +52,205 @@ impl FunctionExecutor {
 
         // Setup calling convention
         CallingConvention::setup_fastcall(&mut self.engine, args, self.stack_base, return_address)?;
-
         CallingConvention::setup_shadow_space(&mut self.engine)?;
 
         // Set RIP to function start
         self.engine.reg_write(Register::RIP, function_address)?;
 
-        // Execute instruction by instruction
-        let mut instruction_count = 0;
-        let max_instructions = 1000000;
+        // Create hooks for memory fault handling and instruction tracing
+        let mut hooks = HookManager::new();
+
+        // Shared state for instruction counting and tracing
+        let instruction_count = Arc::new(Mutex::new(0u64));
+        let max_instructions = 1000000u64;
+
+        // Setup memory fault hook - we'll handle the actual memory mapping
+        // outside the hook to avoid unsafe pointer usage
+        let fault_addresses = Arc::new(Mutex::new(Vec::<u64>::new()));
+        let fault_addresses_clone = fault_addresses.clone();
+
+        hooks.add_hook(
+            HookType::MemFault,
+            0,
+            u64::MAX,
+            move |_cpu, address, _size| {
+                let page_base = address & !0xfff;
+
+                // NEVER map the null page (address 0)
+                if page_base == 0 {
+                    return Ok(()); // Don't handle null page faults
+                }
+
+                // Record the fault address for handling outside the hook
+                fault_addresses_clone.lock().unwrap().push(page_base);
+                Ok(()) // Indicate we will handle this fault
+            },
+        );
+
+        // Setup code hook for instruction counting and return detection
+        let count_clone = instruction_count.clone();
+        let tracer_enabled = self.tracer.is_enabled();
+        let instruction_addresses = Arc::new(Mutex::new(Vec::<u64>::new()));
+        let instruction_addresses_clone = instruction_addresses.clone();
+
+        hooks.add_hook(HookType::Code, 0, u64::MAX, move |_cpu, address, _size| {
+            // Record instruction for tracing outside the hook
+            if tracer_enabled {
+                instruction_addresses_clone.lock().unwrap().push(address);
+            }
+
+            // Check instruction count limit
+            {
+                let mut count = count_clone.lock().unwrap();
+                *count += 1;
+                if *count > max_instructions {
+                    return Err(EmulatorError::UnsupportedInstruction(
+                        "Execution exceeded maximum instruction count".to_string(),
+                    ));
+                }
+            }
+
+            // Check for return to exit execution
+            if address == return_address {
+                return Err(EmulatorError::UnsupportedInstruction(
+                    "FUNCTION_RETURN".to_string(),
+                ));
+            }
+
+            Ok(())
+        });
+
+        // Execute with retry logic for memory faults
+        let mut retry_count = 0;
+        const MAX_RETRIES: u32 = 100;
 
         loop {
-            if instruction_count >= max_instructions {
-                anyhow::bail!("Execution exceeded maximum instruction count");
-            }
+            // Clear fault and instruction tracking for this execution attempt
+            fault_addresses.lock().unwrap().clear();
+            instruction_addresses.lock().unwrap().clear();
 
-            let rip = self.engine.reg_read(Register::RIP)?;
-
-            // Check for return
-            if rip == return_address {
-                if self.tracer.is_enabled() {
-                    let rax = self.engine.reg_read(Register::RAX)?;
-                    self.tracer.trace_return(return_address, rax)?;
+            // Execute the function
+            match self
+                .engine
+                .emu_start(function_address, return_address, 0, 0, Some(&mut hooks))
+            {
+                Ok(()) => {
+                    // Normal completion - function reached end address
+                    break;
                 }
-                break;
-            }
-
-            // Read instruction bytes
-            let instruction_bytes = self.read_instruction_at(rip)?;
-
-            // Trace before execution
-            if self.tracer.is_enabled() {
-                self.tracer.trace_instruction(
-                    rip,
-                    &instruction_bytes,
-                    &self.engine,
-                    Some(self.memory_manager.get_loader()),
-                )?;
-            }
-
-            // Execute single instruction
-            match self.engine.emu_start(rip, rip + 15, 0, 1, None) {
-                Ok(()) => {}
-                Err(EmulatorError::UnmappedMemory(addr)) => {
-                    // Try to handle memory fault by loading from minidump
-                    if self.handle_memory_fault(addr, 8).unwrap_or(false) {
-                        // Retry the instruction after loading memory
-                        if let Err(e) = self.engine.emu_start(rip, rip + 15, 0, 1, None) {
-                            self.report_instruction_error(rip, &instruction_bytes, e)?;
-                        }
-                    } else {
-                        self.report_instruction_error(
-                            rip,
-                            &instruction_bytes,
-                            EmulatorError::UnmappedMemory(addr),
-                        )?;
+                Err(EmulatorError::UnsupportedInstruction(msg)) if msg == "FUNCTION_RETURN" => {
+                    // Function returned normally - handle tracing and cleanup
+                    if self.tracer.is_enabled() {
+                        let rax = self.engine.reg_read(Register::RAX)?;
+                        self.tracer.trace_return(return_address, rax)?;
                     }
+                    break;
+                }
+                Err(EmulatorError::UnmappedMemory(addr)) => {
+                    // Handle memory fault by mapping the required pages
+                    if retry_count >= MAX_RETRIES {
+                        return Err(anyhow::anyhow!(
+                            "Too many memory fault retries at 0x{:x}",
+                            addr
+                        ));
+                    }
+
+                    // Collect all fault addresses that need mapping
+                    let mut addresses_to_map = fault_addresses.lock().unwrap().clone();
+                    addresses_to_map.push(addr & !0xfff);
+                    addresses_to_map.sort_unstable();
+                    addresses_to_map.dedup();
+
+                    let mut mapped_any = false;
+                    for page_base in addresses_to_map {
+                        if page_base == 0 {
+                            continue; // Never map null page
+                        }
+
+                        if let Ok(page_data) = self.memory_manager.read_memory(page_base, 4096) {
+                            if self
+                                .engine
+                                .mem_map(page_base, 4096, Permission::ALL)
+                                .is_ok()
+                            {
+                                self.engine.mem_write(page_base, &page_data)?;
+                                mapped_any = true;
+                            }
+                        }
+                    }
+
+                    if !mapped_any {
+                        return Err(anyhow::anyhow!(
+                            "Failed to map memory at address 0x{:x}",
+                            addr
+                        ));
+                    }
+
+                    retry_count += 1;
+                    // Continue loop to retry execution
                 }
                 Err(e) => {
-                    self.report_instruction_error(rip, &instruction_bytes, e)?;
+                    // Other errors are fatal
+                    return Err(anyhow::anyhow!("Execution failed: {:?}", e));
                 }
             }
 
-            instruction_count += 1;
+            // Handle instruction tracing for the addresses we collected
+            if self.tracer.is_enabled() {
+                let traced_addresses = instruction_addresses.lock().unwrap().clone();
+                for address in traced_addresses {
+                    if address == return_address {
+                        continue; // Skip tracing the return address itself
+                    }
+
+                    // Try to read instruction bytes for tracing
+                    if let Ok(inst_bytes) = self.read_instruction_bytes_for_tracing(address) {
+                        if let Err(e) = self.tracer.trace_instruction(
+                            address,
+                            &inst_bytes,
+                            &self.engine,
+                            Some(self.memory_manager.get_loader()),
+                        ) {
+                            eprintln!(
+                                "Warning: Failed to trace instruction at 0x{:x}: {}",
+                                address, e
+                            );
+                        }
+                    }
+                }
+            }
         }
 
         if self.tracer.is_enabled() {
-            println!("\n[TRACE] Executed {} instructions", instruction_count);
+            let final_count = *instruction_count.lock().unwrap();
+            println!("\n[TRACE] Executed {} instructions", final_count);
         }
 
         Ok(())
+    }
+
+    fn read_instruction_bytes_for_tracing(&mut self, address: u64) -> Result<Vec<u8>> {
+        // Ensure instruction memory is mapped for tracing
+        let page_base = address & !0xfff;
+        if let Ok(page_data) = self.memory_manager.read_memory(page_base, 4096) {
+            if self
+                .engine
+                .mem_map(page_base, 4096, Permission::ALL)
+                .is_ok()
+            {
+                let _ = self.engine.mem_write(page_base, &page_data);
+            }
+        }
+
+        // Read instruction bytes (up to 15 bytes max for x86-64)
+        let mut inst_bytes = vec![0u8; 15];
+        match self.engine.mem_read(address, &mut inst_bytes) {
+            Ok(()) => Ok(inst_bytes),
+            Err(_) => {
+                // If we can't read, return a minimal instruction (single byte)
+                Ok(vec![0x90]) // NOP instruction as placeholder
+            }
+        }
     }
 
     fn read_instruction_at(&mut self, address: u64) -> Result<Vec<u8>> {
@@ -278,24 +408,5 @@ impl FunctionExecutor {
             instruction_len,
             e
         )
-    }
-}
-
-#[derive(Debug)]
-pub struct ExecutionContext {
-    pub function_address: u64,
-    pub return_value: u64,
-    pub instruction_count: usize,
-    pub execution_time_ms: u64,
-}
-
-impl ExecutionContext {
-    pub fn new(function_address: u64) -> Self {
-        ExecutionContext {
-            function_address,
-            return_value: 0,
-            instruction_count: 0,
-            execution_time_ms: 0,
-        }
     }
 }
