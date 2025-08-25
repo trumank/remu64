@@ -1,24 +1,15 @@
-[package]
-name = "amd64-emu"
+[workspace]
+resolver = "2"
+members = ["amd64-emu"]
+
+[workspace.package]
 version = "0.1.0"
 edition = "2021"
 authors = ["AMD64 Emulator Contributors"]
 description = "Pure Rust AMD64 emulator with Unicorn Engine-like API"
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/amd64-emu/amd64-emu"
 keywords = ["emulator", "x86-64", "amd64", "cpu", "unicorn"]
 categories = ["emulators", "simulation"]
-
-[dependencies]
-bitflags = "2.4"
-thiserror = "1.0"
-log = "0.4"
-env_logger = "0.11"
-
-[dev-dependencies]
-criterion = "0.5"
-proptest = "1.4"
-
 
 [profile.release]
 opt-level = 3
