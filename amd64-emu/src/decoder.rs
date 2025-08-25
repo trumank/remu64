@@ -748,7 +748,14 @@ impl Decoder {
             1 => Some(Register::RCX),
             2 => Some(Register::RDX),
             3 => Some(Register::RBX),
-            5 if mod_bits == 0 => None,  // RIP-relative or absolute
+            5 if mod_bits == 0 => {
+                // In 64-bit mode, [disp32] is RIP-relative
+                if matches!(self.mode, DecoderMode::Mode64) {
+                    Some(Register::RIP)
+                } else {
+                    None  // Absolute addressing in 32/16-bit modes
+                }
+            }
             5 => Some(Register::RBP),
             6 => Some(Register::RSI),
             7 => Some(Register::RDI),
