@@ -20,7 +20,6 @@ pub struct Engine {
     _mode: EngineMode,
     stop_requested: Arc<AtomicBool>,
     instruction_count: u64,
-    trace_enabled: bool,
 }
 
 impl Engine {
@@ -38,7 +37,6 @@ impl Engine {
             _mode: mode,
             stop_requested: Arc::new(AtomicBool::new(false)),
             instruction_count: 0,
-            trace_enabled: false,
         }
     }
 
@@ -156,10 +154,6 @@ impl Engine {
         Ok(())
     }
 
-    pub fn set_trace(&mut self, enabled: bool) {
-        self.trace_enabled = enabled;
-    }
-
     fn step<H: HookManager>(&mut self, mut hooks: Option<&mut H>) -> Result<()> {
         let rip = self.cpu.rip;
 
@@ -190,28 +184,31 @@ impl Engine {
 
         let inst = self.decoder.decode(&inst_bytes, rip)?;
 
-        if self.trace_enabled {
-            log::debug!("Executing at {:#x}: {:?}", rip, inst.opcode);
-        }
-
         if let Some(hooks) = hooks.as_deref_mut() {
             hooks.on_code(self, rip, inst.size)?;
         }
 
         self.cpu.rip = rip + inst.size as u64;
 
-        self.execute_instruction(&inst, hooks)?;
+        ExecutionContext {
+            engine: self,
+            hooks: hooks,
+        }
+        .execute_instruction(&inst)?;
 
         self.instruction_count += 1;
 
         Ok(())
     }
+}
 
-    fn execute_instruction<H: HookManager>(
-        &mut self,
-        inst: &Instruction,
-        hooks: Option<&mut H>,
-    ) -> Result<()> {
+struct ExecutionContext<'a, H: HookManager> {
+    engine: &'a mut Engine,
+    hooks: Option<&'a mut H>,
+}
+
+impl<H: HookManager> ExecutionContext<'_, H> {
+    fn execute_instruction(&mut self, inst: &Instruction) -> Result<()> {
         match inst.opcode {
             Opcode::MOV => self.execute_mov(inst),
             Opcode::ADD => self.execute_add(inst),
@@ -228,42 +225,44 @@ impl Engine {
             Opcode::CALL => self.execute_call(inst),
             Opcode::RET => self.execute_ret(inst),
             Opcode::JMP => self.execute_jmp(inst),
-            Opcode::JZ => self.execute_jcc(inst, self.cpu.rflags.contains(Flags::ZF)),
-            Opcode::JNZ => self.execute_jcc(inst, !self.cpu.rflags.contains(Flags::ZF)),
-            Opcode::JS => self.execute_jcc(inst, self.cpu.rflags.contains(Flags::SF)),
-            Opcode::JNS => self.execute_jcc(inst, !self.cpu.rflags.contains(Flags::SF)),
-            Opcode::JO => self.execute_jcc(inst, self.cpu.rflags.contains(Flags::OF)),
-            Opcode::JNO => self.execute_jcc(inst, !self.cpu.rflags.contains(Flags::OF)),
-            Opcode::JB => self.execute_jcc(inst, self.cpu.rflags.contains(Flags::CF)),
-            Opcode::JAE => self.execute_jcc(inst, !self.cpu.rflags.contains(Flags::CF)),
+            Opcode::JZ => self.execute_jcc(inst, self.engine.cpu.rflags.contains(Flags::ZF)),
+            Opcode::JNZ => self.execute_jcc(inst, !self.engine.cpu.rflags.contains(Flags::ZF)),
+            Opcode::JS => self.execute_jcc(inst, self.engine.cpu.rflags.contains(Flags::SF)),
+            Opcode::JNS => self.execute_jcc(inst, !self.engine.cpu.rflags.contains(Flags::SF)),
+            Opcode::JO => self.execute_jcc(inst, self.engine.cpu.rflags.contains(Flags::OF)),
+            Opcode::JNO => self.execute_jcc(inst, !self.engine.cpu.rflags.contains(Flags::OF)),
+            Opcode::JB => self.execute_jcc(inst, self.engine.cpu.rflags.contains(Flags::CF)),
+            Opcode::JAE => self.execute_jcc(inst, !self.engine.cpu.rflags.contains(Flags::CF)),
             Opcode::JBE => self.execute_jcc(
                 inst,
-                self.cpu.rflags.contains(Flags::CF) || self.cpu.rflags.contains(Flags::ZF),
+                self.engine.cpu.rflags.contains(Flags::CF)
+                    || self.engine.cpu.rflags.contains(Flags::ZF),
             ),
             Opcode::JA => self.execute_jcc(
                 inst,
-                !self.cpu.rflags.contains(Flags::CF) && !self.cpu.rflags.contains(Flags::ZF),
+                !self.engine.cpu.rflags.contains(Flags::CF)
+                    && !self.engine.cpu.rflags.contains(Flags::ZF),
             ),
             Opcode::JL => self.execute_jcc(inst, {
-                let sf = self.cpu.rflags.contains(Flags::SF);
-                let of = self.cpu.rflags.contains(Flags::OF);
+                let sf = self.engine.cpu.rflags.contains(Flags::SF);
+                let of = self.engine.cpu.rflags.contains(Flags::OF);
                 sf != of
             }),
             Opcode::JGE => self.execute_jcc(inst, {
-                let sf = self.cpu.rflags.contains(Flags::SF);
-                let of = self.cpu.rflags.contains(Flags::OF);
+                let sf = self.engine.cpu.rflags.contains(Flags::SF);
+                let of = self.engine.cpu.rflags.contains(Flags::OF);
                 sf == of
             }),
             Opcode::JLE => self.execute_jcc(inst, {
-                let sf = self.cpu.rflags.contains(Flags::SF);
-                let of = self.cpu.rflags.contains(Flags::OF);
-                let zf = self.cpu.rflags.contains(Flags::ZF);
+                let sf = self.engine.cpu.rflags.contains(Flags::SF);
+                let of = self.engine.cpu.rflags.contains(Flags::OF);
+                let zf = self.engine.cpu.rflags.contains(Flags::ZF);
                 zf || (sf != of)
             }),
             Opcode::JG => self.execute_jcc(inst, {
-                let sf = self.cpu.rflags.contains(Flags::SF);
-                let of = self.cpu.rflags.contains(Flags::OF);
-                let zf = self.cpu.rflags.contains(Flags::ZF);
+                let sf = self.engine.cpu.rflags.contains(Flags::SF);
+                let of = self.engine.cpu.rflags.contains(Flags::OF);
+                let zf = self.engine.cpu.rflags.contains(Flags::ZF);
                 !zf && (sf == of)
             }),
             Opcode::INC => self.execute_inc(inst),
@@ -296,10 +295,10 @@ impl Engine {
             }
             Opcode::NOP => Ok(()),
             Opcode::HLT => {
-                self.stop_requested.store(true, Ordering::SeqCst);
+                self.engine.stop_requested.store(true, Ordering::SeqCst);
                 Ok(())
             }
-            Opcode::SYSCALL => self.execute_syscall(inst, hooks),
+            Opcode::SYSCALL => self.execute_syscall(inst),
             Opcode::MOVAPS => self.execute_movaps(inst),
             Opcode::MOVUPS => self.execute_movups(inst),
             Opcode::ADDPS => self.execute_addps(inst),
@@ -320,8 +319,8 @@ impl Engine {
             Opcode::CMOVAE => self.execute_cmovae(inst),
             Opcode::CMOVG => self.execute_cmovg(inst),
             _ => {
-                if let Some(hooks) = hooks {
-                    hooks.on_invalid(self, inst.address, 0)?;
+                if let Some(hooks) = &mut self.hooks {
+                    hooks.on_invalid(self.engine, inst.address, 0)?;
                 }
                 Err(EmulatorError::UnsupportedInstruction(format!(
                     "{:?}",
@@ -432,7 +431,7 @@ impl Engine {
 
         let dst = self.read_operand(&inst.operands[0])?;
         let src = self.read_operand(&inst.operands[1])?;
-        let carry = if self.cpu.rflags.contains(Flags::CF) {
+        let carry = if self.engine.cpu.rflags.contains(Flags::CF) {
             1
         } else {
             0
@@ -482,9 +481,10 @@ impl Engine {
         let result_masked = result & max_val;
         let carry_out = (intermediate > max_val) || ((intermediate & max_val) + carry > max_val);
 
-        self.cpu.rflags.set(Flags::CF, carry_out);
-        self.cpu.rflags.set(Flags::ZF, result_masked == 0);
-        self.cpu
+        self.engine.cpu.rflags.set(Flags::CF, carry_out);
+        self.engine.cpu.rflags.set(Flags::ZF, result_masked == 0);
+        self.engine
+            .cpu
             .rflags
             .set(Flags::SF, (result_masked & sign_bit) != 0);
 
@@ -492,13 +492,14 @@ impl Engine {
         let dst_sign = (dst_masked & sign_bit) != 0;
         let src_sign = (src_masked & sign_bit) != 0;
         let res_sign = (result_masked & sign_bit) != 0;
-        self.cpu
+        self.engine
+            .cpu
             .rflags
             .set(Flags::OF, dst_sign == src_sign && dst_sign != res_sign);
 
         // Parity flag
         let parity = (result_masked as u8).count_ones().is_multiple_of(2);
-        self.cpu.rflags.set(Flags::PF, parity);
+        self.engine.cpu.rflags.set(Flags::PF, parity);
 
         self.write_operand(&inst.operands[0], result)?;
         Ok(())
@@ -511,7 +512,7 @@ impl Engine {
 
         let dst = self.read_operand(&inst.operands[0])?;
         let src = self.read_operand(&inst.operands[1])?;
-        let borrow = if self.cpu.rflags.contains(Flags::CF) {
+        let borrow = if self.engine.cpu.rflags.contains(Flags::CF) {
             1
         } else {
             0
@@ -524,20 +525,20 @@ impl Engine {
         let intermediate = dst.wrapping_sub(src);
         let borrow_out = (dst < src) || (intermediate < borrow);
 
-        self.cpu.rflags.set(Flags::CF, borrow_out);
-        self.cpu.rflags.set(Flags::ZF, result == 0);
-        self.cpu.rflags.set(Flags::SF, (result as i64) < 0);
+        self.engine.cpu.rflags.set(Flags::CF, borrow_out);
+        self.engine.cpu.rflags.set(Flags::ZF, result == 0);
+        self.engine.cpu.rflags.set(Flags::SF, (result as i64) < 0);
 
         // Overflow flag: sign change when subtracting values of different sign
         let dst_sign = (dst as i64) < 0;
         let src_sign = (src as i64) < 0;
         let result_sign = (result as i64) < 0;
         let overflow = (dst_sign != src_sign) && (dst_sign != result_sign);
-        self.cpu.rflags.set(Flags::OF, overflow);
+        self.engine.cpu.rflags.set(Flags::OF, overflow);
 
         // Parity flag
         let parity = (result as u8).count_ones().is_multiple_of(2);
-        self.cpu.rflags.set(Flags::PF, parity);
+        self.engine.cpu.rflags.set(Flags::PF, parity);
 
         self.write_operand(&inst.operands[0], result)?;
         Ok(())
@@ -620,9 +621,9 @@ impl Engine {
         let result = value.wrapping_add(1);
 
         // INC doesn't affect CF flag, only other arithmetic flags
-        let cf = self.cpu.rflags.contains(Flags::CF);
+        let cf = self.engine.cpu.rflags.contains(Flags::CF);
         self.update_flags_arithmetic(value, 1, result, false);
-        self.cpu.rflags.set(Flags::CF, cf);
+        self.engine.cpu.rflags.set(Flags::CF, cf);
 
         self.write_operand(&inst.operands[0], result)?;
         Ok(())
@@ -637,9 +638,9 @@ impl Engine {
         let result = value.wrapping_sub(1);
 
         // DEC doesn't affect CF flag, only other arithmetic flags
-        let cf = self.cpu.rflags.contains(Flags::CF);
+        let cf = self.engine.cpu.rflags.contains(Flags::CF);
         self.update_flags_arithmetic(value, 1, result, true);
-        self.cpu.rflags.set(Flags::CF, cf);
+        self.engine.cpu.rflags.set(Flags::CF, cf);
 
         self.write_operand(&inst.operands[0], result)?;
         Ok(())
@@ -654,7 +655,7 @@ impl Engine {
         let result = 0u64.wrapping_sub(value);
 
         // NEG sets CF to 0 if operand is 0, otherwise 1
-        self.cpu.rflags.set(Flags::CF, value != 0);
+        self.engine.cpu.rflags.set(Flags::CF, value != 0);
 
         // Update other arithmetic flags
         self.update_flags_arithmetic(0, value, result, true);
@@ -697,12 +698,12 @@ impl Engine {
         } else {
             false
         };
-        self.cpu.rflags.set(Flags::CF, last_bit_out);
+        self.engine.cpu.rflags.set(Flags::CF, last_bit_out);
 
         // OF is set if the sign bit changed (only for count == 1)
         if count == 1 {
             let sign_changed = ((value >> 63) & 1) != ((result >> 63) & 1);
-            self.cpu.rflags.set(Flags::OF, sign_changed);
+            self.engine.cpu.rflags.set(Flags::OF, sign_changed);
         }
 
         // Update SF, ZF, PF based on result
@@ -732,11 +733,14 @@ impl Engine {
         } else {
             false
         };
-        self.cpu.rflags.set(Flags::CF, last_bit_out);
+        self.engine.cpu.rflags.set(Flags::CF, last_bit_out);
 
         // OF is set to the sign bit of the original value (only for count == 1)
         if count == 1 {
-            self.cpu.rflags.set(Flags::OF, (value >> 63) & 1 != 0);
+            self.engine
+                .cpu
+                .rflags
+                .set(Flags::OF, (value >> 63) & 1 != 0);
         }
 
         // Update SF, ZF, PF based on result
@@ -767,11 +771,11 @@ impl Engine {
             // For SAR, if shifting more than 63, CF = sign bit
             value < 0
         };
-        self.cpu.rflags.set(Flags::CF, last_bit_out);
+        self.engine.cpu.rflags.set(Flags::CF, last_bit_out);
 
         // OF is cleared for SAR with count == 1
         if count == 1 {
-            self.cpu.rflags.set(Flags::OF, false);
+            self.engine.cpu.rflags.set(Flags::OF, false);
         }
 
         // Update SF, ZF, PF based on result
@@ -804,11 +808,11 @@ impl Engine {
                 let mut addr = *displacement as u64;
 
                 if let Some(base_reg) = base {
-                    addr = addr.wrapping_add(self.cpu.read_reg(*base_reg));
+                    addr = addr.wrapping_add(self.engine.cpu.read_reg(*base_reg));
                 }
 
                 if let Some(index_reg) = index {
-                    let index_val = self.cpu.read_reg(*index_reg);
+                    let index_val = self.engine.cpu.read_reg(*index_reg);
                     addr = addr.wrapping_add(index_val.wrapping_mul(*scale as u64));
                 }
 
@@ -818,7 +822,7 @@ impl Engine {
         };
 
         // LEA doesn't affect any flags
-        self.cpu.write_reg(dest, address);
+        self.engine.cpu.write_reg(dest, address);
         Ok(())
     }
 
@@ -839,12 +843,12 @@ impl Engine {
         let result = value.rotate_left(actual_count);
 
         // CF gets the last bit rotated out (which is now the LSB)
-        self.cpu.rflags.set(Flags::CF, result & 1 != 0);
+        self.engine.cpu.rflags.set(Flags::CF, result & 1 != 0);
 
         // OF is set if sign bit changed (only for count == 1)
         if count == 1 {
             let sign_changed = ((value >> 63) & 1) != ((result >> 63) & 1);
-            self.cpu.rflags.set(Flags::OF, sign_changed);
+            self.engine.cpu.rflags.set(Flags::OF, sign_changed);
         }
 
         self.write_operand(&inst.operands[0], result)?;
@@ -868,13 +872,16 @@ impl Engine {
         let result = value.rotate_right(actual_count);
 
         // CF gets the last bit rotated out (which is now the MSB)
-        self.cpu.rflags.set(Flags::CF, (result >> 63) & 1 != 0);
+        self.engine
+            .cpu
+            .rflags
+            .set(Flags::CF, (result >> 63) & 1 != 0);
 
         // OF is set based on the two most significant bits (only for count == 1)
         if count == 1 {
             let msb = (result >> 63) & 1;
             let next_msb = (result >> 62) & 1;
-            self.cpu.rflags.set(Flags::OF, msb != next_msb);
+            self.engine.cpu.rflags.set(Flags::OF, msb != next_msb);
         }
 
         self.write_operand(&inst.operands[0], result)?;
@@ -928,19 +935,21 @@ impl Engine {
 
         // MUL performs unsigned multiplication
         // For 64-bit operand: RDX:RAX = RAX * operand
-        let multiplicand = self.cpu.read_reg(Register::RAX);
+        let multiplicand = self.engine.cpu.read_reg(Register::RAX);
         let multiplier = self.read_operand(&inst.operands[0])?;
 
         let result = (multiplicand as u128) * (multiplier as u128);
 
         // Store low 64 bits in RAX, high 64 bits in RDX
-        self.cpu.write_reg(Register::RAX, result as u64);
-        self.cpu.write_reg(Register::RDX, (result >> 64) as u64);
+        self.engine.cpu.write_reg(Register::RAX, result as u64);
+        self.engine
+            .cpu
+            .write_reg(Register::RDX, (result >> 64) as u64);
 
         // Set CF and OF if upper half is non-zero
         let overflow = (result >> 64) != 0;
-        self.cpu.rflags.set(Flags::CF, overflow);
-        self.cpu.rflags.set(Flags::OF, overflow);
+        self.engine.cpu.rflags.set(Flags::CF, overflow);
+        self.engine.cpu.rflags.set(Flags::OF, overflow);
 
         // SF, ZF, AF, and PF are undefined after MUL
 
@@ -955,8 +964,8 @@ impl Engine {
         // DIV performs unsigned division
         // For 64-bit operand: Quotient = RDX:RAX / operand -> RAX
         //                     Remainder = RDX:RAX % operand -> RDX
-        let dividend_low = self.cpu.read_reg(Register::RAX);
-        let dividend_high = self.cpu.read_reg(Register::RDX);
+        let dividend_low = self.engine.cpu.read_reg(Register::RAX);
+        let dividend_high = self.engine.cpu.read_reg(Register::RDX);
         let dividend = ((dividend_high as u128) << 64) | (dividend_low as u128);
         let divisor = self.read_operand(&inst.operands[0])? as u128;
 
@@ -973,8 +982,8 @@ impl Engine {
             return Err(EmulatorError::DivisionOverflow);
         }
 
-        self.cpu.write_reg(Register::RAX, quotient as u64);
-        self.cpu.write_reg(Register::RDX, remainder as u64);
+        self.engine.cpu.write_reg(Register::RAX, quotient as u64);
+        self.engine.cpu.write_reg(Register::RDX, remainder as u64);
 
         // All flags are undefined after DIV
 
@@ -988,20 +997,22 @@ impl Engine {
         }
 
         // Single operand form: RDX:RAX = RAX * operand (signed)
-        let multiplicand = self.cpu.read_reg(Register::RAX) as i64;
+        let multiplicand = self.engine.cpu.read_reg(Register::RAX) as i64;
         let multiplier = self.read_operand(&inst.operands[0])? as i64;
 
         let result = (multiplicand as i128) * (multiplier as i128);
 
         // Store low 64 bits in RAX, high 64 bits in RDX
-        self.cpu.write_reg(Register::RAX, result as u64);
-        self.cpu.write_reg(Register::RDX, (result >> 64) as u64);
+        self.engine.cpu.write_reg(Register::RAX, result as u64);
+        self.engine
+            .cpu
+            .write_reg(Register::RDX, (result >> 64) as u64);
 
         // Set CF and OF if result doesn't fit in 64 bits (signed)
         let sign_extended = (result as i64) as i128;
         let overflow = result != sign_extended;
-        self.cpu.rflags.set(Flags::CF, overflow);
-        self.cpu.rflags.set(Flags::OF, overflow);
+        self.engine.cpu.rflags.set(Flags::CF, overflow);
+        self.engine.cpu.rflags.set(Flags::OF, overflow);
 
         Ok(())
     }
@@ -1012,8 +1023,8 @@ impl Engine {
         }
 
         // IDIV performs signed division
-        let dividend_low = self.cpu.read_reg(Register::RAX) as i64;
-        let dividend_high = self.cpu.read_reg(Register::RDX) as i64;
+        let dividend_low = self.engine.cpu.read_reg(Register::RAX) as i64;
+        let dividend_high = self.engine.cpu.read_reg(Register::RDX) as i64;
         let dividend = ((dividend_high as i128) << 64) | (dividend_low as u64 as i128);
         let divisor = self.read_operand(&inst.operands[0])? as i64 as i128;
 
@@ -1029,8 +1040,8 @@ impl Engine {
             return Err(EmulatorError::DivisionOverflow);
         }
 
-        self.cpu.write_reg(Register::RAX, quotient as u64);
-        self.cpu.write_reg(Register::RDX, remainder as u64);
+        self.engine.cpu.write_reg(Register::RAX, quotient as u64);
+        self.engine.cpu.write_reg(Register::RDX, remainder as u64);
 
         Ok(())
     }
@@ -1041,10 +1052,10 @@ impl Engine {
         }
 
         let value = self.read_operand(&inst.operands[0])?;
-        let rsp = self.cpu.read_reg(Register::RSP);
+        let rsp = self.engine.cpu.read_reg(Register::RSP);
         let new_rsp = rsp.wrapping_sub(8);
-        self.cpu.write_reg(Register::RSP, new_rsp);
-        self.memory.write_u64(new_rsp, value)?;
+        self.engine.cpu.write_reg(Register::RSP, new_rsp);
+        self.engine.memory.write_u64(new_rsp, value)?;
         Ok(())
     }
 
@@ -1053,10 +1064,12 @@ impl Engine {
             return Err(EmulatorError::InvalidInstruction(inst.address));
         }
 
-        let rsp = self.cpu.read_reg(Register::RSP);
-        let value = self.memory.read_u64(rsp)?;
+        let rsp = self.engine.cpu.read_reg(Register::RSP);
+        let value = self.engine.memory.read_u64(rsp)?;
         self.write_operand(&inst.operands[0], value)?;
-        self.cpu.write_reg(Register::RSP, rsp.wrapping_add(8));
+        self.engine
+            .cpu
+            .write_reg(Register::RSP, rsp.wrapping_add(8));
         Ok(())
     }
 
@@ -1065,28 +1078,30 @@ impl Engine {
             return Err(EmulatorError::InvalidInstruction(inst.address));
         }
 
-        let rsp = self.cpu.read_reg(Register::RSP);
+        let rsp = self.engine.cpu.read_reg(Register::RSP);
         let new_rsp = rsp.wrapping_sub(8);
-        self.cpu.write_reg(Register::RSP, new_rsp);
-        self.memory.write_u64(new_rsp, self.cpu.rip)?;
+        self.engine.cpu.write_reg(Register::RSP, new_rsp);
+        self.engine.memory.write_u64(new_rsp, self.engine.cpu.rip)?;
 
         match &inst.operands[0] {
             Operand::Relative(offset) => {
-                self.cpu.rip = (self.cpu.rip as i64 + offset) as u64;
+                self.engine.cpu.rip = (self.engine.cpu.rip as i64 + offset) as u64;
             }
             _ => {
                 let target = self.read_operand(&inst.operands[0])?;
-                self.cpu.rip = target;
+                self.engine.cpu.rip = target;
             }
         }
         Ok(())
     }
 
     fn execute_ret(&mut self, _inst: &Instruction) -> Result<()> {
-        let rsp = self.cpu.read_reg(Register::RSP);
-        let return_addr = self.memory.read_u64(rsp)?;
-        self.cpu.write_reg(Register::RSP, rsp.wrapping_add(8));
-        self.cpu.rip = return_addr;
+        let rsp = self.engine.cpu.read_reg(Register::RSP);
+        let return_addr = self.engine.memory.read_u64(rsp)?;
+        self.engine
+            .cpu
+            .write_reg(Register::RSP, rsp.wrapping_add(8));
+        self.engine.cpu.rip = return_addr;
         Ok(())
     }
 
@@ -1097,11 +1112,11 @@ impl Engine {
 
         match &inst.operands[0] {
             Operand::Relative(offset) => {
-                self.cpu.rip = (self.cpu.rip as i64 + offset) as u64;
+                self.engine.cpu.rip = (self.engine.cpu.rip as i64 + offset) as u64;
             }
             _ => {
                 let target = self.read_operand(&inst.operands[0])?;
-                self.cpu.rip = target;
+                self.engine.cpu.rip = target;
             }
         }
         Ok(())
@@ -1114,13 +1129,9 @@ impl Engine {
         Ok(())
     }
 
-    fn execute_syscall<H: HookManager>(
-        &mut self,
-        _inst: &Instruction,
-        hooks: Option<&mut H>,
-    ) -> Result<()> {
-        if let Some(hooks) = hooks {
-            hooks.on_interrupt(self, 0x80, 0)?;
+    fn execute_syscall(&mut self, _inst: &Instruction) -> Result<()> {
+        if let Some(hooks) = &mut self.hooks {
+            hooks.on_interrupt(self.engine, 0x80, 0)?;
         }
         Ok(())
     }
@@ -1131,15 +1142,15 @@ impl Engine {
         }
 
         // Decrement RCX (treating it as unsigned)
-        let count = self.cpu.read_reg(Register::RCX);
+        let count = self.engine.cpu.read_reg(Register::RCX);
         let new_count = count.wrapping_sub(1);
-        self.cpu.write_reg(Register::RCX, new_count);
+        self.engine.cpu.write_reg(Register::RCX, new_count);
 
         // Jump if new_count != 0 (after decrement)
         if new_count != 0 {
             match &inst.operands[0] {
                 Operand::Relative(offset) => {
-                    self.cpu.rip = (self.cpu.rip as i64 + offset) as u64;
+                    self.engine.cpu.rip = (self.engine.cpu.rip as i64 + offset) as u64;
                 }
                 _ => return Err(EmulatorError::InvalidInstruction(inst.address)),
             }
@@ -1154,15 +1165,15 @@ impl Engine {
         }
 
         // Decrement RCX (treating it as unsigned)
-        let count = self.cpu.read_reg(Register::RCX);
+        let count = self.engine.cpu.read_reg(Register::RCX);
         let new_count = count.wrapping_sub(1);
-        self.cpu.write_reg(Register::RCX, new_count);
+        self.engine.cpu.write_reg(Register::RCX, new_count);
 
         // Jump if new_count != 0 AND ZF = 1
-        if new_count != 0 && self.cpu.rflags.contains(Flags::ZF) {
+        if new_count != 0 && self.engine.cpu.rflags.contains(Flags::ZF) {
             match &inst.operands[0] {
                 Operand::Relative(offset) => {
-                    self.cpu.rip = (self.cpu.rip as i64 + offset) as u64;
+                    self.engine.cpu.rip = (self.engine.cpu.rip as i64 + offset) as u64;
                 }
                 _ => return Err(EmulatorError::InvalidInstruction(inst.address)),
             }
@@ -1177,15 +1188,15 @@ impl Engine {
         }
 
         // Decrement RCX (treating it as unsigned)
-        let count = self.cpu.read_reg(Register::RCX);
+        let count = self.engine.cpu.read_reg(Register::RCX);
         let new_count = count.wrapping_sub(1);
-        self.cpu.write_reg(Register::RCX, new_count);
+        self.engine.cpu.write_reg(Register::RCX, new_count);
 
         // Jump if new_count != 0 AND ZF = 0
-        if new_count != 0 && !self.cpu.rflags.contains(Flags::ZF) {
+        if new_count != 0 && !self.engine.cpu.rflags.contains(Flags::ZF) {
             match &inst.operands[0] {
                 Operand::Relative(offset) => {
-                    self.cpu.rip = (self.cpu.rip as i64 + offset) as u64;
+                    self.engine.cpu.rip = (self.engine.cpu.rip as i64 + offset) as u64;
                 }
                 _ => return Err(EmulatorError::InvalidInstruction(inst.address)),
             }
@@ -1206,7 +1217,7 @@ impl Engine {
         let has_rep = inst.prefix.rep.is_some();
 
         if has_rep {
-            let count = self.cpu.read_reg(Register::RCX);
+            let count = self.engine.cpu.read_reg(Register::RCX);
             if count == 0 {
                 return Ok(());
             }
@@ -1214,7 +1225,7 @@ impl Engine {
             for _ in 0..count {
                 self.movs_single(size)?;
             }
-            self.cpu.write_reg(Register::RCX, 0);
+            self.engine.cpu.write_reg(Register::RCX, 0);
         } else {
             self.movs_single(size)?;
         }
@@ -1223,38 +1234,42 @@ impl Engine {
     }
 
     fn movs_single(&mut self, size: OperandSize) -> Result<()> {
-        let rsi = self.cpu.read_reg(Register::RSI);
-        let rdi = self.cpu.read_reg(Register::RDI);
+        let rsi = self.engine.cpu.read_reg(Register::RSI);
+        let rdi = self.engine.cpu.read_reg(Register::RDI);
 
         // Read from [RSI]
         let value = match size {
-            OperandSize::Byte => self.memory.read_u8(rsi)? as u64,
-            OperandSize::Word => self.memory.read_u16(rsi)? as u64,
-            OperandSize::DWord => self.memory.read_u32(rsi)? as u64,
-            OperandSize::QWord => self.memory.read_u64(rsi)?,
+            OperandSize::Byte => self.engine.memory.read_u8(rsi)? as u64,
+            OperandSize::Word => self.engine.memory.read_u16(rsi)? as u64,
+            OperandSize::DWord => self.engine.memory.read_u32(rsi)? as u64,
+            OperandSize::QWord => self.engine.memory.read_u64(rsi)?,
             OperandSize::XmmWord => return Err(EmulatorError::InvalidOperand),
         };
 
         // Write to [RDI]
         match size {
-            OperandSize::Byte => self.memory.write_u8(rdi, value as u8)?,
-            OperandSize::Word => self.memory.write_u16(rdi, value as u16)?,
-            OperandSize::DWord => self.memory.write_u32(rdi, value as u32)?,
-            OperandSize::QWord => self.memory.write_u64(rdi, value)?,
+            OperandSize::Byte => self.engine.memory.write_u8(rdi, value as u8)?,
+            OperandSize::Word => self.engine.memory.write_u16(rdi, value as u16)?,
+            OperandSize::DWord => self.engine.memory.write_u32(rdi, value as u32)?,
+            OperandSize::QWord => self.engine.memory.write_u64(rdi, value)?,
             OperandSize::XmmWord => return Err(EmulatorError::InvalidOperand),
         };
 
         // Update RSI and RDI based on direction flag
         let increment = size.bytes() as u64;
-        if self.cpu.rflags.contains(Flags::DF) {
-            self.cpu
+        if self.engine.cpu.rflags.contains(Flags::DF) {
+            self.engine
+                .cpu
                 .write_reg(Register::RSI, rsi.wrapping_sub(increment));
-            self.cpu
+            self.engine
+                .cpu
                 .write_reg(Register::RDI, rdi.wrapping_sub(increment));
         } else {
-            self.cpu
+            self.engine
+                .cpu
                 .write_reg(Register::RSI, rsi.wrapping_add(increment));
-            self.cpu
+            self.engine
+                .cpu
                 .write_reg(Register::RDI, rdi.wrapping_add(increment));
         }
 
@@ -1272,7 +1287,7 @@ impl Engine {
         // Check if there's a REP prefix
         match inst.prefix.rep {
             Some(crate::decoder::RepPrefix::RepZ) => {
-                let count = self.cpu.read_reg(Register::RCX);
+                let count = self.engine.cpu.read_reg(Register::RCX);
                 if count == 0 {
                     return Ok(());
                 }
@@ -1280,16 +1295,16 @@ impl Engine {
                 for i in 0..count {
                     self.cmps_single(size)?;
                     let new_count = count - i - 1;
-                    self.cpu.write_reg(Register::RCX, new_count);
+                    self.engine.cpu.write_reg(Register::RCX, new_count);
 
                     // Continue while ZF=1 (equal)
-                    if !self.cpu.rflags.contains(Flags::ZF) {
+                    if !self.engine.cpu.rflags.contains(Flags::ZF) {
                         break;
                     }
                 }
             }
             Some(crate::decoder::RepPrefix::RepNZ) => {
-                let count = self.cpu.read_reg(Register::RCX);
+                let count = self.engine.cpu.read_reg(Register::RCX);
                 if count == 0 {
                     return Ok(());
                 }
@@ -1297,10 +1312,10 @@ impl Engine {
                 for i in 0..count {
                     self.cmps_single(size)?;
                     let new_count = count - i - 1;
-                    self.cpu.write_reg(Register::RCX, new_count);
+                    self.engine.cpu.write_reg(Register::RCX, new_count);
 
                     // Continue while ZF=0 (not equal)
-                    if self.cpu.rflags.contains(Flags::ZF) {
+                    if self.engine.cpu.rflags.contains(Flags::ZF) {
                         break;
                     }
                 }
@@ -1312,23 +1327,23 @@ impl Engine {
     }
 
     fn cmps_single(&mut self, size: OperandSize) -> Result<()> {
-        let rsi = self.cpu.read_reg(Register::RSI);
-        let rdi = self.cpu.read_reg(Register::RDI);
+        let rsi = self.engine.cpu.read_reg(Register::RSI);
+        let rdi = self.engine.cpu.read_reg(Register::RDI);
 
         // Read from [RSI] and [RDI]
         let src1 = match size {
-            OperandSize::Byte => self.memory.read_u8(rsi)? as u64,
-            OperandSize::Word => self.memory.read_u16(rsi)? as u64,
-            OperandSize::DWord => self.memory.read_u32(rsi)? as u64,
-            OperandSize::QWord => self.memory.read_u64(rsi)?,
+            OperandSize::Byte => self.engine.memory.read_u8(rsi)? as u64,
+            OperandSize::Word => self.engine.memory.read_u16(rsi)? as u64,
+            OperandSize::DWord => self.engine.memory.read_u32(rsi)? as u64,
+            OperandSize::QWord => self.engine.memory.read_u64(rsi)?,
             OperandSize::XmmWord => return Err(EmulatorError::InvalidOperand),
         };
 
         let src2 = match size {
-            OperandSize::Byte => self.memory.read_u8(rdi)? as u64,
-            OperandSize::Word => self.memory.read_u16(rdi)? as u64,
-            OperandSize::DWord => self.memory.read_u32(rdi)? as u64,
-            OperandSize::QWord => self.memory.read_u64(rdi)?,
+            OperandSize::Byte => self.engine.memory.read_u8(rdi)? as u64,
+            OperandSize::Word => self.engine.memory.read_u16(rdi)? as u64,
+            OperandSize::DWord => self.engine.memory.read_u32(rdi)? as u64,
+            OperandSize::QWord => self.engine.memory.read_u64(rdi)?,
             OperandSize::XmmWord => return Err(EmulatorError::InvalidOperand),
         };
 
@@ -1338,15 +1353,19 @@ impl Engine {
 
         // Update RSI and RDI based on direction flag
         let increment = size.bytes() as u64;
-        if self.cpu.rflags.contains(Flags::DF) {
-            self.cpu
+        if self.engine.cpu.rflags.contains(Flags::DF) {
+            self.engine
+                .cpu
                 .write_reg(Register::RSI, rsi.wrapping_sub(increment));
-            self.cpu
+            self.engine
+                .cpu
                 .write_reg(Register::RDI, rdi.wrapping_sub(increment));
         } else {
-            self.cpu
+            self.engine
+                .cpu
                 .write_reg(Register::RSI, rsi.wrapping_add(increment));
-            self.cpu
+            self.engine
+                .cpu
                 .write_reg(Register::RDI, rdi.wrapping_add(increment));
         }
 
@@ -1364,7 +1383,7 @@ impl Engine {
         // Check if there's a REP prefix
         match inst.prefix.rep {
             Some(crate::decoder::RepPrefix::RepZ) => {
-                let count = self.cpu.read_reg(Register::RCX);
+                let count = self.engine.cpu.read_reg(Register::RCX);
                 if count == 0 {
                     return Ok(());
                 }
@@ -1372,16 +1391,16 @@ impl Engine {
                 for i in 0..count {
                     self.scas_single(size)?;
                     let new_count = count - i - 1;
-                    self.cpu.write_reg(Register::RCX, new_count);
+                    self.engine.cpu.write_reg(Register::RCX, new_count);
 
                     // Continue while ZF=1 (equal)
-                    if !self.cpu.rflags.contains(Flags::ZF) {
+                    if !self.engine.cpu.rflags.contains(Flags::ZF) {
                         break;
                     }
                 }
             }
             Some(crate::decoder::RepPrefix::RepNZ) => {
-                let count = self.cpu.read_reg(Register::RCX);
+                let count = self.engine.cpu.read_reg(Register::RCX);
                 if count == 0 {
                     return Ok(());
                 }
@@ -1389,10 +1408,10 @@ impl Engine {
                 for i in 0..count {
                     self.scas_single(size)?;
                     let new_count = count - i - 1;
-                    self.cpu.write_reg(Register::RCX, new_count);
+                    self.engine.cpu.write_reg(Register::RCX, new_count);
 
                     // Continue while ZF=0 (not equal)
-                    if self.cpu.rflags.contains(Flags::ZF) {
+                    if self.engine.cpu.rflags.contains(Flags::ZF) {
                         break;
                     }
                 }
@@ -1404,23 +1423,23 @@ impl Engine {
     }
 
     fn scas_single(&mut self, size: OperandSize) -> Result<()> {
-        let rdi = self.cpu.read_reg(Register::RDI);
+        let rdi = self.engine.cpu.read_reg(Register::RDI);
 
         // Get accumulator value
         let acc = match size {
-            OperandSize::Byte => self.cpu.read_reg(Register::AL),
-            OperandSize::Word => self.cpu.read_reg(Register::AX),
-            OperandSize::DWord => self.cpu.read_reg(Register::EAX),
-            OperandSize::QWord => self.cpu.read_reg(Register::RAX),
+            OperandSize::Byte => self.engine.cpu.read_reg(Register::AL),
+            OperandSize::Word => self.engine.cpu.read_reg(Register::AX),
+            OperandSize::DWord => self.engine.cpu.read_reg(Register::EAX),
+            OperandSize::QWord => self.engine.cpu.read_reg(Register::RAX),
             OperandSize::XmmWord => return Err(EmulatorError::InvalidOperand),
         };
 
         // Read from [RDI]
         let mem_value = match size {
-            OperandSize::Byte => self.memory.read_u8(rdi)? as u64,
-            OperandSize::Word => self.memory.read_u16(rdi)? as u64,
-            OperandSize::DWord => self.memory.read_u32(rdi)? as u64,
-            OperandSize::QWord => self.memory.read_u64(rdi)?,
+            OperandSize::Byte => self.engine.memory.read_u8(rdi)? as u64,
+            OperandSize::Word => self.engine.memory.read_u16(rdi)? as u64,
+            OperandSize::DWord => self.engine.memory.read_u32(rdi)? as u64,
+            OperandSize::QWord => self.engine.memory.read_u64(rdi)?,
             OperandSize::XmmWord => return Err(EmulatorError::InvalidOperand),
         };
 
@@ -1430,11 +1449,13 @@ impl Engine {
 
         // Update RDI based on direction flag
         let increment = size.bytes() as u64;
-        if self.cpu.rflags.contains(Flags::DF) {
-            self.cpu
+        if self.engine.cpu.rflags.contains(Flags::DF) {
+            self.engine
+                .cpu
                 .write_reg(Register::RDI, rdi.wrapping_sub(increment));
         } else {
-            self.cpu
+            self.engine
+                .cpu
                 .write_reg(Register::RDI, rdi.wrapping_add(increment));
         }
 
@@ -1453,7 +1474,7 @@ impl Engine {
         let has_rep = inst.prefix.rep.is_some();
 
         if has_rep {
-            let count = self.cpu.read_reg(Register::RCX);
+            let count = self.engine.cpu.read_reg(Register::RCX);
             if count == 0 {
                 return Ok(());
             }
@@ -1461,7 +1482,7 @@ impl Engine {
             for _ in 0..count {
                 self.stos_single(size)?;
             }
-            self.cpu.write_reg(Register::RCX, 0);
+            self.engine.cpu.write_reg(Register::RCX, 0);
         } else {
             self.stos_single(size)?;
         }
@@ -1470,33 +1491,35 @@ impl Engine {
     }
 
     fn stos_single(&mut self, size: OperandSize) -> Result<()> {
-        let rdi = self.cpu.read_reg(Register::RDI);
+        let rdi = self.engine.cpu.read_reg(Register::RDI);
 
         // Get accumulator value
         let acc = match size {
-            OperandSize::Byte => self.cpu.read_reg(Register::AL),
-            OperandSize::Word => self.cpu.read_reg(Register::AX),
-            OperandSize::DWord => self.cpu.read_reg(Register::EAX),
-            OperandSize::QWord => self.cpu.read_reg(Register::RAX),
+            OperandSize::Byte => self.engine.cpu.read_reg(Register::AL),
+            OperandSize::Word => self.engine.cpu.read_reg(Register::AX),
+            OperandSize::DWord => self.engine.cpu.read_reg(Register::EAX),
+            OperandSize::QWord => self.engine.cpu.read_reg(Register::RAX),
             OperandSize::XmmWord => return Err(EmulatorError::InvalidOperand),
         };
 
         // Write to [RDI]
         match size {
-            OperandSize::Byte => self.memory.write_u8(rdi, acc as u8)?,
-            OperandSize::Word => self.memory.write_u16(rdi, acc as u16)?,
-            OperandSize::DWord => self.memory.write_u32(rdi, acc as u32)?,
-            OperandSize::QWord => self.memory.write_u64(rdi, acc)?,
+            OperandSize::Byte => self.engine.memory.write_u8(rdi, acc as u8)?,
+            OperandSize::Word => self.engine.memory.write_u16(rdi, acc as u16)?,
+            OperandSize::DWord => self.engine.memory.write_u32(rdi, acc as u32)?,
+            OperandSize::QWord => self.engine.memory.write_u64(rdi, acc)?,
             OperandSize::XmmWord => return Err(EmulatorError::InvalidOperand),
         };
 
         // Update RDI based on direction flag
         let increment = size.bytes() as u64;
-        if self.cpu.rflags.contains(Flags::DF) {
-            self.cpu
+        if self.engine.cpu.rflags.contains(Flags::DF) {
+            self.engine
+                .cpu
                 .write_reg(Register::RDI, rdi.wrapping_sub(increment));
         } else {
-            self.cpu
+            self.engine
+                .cpu
                 .write_reg(Register::RDI, rdi.wrapping_add(increment));
         }
 
@@ -1515,7 +1538,7 @@ impl Engine {
         let has_rep = inst.prefix.rep.is_some();
 
         if has_rep {
-            let count = self.cpu.read_reg(Register::RCX);
+            let count = self.engine.cpu.read_reg(Register::RCX);
             if count == 0 {
                 return Ok(());
             }
@@ -1523,7 +1546,7 @@ impl Engine {
             for _ in 0..count {
                 self.lods_single(size)?;
             }
-            self.cpu.write_reg(Register::RCX, 0);
+            self.engine.cpu.write_reg(Register::RCX, 0);
         } else {
             self.lods_single(size)?;
         }
@@ -1532,33 +1555,35 @@ impl Engine {
     }
 
     fn lods_single(&mut self, size: OperandSize) -> Result<()> {
-        let rsi = self.cpu.read_reg(Register::RSI);
+        let rsi = self.engine.cpu.read_reg(Register::RSI);
 
         // Read from [RSI]
         let value = match size {
-            OperandSize::Byte => self.memory.read_u8(rsi)? as u64,
-            OperandSize::Word => self.memory.read_u16(rsi)? as u64,
-            OperandSize::DWord => self.memory.read_u32(rsi)? as u64,
-            OperandSize::QWord => self.memory.read_u64(rsi)?,
+            OperandSize::Byte => self.engine.memory.read_u8(rsi)? as u64,
+            OperandSize::Word => self.engine.memory.read_u16(rsi)? as u64,
+            OperandSize::DWord => self.engine.memory.read_u32(rsi)? as u64,
+            OperandSize::QWord => self.engine.memory.read_u64(rsi)?,
             OperandSize::XmmWord => return Err(EmulatorError::InvalidOperand),
         };
 
         // Store in accumulator
         match size {
-            OperandSize::Byte => self.cpu.write_reg(Register::AL, value),
-            OperandSize::Word => self.cpu.write_reg(Register::AX, value),
-            OperandSize::DWord => self.cpu.write_reg(Register::EAX, value),
-            OperandSize::QWord => self.cpu.write_reg(Register::RAX, value),
+            OperandSize::Byte => self.engine.cpu.write_reg(Register::AL, value),
+            OperandSize::Word => self.engine.cpu.write_reg(Register::AX, value),
+            OperandSize::DWord => self.engine.cpu.write_reg(Register::EAX, value),
+            OperandSize::QWord => self.engine.cpu.write_reg(Register::RAX, value),
             OperandSize::XmmWord => return Err(EmulatorError::InvalidOperand),
         };
 
         // Update RSI based on direction flag
         let increment = size.bytes() as u64;
-        if self.cpu.rflags.contains(Flags::DF) {
-            self.cpu
+        if self.engine.cpu.rflags.contains(Flags::DF) {
+            self.engine
+                .cpu
                 .write_reg(Register::RSI, rsi.wrapping_sub(increment));
         } else {
-            self.cpu
+            self.engine
+                .cpu
                 .write_reg(Register::RSI, rsi.wrapping_add(increment));
         }
 
@@ -1567,7 +1592,7 @@ impl Engine {
 
     fn read_operand(&mut self, operand: &Operand) -> Result<u64> {
         match operand {
-            Operand::Register(reg) => Ok(self.cpu.read_reg(*reg)),
+            Operand::Register(reg) => Ok(self.engine.cpu.read_reg(*reg)),
             Operand::Immediate(val) => Ok(*val as u64),
             Operand::Memory {
                 base,
@@ -1578,28 +1603,29 @@ impl Engine {
             } => {
                 let mut addr = *displacement as u64;
                 if let Some(base_reg) = base {
-                    addr = addr.wrapping_add(self.cpu.read_reg(*base_reg));
+                    addr = addr.wrapping_add(self.engine.cpu.read_reg(*base_reg));
                 }
                 if let Some(index_reg) = index {
-                    addr = addr.wrapping_add(self.cpu.read_reg(*index_reg) * (*scale as u64));
+                    addr =
+                        addr.wrapping_add(self.engine.cpu.read_reg(*index_reg) * (*scale as u64));
                 }
 
                 match size {
-                    OperandSize::Byte => self.memory.read_u8(addr).map(|v| v as u64),
-                    OperandSize::Word => self.memory.read_u16(addr).map(|v| v as u64),
-                    OperandSize::DWord => self.memory.read_u32(addr).map(|v| v as u64),
-                    OperandSize::QWord => self.memory.read_u64(addr),
+                    OperandSize::Byte => self.engine.memory.read_u8(addr).map(|v| v as u64),
+                    OperandSize::Word => self.engine.memory.read_u16(addr).map(|v| v as u64),
+                    OperandSize::DWord => self.engine.memory.read_u32(addr).map(|v| v as u64),
+                    OperandSize::QWord => self.engine.memory.read_u64(addr),
                     OperandSize::XmmWord => Err(EmulatorError::InvalidOperand),
                 }
             }
-            Operand::Relative(offset) => Ok((self.cpu.rip as i64 + offset) as u64),
+            Operand::Relative(offset) => Ok((self.engine.cpu.rip as i64 + offset) as u64),
         }
     }
 
     fn write_operand(&mut self, operand: &Operand, value: u64) -> Result<()> {
         match operand {
             Operand::Register(reg) => {
-                self.cpu.write_reg(*reg, value);
+                self.engine.cpu.write_reg(*reg, value);
                 Ok(())
             }
             Operand::Memory {
@@ -1611,17 +1637,18 @@ impl Engine {
             } => {
                 let mut addr = *displacement as u64;
                 if let Some(base_reg) = base {
-                    addr = addr.wrapping_add(self.cpu.read_reg(*base_reg));
+                    addr = addr.wrapping_add(self.engine.cpu.read_reg(*base_reg));
                 }
                 if let Some(index_reg) = index {
-                    addr = addr.wrapping_add(self.cpu.read_reg(*index_reg) * (*scale as u64));
+                    addr =
+                        addr.wrapping_add(self.engine.cpu.read_reg(*index_reg) * (*scale as u64));
                 }
 
                 match size {
-                    OperandSize::Byte => self.memory.write_u8(addr, value as u8),
-                    OperandSize::Word => self.memory.write_u16(addr, value as u16),
-                    OperandSize::DWord => self.memory.write_u32(addr, value as u32),
-                    OperandSize::QWord => self.memory.write_u64(addr, value),
+                    OperandSize::Byte => self.engine.memory.write_u8(addr, value as u8),
+                    OperandSize::Word => self.engine.memory.write_u16(addr, value as u16),
+                    OperandSize::DWord => self.engine.memory.write_u32(addr, value as u32),
+                    OperandSize::QWord => self.engine.memory.write_u64(addr, value),
                     OperandSize::XmmWord => Err(EmulatorError::InvalidOperand),
                 }
             }
@@ -1630,55 +1657,57 @@ impl Engine {
     }
 
     fn update_flags_arithmetic(&mut self, dst: u64, src: u64, result: u64, is_sub: bool) {
-        self.cpu.rflags.set(Flags::ZF, result == 0);
-        self.cpu.rflags.set(Flags::SF, (result as i64) < 0);
+        self.engine.cpu.rflags.set(Flags::ZF, result == 0);
+        self.engine.cpu.rflags.set(Flags::SF, (result as i64) < 0);
 
         if is_sub {
-            self.cpu.rflags.set(Flags::CF, dst < src);
+            self.engine.cpu.rflags.set(Flags::CF, dst < src);
             let dst_sign = (dst as i64) < 0;
             let src_sign = (src as i64) < 0;
             let res_sign = (result as i64) < 0;
-            self.cpu
+            self.engine
+                .cpu
                 .rflags
                 .set(Flags::OF, dst_sign != src_sign && dst_sign != res_sign);
         } else {
-            self.cpu.rflags.set(Flags::CF, result < dst);
+            self.engine.cpu.rflags.set(Flags::CF, result < dst);
             let dst_sign = (dst as i64) < 0;
             let src_sign = (src as i64) < 0;
             let res_sign = (result as i64) < 0;
-            self.cpu
+            self.engine
+                .cpu
                 .rflags
                 .set(Flags::OF, dst_sign == src_sign && dst_sign != res_sign);
         }
 
         let parity = (result as u8).count_ones().is_multiple_of(2);
-        self.cpu.rflags.set(Flags::PF, parity);
+        self.engine.cpu.rflags.set(Flags::PF, parity);
     }
 
     fn update_flags_logical(&mut self, result: u64) {
-        self.cpu.rflags.set(Flags::ZF, result == 0);
-        self.cpu.rflags.set(Flags::SF, (result as i64) < 0);
-        self.cpu.rflags.set(Flags::CF, false);
-        self.cpu.rflags.set(Flags::OF, false);
+        self.engine.cpu.rflags.set(Flags::ZF, result == 0);
+        self.engine.cpu.rflags.set(Flags::SF, (result as i64) < 0);
+        self.engine.cpu.rflags.set(Flags::CF, false);
+        self.engine.cpu.rflags.set(Flags::OF, false);
 
         let parity = (result as u8).count_ones().is_multiple_of(2);
-        self.cpu.rflags.set(Flags::PF, parity);
+        self.engine.cpu.rflags.set(Flags::PF, parity);
     }
 
     pub fn context_save(&self) -> CpuState {
-        self.cpu.clone()
+        self.engine.cpu.clone()
     }
 
     pub fn context_restore(&mut self, state: &CpuState) {
-        self.cpu = state.clone();
+        self.engine.cpu = state.clone();
     }
 
     pub fn xmm_read(&self, reg: Register) -> Result<u128> {
-        Ok(self.cpu.read_xmm(reg))
+        Ok(self.engine.cpu.read_xmm(reg))
     }
 
     pub fn xmm_write(&mut self, reg: Register, value: u128) -> Result<()> {
-        self.cpu.write_xmm(reg, value);
+        self.engine.cpu.write_xmm(reg, value);
         Ok(())
     }
 
@@ -1691,17 +1720,17 @@ impl Engine {
     ) -> Result<u64> {
         let mut addr = displacement as u64;
         if let Some(base_reg) = base {
-            addr = addr.wrapping_add(self.cpu.read_reg(base_reg));
+            addr = addr.wrapping_add(self.engine.cpu.read_reg(base_reg));
         }
         if let Some(index_reg) = index {
-            addr = addr.wrapping_add(self.cpu.read_reg(index_reg) * (scale as u64));
+            addr = addr.wrapping_add(self.engine.cpu.read_reg(index_reg) * (scale as u64));
         }
         Ok(addr)
     }
 
     fn read_xmm_operand(&self, operand: &Operand) -> Result<u128> {
         match operand {
-            Operand::Register(reg) => Ok(self.cpu.read_xmm(*reg)),
+            Operand::Register(reg) => Ok(self.engine.cpu.read_xmm(*reg)),
             Operand::Memory {
                 base,
                 index,
@@ -1714,7 +1743,7 @@ impl Engine {
                 }
                 let address = self.calculate_address(*base, *index, *scale, *displacement)?;
                 let mut bytes = [0u8; 16];
-                self.memory.read(address, &mut bytes)?;
+                self.engine.memory.read(address, &mut bytes)?;
                 Ok(u128::from_le_bytes(bytes))
             }
             _ => Err(EmulatorError::InvalidOperand),
@@ -1724,7 +1753,7 @@ impl Engine {
     fn write_xmm_operand(&mut self, operand: &Operand, value: u128) -> Result<()> {
         match operand {
             Operand::Register(reg) => {
-                self.cpu.write_xmm(*reg, value);
+                self.engine.cpu.write_xmm(*reg, value);
                 Ok(())
             }
             Operand::Memory {
@@ -1739,7 +1768,7 @@ impl Engine {
                 }
                 let address = self.calculate_address(*base, *index, *scale, *displacement)?;
                 let bytes = value.to_le_bytes();
-                self.memory.write(address, &bytes)?;
+                self.engine.memory.write(address, &bytes)?;
                 Ok(())
             }
             _ => Err(EmulatorError::InvalidOperand),
@@ -1960,54 +1989,54 @@ impl Engine {
         // Signals invalid if either operand is SNaN
         if a.is_nan() || b.is_nan() {
             // Unordered result
-            self.cpu.rflags.set(Flags::ZF, true);
-            self.cpu.rflags.set(Flags::PF, true);
-            self.cpu.rflags.set(Flags::CF, true);
+            self.engine.cpu.rflags.set(Flags::ZF, true);
+            self.engine.cpu.rflags.set(Flags::PF, true);
+            self.engine.cpu.rflags.set(Flags::CF, true);
         } else if a > b {
-            self.cpu.rflags.set(Flags::ZF, false);
-            self.cpu.rflags.set(Flags::PF, false);
-            self.cpu.rflags.set(Flags::CF, false);
+            self.engine.cpu.rflags.set(Flags::ZF, false);
+            self.engine.cpu.rflags.set(Flags::PF, false);
+            self.engine.cpu.rflags.set(Flags::CF, false);
         } else if a < b {
-            self.cpu.rflags.set(Flags::ZF, false);
-            self.cpu.rflags.set(Flags::PF, false);
-            self.cpu.rflags.set(Flags::CF, true);
+            self.engine.cpu.rflags.set(Flags::ZF, false);
+            self.engine.cpu.rflags.set(Flags::PF, false);
+            self.engine.cpu.rflags.set(Flags::CF, true);
         } else {
             // a == b
-            self.cpu.rflags.set(Flags::ZF, true);
-            self.cpu.rflags.set(Flags::PF, false);
-            self.cpu.rflags.set(Flags::CF, false);
+            self.engine.cpu.rflags.set(Flags::ZF, true);
+            self.engine.cpu.rflags.set(Flags::PF, false);
+            self.engine.cpu.rflags.set(Flags::CF, false);
         }
 
         // Clear OF and SF
-        self.cpu.rflags.set(Flags::OF, false);
-        self.cpu.rflags.set(Flags::SF, false);
+        self.engine.cpu.rflags.set(Flags::OF, false);
+        self.engine.cpu.rflags.set(Flags::SF, false);
     }
 
     fn update_flags_ucomiss(&mut self, a: f32, b: f32) {
         // UCOMISS is similar to COMISS but doesn't signal on QNaN
         if a.is_nan() || b.is_nan() {
             // Unordered result
-            self.cpu.rflags.set(Flags::ZF, true);
-            self.cpu.rflags.set(Flags::PF, true);
-            self.cpu.rflags.set(Flags::CF, true);
+            self.engine.cpu.rflags.set(Flags::ZF, true);
+            self.engine.cpu.rflags.set(Flags::PF, true);
+            self.engine.cpu.rflags.set(Flags::CF, true);
         } else if a > b {
-            self.cpu.rflags.set(Flags::ZF, false);
-            self.cpu.rflags.set(Flags::PF, false);
-            self.cpu.rflags.set(Flags::CF, false);
+            self.engine.cpu.rflags.set(Flags::ZF, false);
+            self.engine.cpu.rflags.set(Flags::PF, false);
+            self.engine.cpu.rflags.set(Flags::CF, false);
         } else if a < b {
-            self.cpu.rflags.set(Flags::ZF, false);
-            self.cpu.rflags.set(Flags::PF, false);
-            self.cpu.rflags.set(Flags::CF, true);
+            self.engine.cpu.rflags.set(Flags::ZF, false);
+            self.engine.cpu.rflags.set(Flags::PF, false);
+            self.engine.cpu.rflags.set(Flags::CF, true);
         } else {
             // a == b
-            self.cpu.rflags.set(Flags::ZF, true);
-            self.cpu.rflags.set(Flags::PF, false);
-            self.cpu.rflags.set(Flags::CF, false);
+            self.engine.cpu.rflags.set(Flags::ZF, true);
+            self.engine.cpu.rflags.set(Flags::PF, false);
+            self.engine.cpu.rflags.set(Flags::CF, false);
         }
 
         // Clear OF and SF
-        self.cpu.rflags.set(Flags::OF, false);
-        self.cpu.rflags.set(Flags::SF, false);
+        self.engine.cpu.rflags.set(Flags::OF, false);
+        self.engine.cpu.rflags.set(Flags::SF, false);
     }
 
     fn simd_add_ps(&self, a: u128, b: u128) -> u128 {
@@ -2118,47 +2147,50 @@ impl Engine {
         // Mask results to the appropriate size
         let result_masked = result & max_val;
 
-        self.cpu.rflags.set(Flags::ZF, result_masked == 0);
-        self.cpu
+        self.engine.cpu.rflags.set(Flags::ZF, result_masked == 0);
+        self.engine
+            .cpu
             .rflags
             .set(Flags::SF, (result_masked & sign_bit) != 0);
 
         if is_sub {
-            self.cpu.rflags.set(Flags::CF, dst < src);
+            self.engine.cpu.rflags.set(Flags::CF, dst < src);
             let dst_sign = (dst & sign_bit) != 0;
             let src_sign = (src & sign_bit) != 0;
             let res_sign = (result_masked & sign_bit) != 0;
-            self.cpu
+            self.engine
+                .cpu
                 .rflags
                 .set(Flags::OF, dst_sign != src_sign && dst_sign != res_sign);
         } else {
             // For addition, carry occurs when the result is less than either operand (wrapped around)
-            self.cpu.rflags.set(
+            self.engine.cpu.rflags.set(
                 Flags::CF,
                 result_masked < (dst & max_val) || result_masked < (src & max_val),
             );
             let dst_sign = (dst & sign_bit) != 0;
             let src_sign = (src & sign_bit) != 0;
             let res_sign = (result_masked & sign_bit) != 0;
-            self.cpu
+            self.engine
+                .cpu
                 .rflags
                 .set(Flags::OF, dst_sign == src_sign && dst_sign != res_sign);
         }
 
         let parity = (result_masked as u8).count_ones().is_multiple_of(2);
-        self.cpu.rflags.set(Flags::PF, parity);
+        self.engine.cpu.rflags.set(Flags::PF, parity);
     }
 
     fn execute_cdq(&mut self, _inst: &Instruction) -> Result<()> {
         // CDQ: Convert Doubleword to Quadword
         // Sign-extend EAX into EDX:EAX
-        let eax = self.cpu.read_reg(Register::EAX) as u32 as i32;
+        let eax = self.engine.cpu.read_reg(Register::EAX) as u32 as i32;
 
         // If EAX is negative (bit 31 is set), EDX should be 0xFFFFFFFF
         // If EAX is positive or zero, EDX should be 0x00000000
         let edx = if eax < 0 { 0xFFFFFFFF } else { 0x00000000 };
 
-        self.cpu.write_reg(Register::EDX, edx);
+        self.engine.cpu.write_reg(Register::EDX, edx);
 
         // CDQ doesn't affect any flags
         Ok(())
@@ -2228,7 +2260,8 @@ impl Engine {
         }
 
         // Check condition: CF=1 or ZF=1 (below or equal for unsigned comparison)
-        let condition = self.cpu.rflags.contains(Flags::CF) || self.cpu.rflags.contains(Flags::ZF);
+        let condition = self.engine.cpu.rflags.contains(Flags::CF)
+            || self.engine.cpu.rflags.contains(Flags::ZF);
 
         // Set the byte operand to 1 if condition is true, 0 if false
         let value = if condition { 1u64 } else { 0u64 };
@@ -2237,9 +2270,9 @@ impl Engine {
         match &inst.operands[0] {
             Operand::Register(reg) => {
                 // For register operands, we need to preserve the upper bits and only set the low byte
-                let current_value = self.cpu.read_reg(*reg);
+                let current_value = self.engine.cpu.read_reg(*reg);
                 let new_value = (current_value & !0xFF) | (value & 0xFF);
-                self.cpu.write_reg(*reg, new_value);
+                self.engine.cpu.write_reg(*reg, new_value);
                 Ok(())
             }
             Operand::Memory { .. } => {
@@ -2256,12 +2289,13 @@ impl Engine {
                 {
                     let mut addr = *displacement as u64;
                     if let Some(base_reg) = base {
-                        addr = addr.wrapping_add(self.cpu.read_reg(*base_reg));
+                        addr = addr.wrapping_add(self.engine.cpu.read_reg(*base_reg));
                     }
                     if let Some(index_reg) = index {
-                        addr = addr.wrapping_add(self.cpu.read_reg(*index_reg) * (*scale as u64));
+                        addr = addr
+                            .wrapping_add(self.engine.cpu.read_reg(*index_reg) * (*scale as u64));
                     }
-                    self.memory.write_u8(addr, value as u8)
+                    self.engine.memory.write_u8(addr, value as u8)
                 } else {
                     Err(EmulatorError::InvalidOperand)
                 }
@@ -2277,7 +2311,7 @@ impl Engine {
         }
 
         // Check condition: CF=0 (above or equal for unsigned comparison)
-        let condition = !self.cpu.rflags.contains(Flags::CF);
+        let condition = !self.engine.cpu.rflags.contains(Flags::CF);
 
         if condition {
             // Only move if condition is true
@@ -2297,9 +2331,9 @@ impl Engine {
         }
 
         // Check condition: ZF=0 AND SF=OF (greater for signed comparison)
-        let zf = self.cpu.rflags.contains(Flags::ZF);
-        let sf = self.cpu.rflags.contains(Flags::SF);
-        let of = self.cpu.rflags.contains(Flags::OF);
+        let zf = self.engine.cpu.rflags.contains(Flags::ZF);
+        let sf = self.engine.cpu.rflags.contains(Flags::SF);
+        let of = self.engine.cpu.rflags.contains(Flags::OF);
         let condition = !zf && (sf == of);
 
         if condition {
