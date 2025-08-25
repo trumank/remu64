@@ -43,6 +43,7 @@ impl FormatterOutput for ColorFormatterOutput {
 pub struct InstructionTracer {
     formatter: IntelFormatter,
     enabled: bool,
+    full_trace: bool,
     instruction_count: usize,
     output: Box<dyn Write>,
     formatter_output: ColorFormatterOutput,
@@ -53,6 +54,7 @@ impl InstructionTracer {
         InstructionTracer {
             formatter: IntelFormatter::new(),
             enabled,
+            full_trace: false,
             instruction_count: 0,
             output: Box::new(std::io::stdout()),
             formatter_output: ColorFormatterOutput::new(),
@@ -63,6 +65,7 @@ impl InstructionTracer {
         InstructionTracer {
             formatter: IntelFormatter::new(),
             enabled,
+            full_trace: false,
             instruction_count: 0,
             output,
             formatter_output: ColorFormatterOutput::new(),
@@ -75,6 +78,14 @@ impl InstructionTracer {
 
     pub fn set_enabled(&mut self, enabled: bool) {
         self.enabled = enabled;
+    }
+    
+    pub fn set_full_trace(&mut self, full_trace: bool) {
+        self.full_trace = full_trace;
+    }
+    
+    pub fn is_full_trace_enabled(&self) -> bool {
+        self.full_trace
     }
 
     pub fn trace_instruction(
@@ -108,16 +119,23 @@ impl InstructionTracer {
         self.formatter.format(&instruction, &mut self.formatter_output);
         let colored_disasm = self.formatter_output.get_result();
 
-        // Get key register values
+        // Get register values
         let rax = engine.reg_read(Register::RAX).unwrap_or(0);
         let rcx = engine.reg_read(Register::RCX).unwrap_or(0);
         let rdx = engine.reg_read(Register::RDX).unwrap_or(0);
+        let rbx = engine.reg_read(Register::RBX).unwrap_or(0);
         let rsp = engine.reg_read(Register::RSP).unwrap_or(0);
         let rbp = engine.reg_read(Register::RBP).unwrap_or(0);
         let rsi = engine.reg_read(Register::RSI).unwrap_or(0);
         let rdi = engine.reg_read(Register::RDI).unwrap_or(0);
         let r8 = engine.reg_read(Register::R8).unwrap_or(0);
         let r9 = engine.reg_read(Register::R9).unwrap_or(0);
+        let r10 = engine.reg_read(Register::R10).unwrap_or(0);
+        let r11 = engine.reg_read(Register::R11).unwrap_or(0);
+        let r12 = engine.reg_read(Register::R12).unwrap_or(0);
+        let r13 = engine.reg_read(Register::R13).unwrap_or(0);
+        let r14 = engine.reg_read(Register::R14).unwrap_or(0);
+        let r15 = engine.reg_read(Register::R15).unwrap_or(0);
 
         // Check if RIP is in a known module
         let module_info = loader
@@ -131,64 +149,99 @@ impl InstructionTracer {
             None => format!("0x{:016x}", rip).yellow().to_string()
         };
 
-        // Format the trace output with instruction length and hex bytes
-        writeln!(
-            self.output,
-            "{} {}: {} [{}] ({} bytes) | {} {} {}",
-            format!("[{:06}]", self.instruction_count).bright_black(),
-            address_str,
-            colored_disasm,
-            hex_bytes.bright_magenta(),
-            instruction_len,
-            format!("RAX={:016x}", rax).bright_blue(),
-            format!("RCX={:016x}", rcx).bright_blue(),
-            format!("RDX={:016x}", rdx).bright_blue()
-        )?;
-
-        // Print additional registers if they're being used by the instruction
-        let uses_rsp_rbp = (0..instruction.op_count()).any(|i| {
-            let reg = instruction.op_register(i);
-            reg == iced_x86::Register::RSP || reg == iced_x86::Register::RBP
-        });
-        
-        if uses_rsp_rbp {
+        if self.full_trace {
+            // Full trace mode - show all registers
             writeln!(
                 self.output,
-                "         {:30} | {} {}",
-                "",
-                format!("RSP={:016x}", rsp).bright_blue(),
-                format!("RBP={:016x}", rbp).bright_blue()
+                "{} {}: {} [{}] ({} bytes)",
+                format!("[{:06}]", self.instruction_count).bright_black(),
+                address_str,
+                colored_disasm,
+                hex_bytes.bright_magenta(),
+                instruction_len
             )?;
-        }
-
-        let uses_rsi_rdi = (0..instruction.op_count()).any(|i| {
-            let reg = instruction.op_register(i);
-            reg == iced_x86::Register::RSI || reg == iced_x86::Register::RDI
-        });
-        
-        if uses_rsi_rdi {
+            
+            // Show all general-purpose registers in a compact format
             writeln!(
                 self.output,
-                "         {:30} | {} {}",
-                "",
-                format!("RSI={:016x}", rsi).bright_blue(),
-                format!("RDI={:016x}", rdi).bright_blue()
+                "         RAX={:016x} RCX={:016x} RDX={:016x} RBX={:016x}",
+                rax, rcx, rdx, rbx
             )?;
-        }
-
-        let uses_r8_r9 = (0..instruction.op_count()).any(|i| {
-            let reg = instruction.op_register(i);
-            reg == iced_x86::Register::R8 || reg == iced_x86::Register::R9
-        });
-        
-        if uses_r8_r9 {
             writeln!(
                 self.output,
-                "         {:30} | {} {}",
-                "",
-                format!("R8={:016x}", r8).bright_blue(),
-                format!("R9={:016x}", r9).bright_blue()
+                "         RSP={:016x} RBP={:016x} RSI={:016x} RDI={:016x}",
+                rsp, rbp, rsi, rdi
             )?;
+            writeln!(
+                self.output,
+                "         R8 ={:016x} R9 ={:016x} R10={:016x} R11={:016x}",
+                r8, r9, r10, r11
+            )?;
+            writeln!(
+                self.output,
+                "         R12={:016x} R13={:016x} R14={:016x} R15={:016x}",
+                r12, r13, r14, r15
+            )?;
+        } else {
+            // Standard trace mode - show basic registers
+            writeln!(
+                self.output,
+                "{} {}: {} [{}] ({} bytes) | {} {} {}",
+                format!("[{:06}]", self.instruction_count).bright_black(),
+                address_str,
+                colored_disasm,
+                hex_bytes.bright_magenta(),
+                instruction_len,
+                format!("RAX={:016x}", rax).bright_blue(),
+                format!("RCX={:016x}", rcx).bright_blue(),
+                format!("RDX={:016x}", rdx).bright_blue()
+            )?;
+
+            // Print additional registers if they're being used by the instruction
+            let uses_rsp_rbp = (0..instruction.op_count()).any(|i| {
+                let reg = instruction.op_register(i);
+                reg == iced_x86::Register::RSP || reg == iced_x86::Register::RBP
+            });
+            
+            if uses_rsp_rbp {
+                writeln!(
+                    self.output,
+                    "         {:30} | {} {}",
+                    "",
+                    format!("RSP={:016x}", rsp).bright_blue(),
+                    format!("RBP={:016x}", rbp).bright_blue()
+                )?;
+            }
+
+            let uses_rsi_rdi = (0..instruction.op_count()).any(|i| {
+                let reg = instruction.op_register(i);
+                reg == iced_x86::Register::RSI || reg == iced_x86::Register::RDI
+            });
+            
+            if uses_rsi_rdi {
+                writeln!(
+                    self.output,
+                    "         {:30} | {} {}",
+                    "",
+                    format!("RSI={:016x}", rsi).bright_blue(),
+                    format!("RDI={:016x}", rdi).bright_blue()
+                )?;
+            }
+
+            let uses_r8_r9 = (0..instruction.op_count()).any(|i| {
+                let reg = instruction.op_register(i);
+                reg == iced_x86::Register::R8 || reg == iced_x86::Register::R9
+            });
+            
+            if uses_r8_r9 {
+                writeln!(
+                    self.output,
+                    "         {:30} | {} {}",
+                    "",
+                    format!("R8={:016x}", r8).bright_blue(),
+                    format!("R9={:016x}", r9).bright_blue()
+                )?;
+            }
         }
 
         Ok(())

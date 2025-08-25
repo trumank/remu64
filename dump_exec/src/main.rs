@@ -11,6 +11,10 @@ struct Cli {
     #[arg(long)]
     trace: bool,
 
+    /// Enable full CPU state tracing with all registers
+    #[arg(long)]
+    full_trace: bool,
+
     /// List all modules found in the minidump
     #[arg(long)]
     list_modules: bool,
@@ -80,6 +84,12 @@ fn main() -> Result<()> {
     if cli.trace {
         println!("Enabling instruction tracing...");
         executor.enable_tracing(true);
+    }
+    
+    if cli.full_trace {
+        println!("Enabling full CPU state tracing...");
+        executor.enable_tracing(true);
+        executor.enable_full_trace(true);
     }
 
     println!("Executing function at 0x{:x} with {} arguments", function_address, function_args.len());

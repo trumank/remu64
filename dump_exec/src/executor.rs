@@ -177,6 +177,10 @@ impl FunctionExecutor {
         self.tracer.set_enabled(enabled);
     }
     
+    pub fn enable_full_trace(&mut self, enabled: bool) {
+        self.tracer.set_full_trace(enabled);
+    }
+    
     pub fn is_tracing_enabled(&self) -> bool {
         self.tracer.is_enabled()
     }
