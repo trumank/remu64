@@ -612,6 +612,30 @@ impl Decoder {
                 offset += self.operand_size(prefix).bytes();
                 (Opcode::MOV, vec![Operand::Register(reg), Operand::Immediate(imm)])
             }
+            0xC1 => {
+                // Shift/rotate group with 8-bit immediate
+                if bytes.len() <= offset {
+                    return Err(EmulatorError::InvalidInstruction(0));
+                }
+                let modrm = bytes[offset];
+                let reg_bits = (modrm >> 3) & 0x07;
+                let (rm_op, _, consumed) = self.decode_modrm_operands(&bytes[offset..], prefix)?;
+                offset += consumed;
+                
+                // Get the 8-bit immediate count
+                let imm = bytes.get(offset).copied().ok_or(EmulatorError::InvalidInstruction(0))?;
+                offset += 1;
+                
+                let opcode = match reg_bits {
+                    0 => Opcode::ROL,  // ROL r/m, imm8
+                    1 => Opcode::ROR,  // ROR r/m, imm8
+                    4 => Opcode::SHL,  // SHL r/m, imm8
+                    5 => Opcode::SHR,  // SHR r/m, imm8
+                    7 => Opcode::SAR,  // SAR r/m, imm8
+                    _ => return Err(EmulatorError::UnsupportedInstruction(format!("C1 /{}", reg_bits))),
+                };
+                (opcode, vec![rm_op, Operand::Immediate(imm as i64)])
+            }
             0xC3 => (Opcode::RET, vec![]),
             0xD3 => {
                 // Shift/rotate group with CL
