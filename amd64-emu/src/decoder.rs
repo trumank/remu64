@@ -798,6 +798,26 @@ impl Decoder {
                 (Opcode::JMP, vec![Operand::Relative(rel as i64)])
             }
             0xF4 => (Opcode::HLT, vec![]),
+            0xF6 => {
+                // Unary Group 3 - byte operations
+                if bytes.len() <= offset {
+                    return Err(EmulatorError::InvalidInstruction(0));
+                }
+                let modrm = bytes[offset];
+                let reg_bits = (modrm >> 3) & 0x07;
+                let (rm_op, _, consumed) = self.decode_modrm_operands(&bytes[offset..], prefix)?;
+                offset += consumed;
+                
+                match reg_bits {
+                    0 => {
+                        // TEST r/m8, imm8
+                        let imm = bytes.get(offset).copied().ok_or(EmulatorError::InvalidInstruction(0))?;
+                        offset += 1;
+                        (Opcode::TEST, vec![rm_op, Operand::Immediate(imm as i64)])
+                    }
+                    _ => return Err(EmulatorError::UnsupportedInstruction(format!("F6 /{}", reg_bits))),
+                }
+            }
             0xF7 => {
                 // NEG/NOT group
                 if bytes.len() <= offset {
