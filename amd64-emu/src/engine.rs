@@ -401,6 +401,8 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             Opcode::SYSCALL => self.execute_syscall(inst),
             Opcode::MOVAPS => self.execute_movaps(inst),
             Opcode::MOVUPS => self.execute_movups(inst),
+            Opcode::MOVQ => self.execute_movq(inst),
+            Opcode::MOVLHPS => self.execute_movlhps(inst),
             Opcode::ADDPS => self.execute_addps(inst),
             Opcode::SUBPS => self.execute_subps(inst),
             Opcode::MULPS => self.execute_mulps(inst),
@@ -418,6 +420,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             Opcode::SETBE => self.execute_setbe(inst),
             Opcode::SETNE => self.execute_setne(inst),
             Opcode::CMOVAE => self.execute_cmovae(inst),
+            Opcode::CMOVB => self.execute_cmovb(inst),
             Opcode::CMOVBE => self.execute_cmovbe(inst),
             Opcode::CMOVE => self.execute_cmove(inst),
             Opcode::CMOVG => self.execute_cmovg(inst),
@@ -1103,28 +1106,60 @@ impl<H: HookManager> ExecutionContext<'_, H> {
     }
 
     fn execute_imul(&mut self, inst: &Instruction) -> Result<()> {
-        // IMUL has multiple forms, for now implement single operand form
+        // IMUL has multiple forms
         if inst.operands.is_empty() {
             return Err(EmulatorError::InvalidInstruction(inst.address));
         }
 
-        // Single operand form: RDX:RAX = RAX * operand (signed)
-        let multiplicand = self.engine.cpu.read_reg(Register::RAX) as i64;
-        let multiplier = self.read_operand(&inst.operands[0], inst)? as i64;
+        match inst.operands.len() {
+            1 => {
+                // Single operand form: RDX:RAX = RAX * operand (signed)
+                let multiplicand = self.engine.cpu.read_reg(Register::RAX) as i64;
+                let multiplier = self.read_operand(&inst.operands[0], inst)? as i64;
 
-        let result = (multiplicand as i128) * (multiplier as i128);
+                let result = (multiplicand as i128) * (multiplier as i128);
 
-        // Store low 64 bits in RAX, high 64 bits in RDX
-        self.engine.cpu.write_reg(Register::RAX, result as u64);
-        self.engine
-            .cpu
-            .write_reg(Register::RDX, (result >> 64) as u64);
+                // Store low 64 bits in RAX, high 64 bits in RDX
+                self.engine.cpu.write_reg(Register::RAX, result as u64);
+                self.engine
+                    .cpu
+                    .write_reg(Register::RDX, (result >> 64) as u64);
 
-        // Set CF and OF if result doesn't fit in 64 bits (signed)
-        let sign_extended = (result as i64) as i128;
-        let overflow = result != sign_extended;
-        self.engine.cpu.rflags.set(Flags::CF, overflow);
-        self.engine.cpu.rflags.set(Flags::OF, overflow);
+                // Set CF and OF if result doesn't fit in 64 bits (signed)
+                let sign_extended = (result as i64) as i128;
+                let overflow = result != sign_extended;
+                self.engine.cpu.rflags.set(Flags::CF, overflow);
+                self.engine.cpu.rflags.set(Flags::OF, overflow);
+            }
+            2 => {
+                // Two operand form: reg = reg * r/m (signed)
+                let multiplicand = self.read_operand(&inst.operands[0], inst)? as i64;
+                let multiplier = self.read_operand(&inst.operands[1], inst)? as i64;
+
+                let result = (multiplicand as i128) * (multiplier as i128);
+
+                // Store result in destination register
+                self.write_operand(&inst.operands[0], result as u64, inst)?;
+
+                // Set CF and OF if result doesn't fit in destination size (signed)
+                let dest_size = match inst.operand_size {
+                    OperandSize::Word => 16,
+                    OperandSize::DWord => 32,
+                    OperandSize::QWord => 64,
+                    _ => 64,
+                };
+                
+                let max_positive = (1i128 << (dest_size - 1)) - 1;
+                let min_negative = -(1i128 << (dest_size - 1));
+                let overflow = result > max_positive || result < min_negative;
+                
+                self.engine.cpu.rflags.set(Flags::CF, overflow);
+                self.engine.cpu.rflags.set(Flags::OF, overflow);
+            }
+            _ => {
+                return Err(EmulatorError::InvalidInstruction(inst.address));
+            }
+        }
 
         Ok(())
     }
@@ -2108,6 +2143,54 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         Ok(())
     }
 
+    fn execute_movq(&mut self, inst: &Instruction) -> Result<()> {
+        if inst.operands.len() != 2 {
+            return Err(EmulatorError::InvalidInstruction(inst.address));
+        }
+
+        // MOVQ can move between XMM and general-purpose registers
+        // Check if destination is XMM and source is general-purpose register
+        match (&inst.operands[0], &inst.operands[1]) {
+            (Operand::Register(dst_reg), Operand::Register(src_reg)) => {
+                if dst_reg.is_xmm() && !src_reg.is_xmm() {
+                    // XMM <- GPR (zero upper 64 bits)
+                    let value = self.engine.cpu.read_reg(*src_reg);
+                    self.engine.cpu.write_xmm(*dst_reg, value as u128);
+                } else if !dst_reg.is_xmm() && src_reg.is_xmm() {
+                    // GPR <- XMM (take lower 64 bits)
+                    let value = self.engine.cpu.read_xmm(*src_reg);
+                    self.engine.cpu.write_reg(*dst_reg, value as u64);
+                } else {
+                    return Err(EmulatorError::InvalidInstruction(inst.address));
+                }
+            }
+            _ => {
+                // For memory operands, use standard XMM operations
+                let value = self.read_xmm_operand(&inst.operands[1])?;
+                self.write_xmm_operand(&inst.operands[0], value)?;
+            }
+        }
+        Ok(())
+    }
+
+    fn execute_movlhps(&mut self, inst: &Instruction) -> Result<()> {
+        if inst.operands.len() != 2 {
+            return Err(EmulatorError::InvalidInstruction(inst.address));
+        }
+
+        // MOVLHPS: Move low 64 bits of source to high 64 bits of destination
+        // High 64 bits of destination remain unchanged
+        let src_value = self.read_xmm_operand(&inst.operands[1])?;
+        let dst_value = self.read_xmm_operand(&inst.operands[0])?;
+
+        // Take low 64 bits of source and put them in high 64 bits of destination
+        let low_src = src_value & 0xFFFFFFFFFFFFFFFF;
+        let result = (dst_value & 0xFFFFFFFFFFFFFFFF) | (low_src << 64);
+
+        self.write_xmm_operand(&inst.operands[0], result)?;
+        Ok(())
+    }
+
     fn execute_addps(&mut self, inst: &Instruction) -> Result<()> {
         if inst.operands.len() != 2 {
             return Err(EmulatorError::InvalidInstruction(inst.address));
@@ -2698,6 +2781,26 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         // If condition is false, do nothing (don't modify destination)
 
         // CMOVAE doesn't affect any flags
+        Ok(())
+    }
+
+    fn execute_cmovb(&mut self, inst: &Instruction) -> Result<()> {
+        // CMOVB: Conditional move if below (CF=1)
+        if inst.operands.len() != 2 {
+            return Err(EmulatorError::InvalidInstruction(inst.address));
+        }
+
+        // Check condition: CF=1 (below for unsigned comparison)
+        let condition = self.engine.cpu.rflags.contains(Flags::CF);
+
+        if condition {
+            // Only move if condition is true
+            let value = self.read_operand(&inst.operands[1], inst)?;
+            self.write_operand(&inst.operands[0], value, inst)?;
+        }
+        // If condition is false, do nothing (don't modify destination)
+
+        // CMOVB doesn't affect any flags
         Ok(())
     }
 

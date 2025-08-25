@@ -91,6 +91,8 @@ pub enum Opcode {
     MOVUPS,
     MOVSS,
     MOVSD,
+    MOVQ,
+    MOVLHPS,
     ADDPS,
     SUBPS,
     MULPS,
@@ -126,6 +128,7 @@ pub enum Opcode {
     SETBE,
     SETNE,
     CMOVAE,
+    CMOVB,
     CMOVBE,
     CMOVE,
     CMOVG,
@@ -608,6 +611,15 @@ impl Decoder {
                 offset += 1;
                 (Opcode::JBE, vec![Operand::Relative(rel as i64)])
             }
+            0x77 => {
+                // JA/JNBE rel8 - Jump if above (CF=0 AND ZF=0)
+                let rel = bytes
+                    .get(offset)
+                    .copied()
+                    .ok_or(EmulatorError::InvalidInstruction(0))? as i8;
+                offset += 1;
+                (Opcode::JA, vec![Operand::Relative(rel as i64)])
+            }
             0x78 => {
                 let rel = bytes
                     .get(offset)
@@ -1067,6 +1079,18 @@ impl Decoder {
                 offset += consumed;
 
                 match reg_bits {
+                    0 => {
+                        // TEST r/m, imm - immediate operand size depends on operand size
+                        let imm = self.decode_immediate(&bytes[offset..], self.operand_size(prefix))?;
+                        offset += self.operand_size(prefix).bytes();
+                        (Opcode::TEST, vec![rm_op, Operand::Immediate(imm)])
+                    }
+                    1 => {
+                        // Also TEST r/m, imm (same as /0)
+                        let imm = self.decode_immediate(&bytes[offset..], self.operand_size(prefix))?;
+                        offset += self.operand_size(prefix).bytes();
+                        (Opcode::TEST, vec![rm_op, Operand::Immediate(imm)])
+                    }
                     2 => (Opcode::NOT, vec![rm_op]),
                     3 => (Opcode::NEG, vec![rm_op]),
                     4 => (Opcode::MUL, vec![rm_op]),
@@ -1158,6 +1182,13 @@ impl Decoder {
                             self.decode_modrm_xmm(&bytes[offset..], prefix)?;
                         offset += consumed;
                         (Opcode::MOVUPS, vec![src, dst])
+                    }
+                    0x16 => {
+                        // MOVLHPS xmm1, xmm2 - Move low to high packed single
+                        let (dst, src, consumed) =
+                            self.decode_modrm_xmm(&bytes[offset..], prefix)?;
+                        offset += consumed;
+                        (Opcode::MOVLHPS, vec![dst, src])
                     }
                     0x1F => {
                         // Multi-byte NOP - 0x0F 0x1F /0
@@ -1305,6 +1336,13 @@ impl Decoder {
                         offset += consumed;
                         (Opcode::MOVZX, vec![reg_op, rm_op])
                     }
+                    0x42 => {
+                        // CMOVB r, r/m - Conditional move if below (CF=1)
+                        let (rm_op, reg_op, consumed) =
+                            self.decode_modrm_operands(&bytes[offset..], prefix)?;
+                        offset += consumed;
+                        (Opcode::CMOVB, vec![reg_op, rm_op])
+                    }
                     0x43 => {
                         // CMOVAE r, r/m - Conditional move if above or equal (CF=0)
                         let (rm_op, reg_op, consumed) =
@@ -1385,6 +1423,30 @@ impl Decoder {
                         offset += 1;
                         
                         (opcode, vec![rm_op, Operand::Immediate(imm)])
+                    }
+                    0x6E => {
+                        // MOVD/MOVQ xmm, r/m - Move doubleword/quadword from r/m to xmm
+                        if bytes.len() <= offset {
+                            return Err(EmulatorError::InvalidInstruction(0));
+                        }
+                        let modrm = bytes[offset];
+                        let reg_bits = (modrm >> 3) & 0x07;
+                        
+                        // Destination is always XMM
+                        let xmm_reg = self.decode_xmm_register(reg_bits, prefix);
+                        
+                        // Source can be GPR or memory, use regular modrm decoding
+                        let (rm_op, _, consumed) = self.decode_modrm_operands(&bytes[offset..], prefix)?;
+                        offset += consumed;
+                        
+                        (Opcode::MOVQ, vec![Operand::Register(xmm_reg), rm_op])
+                    }
+                    0xAF => {
+                        // IMUL r, r/m - Two operand integer multiply
+                        let (rm_op, reg_op, consumed) =
+                            self.decode_modrm_operands(&bytes[offset..], prefix)?;
+                        offset += consumed;
+                        (Opcode::IMUL, vec![reg_op, rm_op])
                     }
                     0xB1 => {
                         // CMPXCHG r/m, r
