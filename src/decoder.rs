@@ -7,6 +7,7 @@ pub enum OperandSize {
     Word,
     DWord,
     QWord,
+    XmmWord,
 }
 
 #[derive(Debug, Clone)]
@@ -82,6 +83,32 @@ pub enum Opcode {
     REP,
     REPZ,
     REPNZ,
+    MOVAPS,
+    MOVUPS,
+    MOVSS,
+    MOVSD,
+    ADDPS,
+    SUBPS,
+    MULPS,
+    DIVPS,
+    ADDSS,
+    SUBSS,
+    MULSS,
+    DIVSS,
+    ADDPD,
+    SUBPD,
+    MULPD,
+    DIVPD,
+    ADDSD,
+    SUBSD,
+    MULSD,
+    DIVSD,
+    XORPS,
+    XORPD,
+    ANDPS,
+    ANDPD,
+    ORPS,
+    ORPD,
 }
 
 #[derive(Debug, Clone)]
@@ -501,6 +528,61 @@ impl Decoder {
                 offset += 1;
                 match secondary {
                     0x05 => (Opcode::SYSCALL, vec![]),
+                    0x10 => {
+                        let (dst, src, consumed) = self.decode_modrm_xmm(&bytes[offset..], prefix)?;
+                        offset += consumed;
+                        (Opcode::MOVUPS, vec![dst, src])
+                    }
+                    0x11 => {
+                        let (src, dst, consumed) = self.decode_modrm_xmm(&bytes[offset..], prefix)?;
+                        offset += consumed;
+                        (Opcode::MOVUPS, vec![dst, src])
+                    }
+                    0x28 => {
+                        let (dst, src, consumed) = self.decode_modrm_xmm(&bytes[offset..], prefix)?;
+                        offset += consumed;
+                        (Opcode::MOVAPS, vec![dst, src])
+                    }
+                    0x29 => {
+                        let (src, dst, consumed) = self.decode_modrm_xmm(&bytes[offset..], prefix)?;
+                        offset += consumed;
+                        (Opcode::MOVAPS, vec![dst, src])
+                    }
+                    0x54 => {
+                        let (dst, src, consumed) = self.decode_modrm_xmm(&bytes[offset..], prefix)?;
+                        offset += consumed;
+                        (Opcode::ANDPS, vec![dst, src])
+                    }
+                    0x56 => {
+                        let (dst, src, consumed) = self.decode_modrm_xmm(&bytes[offset..], prefix)?;
+                        offset += consumed;
+                        (Opcode::ORPS, vec![dst, src])
+                    }
+                    0x57 => {
+                        let (dst, src, consumed) = self.decode_modrm_xmm(&bytes[offset..], prefix)?;
+                        offset += consumed;
+                        (Opcode::XORPS, vec![dst, src])
+                    }
+                    0x58 => {
+                        let (dst, src, consumed) = self.decode_modrm_xmm(&bytes[offset..], prefix)?;
+                        offset += consumed;
+                        (Opcode::ADDPS, vec![dst, src])
+                    }
+                    0x59 => {
+                        let (dst, src, consumed) = self.decode_modrm_xmm(&bytes[offset..], prefix)?;
+                        offset += consumed;
+                        (Opcode::MULPS, vec![dst, src])
+                    }
+                    0x5C => {
+                        let (dst, src, consumed) = self.decode_modrm_xmm(&bytes[offset..], prefix)?;
+                        offset += consumed;
+                        (Opcode::SUBPS, vec![dst, src])
+                    }
+                    0x5E => {
+                        let (dst, src, consumed) = self.decode_modrm_xmm(&bytes[offset..], prefix)?;
+                        offset += consumed;
+                        (Opcode::DIVPS, vec![dst, src])
+                    }
                     0x84 => {
                         let rel = self.decode_immediate(&bytes[offset..], OperandSize::DWord)?;
                         offset += 4;
@@ -772,6 +854,96 @@ impl Decoder {
             _ => Err(EmulatorError::InvalidInstruction(0)),
         }
     }
+    
+    fn decode_modrm_xmm(
+        &self,
+        bytes: &[u8],
+        prefix: &InstructionPrefix,
+    ) -> Result<(Operand, Operand, usize)> {
+        if bytes.is_empty() {
+            return Err(EmulatorError::InvalidInstruction(0));
+        }
+        
+        let modrm = bytes[0];
+        let mod_bits = (modrm >> 6) & 0x03;
+        let reg_bits = (modrm >> 3) & 0x07;
+        let rm_bits = modrm & 0x07;
+        
+        let reg_xmm = self.decode_xmm_register(reg_bits, prefix);
+        
+        let mut offset = 1;
+        
+        let rm_operand = match mod_bits {
+            0x03 => {
+                let rm_xmm = self.decode_xmm_register(rm_bits, prefix);
+                Operand::Register(rm_xmm)
+            }
+            _ => {
+                let (base, index, scale, consumed_and_disp_size) = self.decode_sib_and_displacement(
+                    mod_bits,
+                    rm_bits,
+                    &bytes[offset..],
+                    prefix,
+                )?;
+                
+                let sib_consumed = if rm_bits == 4 { 1 } else { 0 };
+                let disp_size = if rm_bits == 4 {
+                    consumed_and_disp_size - 1
+                } else {
+                    consumed_and_disp_size
+                };
+                
+                offset += sib_consumed;
+                
+                let displacement = if disp_size > 0 {
+                    let disp = self.decode_displacement(&bytes[offset..], disp_size)?;
+                    offset += disp_size;
+                    disp
+                } else {
+                    0
+                };
+                
+                Operand::Memory {
+                    base,
+                    index,
+                    scale,
+                    displacement,
+                    size: OperandSize::XmmWord,
+                }
+            }
+        };
+        
+        Ok((rm_operand, Operand::Register(reg_xmm), offset))
+    }
+    
+    fn decode_xmm_register(&self, reg: u8, prefix: &InstructionPrefix) -> Register {
+        use Register::*;
+        let reg_num = if let Some(rex) = prefix.rex {
+            reg + if rex.r { 8 } else { 0 }
+        } else {
+            reg
+        };
+        
+        match reg_num {
+            0 => XMM0,
+            1 => XMM1,
+            2 => XMM2,
+            3 => XMM3,
+            4 => XMM4,
+            5 => XMM5,
+            6 => XMM6,
+            7 => XMM7,
+            8 => XMM8,
+            9 => XMM9,
+            10 => XMM10,
+            11 => XMM11,
+            12 => XMM12,
+            13 => XMM13,
+            14 => XMM14,
+            15 => XMM15,
+            _ => panic!("Invalid XMM register number: {}", reg_num),
+        }
+    }
 }
 
 impl OperandSize {
@@ -781,6 +953,7 @@ impl OperandSize {
             OperandSize::Word => 2,
             OperandSize::DWord => 4,
             OperandSize::QWord => 8,
+            OperandSize::XmmWord => 16,
         }
     }
 }
