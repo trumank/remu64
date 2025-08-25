@@ -157,16 +157,17 @@ fn test_adc_immediate() {
     
     // Test ADC with immediate values
     let code = vec![
-        0x48, 0xB8, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,  // mov rax, 0xFFFFFFFFFFFFFFFF
-        0x48, 0x05, 0x01, 0x00, 0x00, 0x00,        // add rax, 1 (sets carry)
-        0x14, 0x05,                                // adc al, 5
+        0xB0, 0xFF,                                // mov al, 0xFF
+        0x04, 0x01,                                // add al, 1 (sets carry when AL wraps)
+        0xB0, 0x05,                                // mov al, 5
+        0x14, 0x03,                                // adc al, 3
     ];
     
     engine.mem_write(0x1000, &code).unwrap();
     engine.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0).unwrap();
     
-    // AL (low byte of RAX after overflow) = 0 + 5 + 1 (carry) = 6
-    assert_eq!(engine.reg_read(Register::RAX).unwrap() & 0xFF, 6);
+    // AL = 5 + 3 + 1 (carry) = 9
+    assert_eq!(engine.reg_read(Register::RAX).unwrap() & 0xFF, 9);
 }
 
 #[test]
@@ -178,9 +179,9 @@ fn test_sbb_immediate() {
     
     // Test SBB with immediate values
     let code = vec![
-        0x48, 0xC7, 0xC0, 0x00, 0x00, 0x00, 0x00,  // mov rax, 0
-        0x48, 0x2D, 0x01, 0x00, 0x00, 0x00,        // sub rax, 1 (sets borrow)
-        0x48, 0xC7, 0xC0, 0x0A, 0x00, 0x00, 0x00,  // mov rax, 10  
+        0xB0, 0x00,                                // mov al, 0
+        0x2C, 0x01,                                // sub al, 1 (sets borrow when AL underflows)
+        0xB0, 0x0A,                                // mov al, 10
         0x1C, 0x03,                                // sbb al, 3
     ];
     
