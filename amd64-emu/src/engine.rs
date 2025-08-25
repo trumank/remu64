@@ -287,6 +287,7 @@ impl Engine {
             Opcode::UCOMISS => self.execute_ucomiss(inst),
             Opcode::CDQ => self.execute_cdq(inst),
             Opcode::MOVSXD => self.execute_movsxd(inst),
+            Opcode::MOVZX => self.execute_movzx(inst),
             _ => {
                 self.hooks.run_invalid_hooks(&mut self.cpu, inst.address)?;
                 Err(EmulatorError::UnsupportedInstruction(format!("{:?}", inst.opcode)))
@@ -2041,6 +2042,43 @@ impl Engine {
         self.write_operand(&inst.operands[0], dest_value)?;
         
         // MOVSXD doesn't affect any flags
+        Ok(())
+    }
+    
+    fn execute_movzx(&mut self, inst: &Instruction) -> Result<()> {
+        // MOVZX: Move with Zero-Extend
+        // Takes a smaller source operand, zero-extends it, and stores in destination
+        if inst.operands.len() != 2 {
+            return Err(EmulatorError::InvalidInstruction(inst.address));
+        }
+        
+        // Determine source size based on the source operand or instruction context
+        let src_value = self.read_operand(&inst.operands[1])?;
+        
+        // For MOVZX, we need to determine if it's byte-to-larger or word-to-larger
+        // This can be inferred from the operand or we may need additional context
+        // For now, let's assume byte extension (0x0F 0xB6) and handle word extension (0x0F 0xB7) later
+        let src_size = self.get_operand_size(&inst.operands[1]);
+        
+        let dest_value = match src_size {
+            OperandSize::Byte => {
+                // Zero-extend 8-bit to destination size
+                (src_value as u8) as u64
+            }
+            OperandSize::Word => {
+                // Zero-extend 16-bit to destination size
+                (src_value as u16) as u64
+            }
+            _ => {
+                // For larger source sizes, just use the value as-is
+                src_value
+            }
+        };
+        
+        // Write to the destination register
+        self.write_operand(&inst.operands[0], dest_value)?;
+        
+        // MOVZX doesn't affect any flags
         Ok(())
     }
 }

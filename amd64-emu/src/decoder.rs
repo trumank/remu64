@@ -122,6 +122,7 @@ pub enum Opcode {
     COMISD,
     UCOMISD,
     MOVSXD,
+    MOVZX,
 }
 
 #[derive(Debug, Clone)]
@@ -875,6 +876,18 @@ impl Decoder {
                         let rel = self.decode_immediate(&bytes[offset..], OperandSize::DWord)?;
                         offset += 4;
                         (Opcode::JNZ, vec![Operand::Relative(rel)])
+                    }
+                    0xB6 => {
+                        // MOVZX r, r/m8 - Move with Zero-Extend byte to word/dword/qword
+                        let (rm_op, reg_op, consumed) = self.decode_modrm_operands(&bytes[offset..], prefix)?;
+                        offset += consumed;
+                        (Opcode::MOVZX, vec![reg_op, rm_op])
+                    }
+                    0xB7 => {
+                        // MOVZX r, r/m16 - Move with Zero-Extend word to dword/qword
+                        let (rm_op, reg_op, consumed) = self.decode_modrm_operands(&bytes[offset..], prefix)?;
+                        offset += consumed;
+                        (Opcode::MOVZX, vec![reg_op, rm_op])
                     }
                     0xC1 => {
                         // XADD r/m, r
