@@ -1500,7 +1500,8 @@ impl Decoder {
 
         let rm_operand = match mod_bits {
             0x03 => {
-                let rm_reg = self.decode_register(rm_bits, prefix, size);
+                // For register-to-register ModRM, r/m field uses REX.B extension
+                let rm_reg = self.decode_rm_register(rm_bits, prefix, size);
                 Operand::Register(rm_reg)
             }
             _ => {
@@ -1560,54 +1561,14 @@ impl Decoder {
                 None // [disp32] or [index*scale + disp32]
             } else {
                 // For SIB base register, use REX.B extension
-                let extended = prefix.rex.as_ref().is_some_and(|r| r.b);
-                let base_reg_num = if extended { base_bits + 8 } else { base_bits };
-                Some(match base_reg_num {
-                    0 => Register::RAX,
-                    1 => Register::RCX,
-                    2 => Register::RDX,
-                    3 => Register::RBX,
-                    4 => Register::RSP,
-                    5 => Register::RBP,
-                    6 => Register::RSI,
-                    7 => Register::RDI,
-                    8 => Register::R8,
-                    9 => Register::R9,
-                    10 => Register::R10,
-                    11 => Register::R11,
-                    12 => Register::R12,
-                    13 => Register::R13,
-                    14 => Register::R14,
-                    15 => Register::R15,
-                    _ => Register::RAX,
-                })
+                Some(self.decode_rm_register(base_bits, prefix, OperandSize::QWord))
             };
 
             let index = if index_bits == 4 {
                 None // No index register (RSP can't be index)
             } else {
                 // For SIB index register, use REX.X extension
-                let extended = prefix.rex.as_ref().is_some_and(|r| r.x);
-                let index_reg_num = if extended { index_bits + 8 } else { index_bits };
-                Some(match index_reg_num {
-                    0 => Register::RAX,
-                    1 => Register::RCX,
-                    2 => Register::RDX,
-                    3 => Register::RBX,
-                    4 => Register::RSP,
-                    5 => Register::RBP,
-                    6 => Register::RSI,
-                    7 => Register::RDI,
-                    8 => Register::R8,
-                    9 => Register::R9,
-                    10 => Register::R10,
-                    11 => Register::R11,
-                    12 => Register::R12,
-                    13 => Register::R13,
-                    14 => Register::R14,
-                    15 => Register::R15,
-                    _ => Register::RAX,
-                })
+                Some(self.decode_index_register(index_bits, prefix, OperandSize::QWord))
             };
 
             let disp_size = match mod_bits {
@@ -1622,9 +1583,6 @@ impl Decoder {
         }
 
         // Non-SIB cases - need to handle REX.B extension
-        let extended_rm = prefix.rex.as_ref().is_some_and(|r| r.b);
-        let rm_num = if extended_rm { rm_bits + 8 } else { rm_bits };
-
         let base = match rm_bits {
             5 if mod_bits == 0 => {
                 // In 64-bit mode, [disp32] is RIP-relative
@@ -1635,8 +1593,8 @@ impl Decoder {
                 }
             }
             _ => {
-                // Use decode_register to properly handle REX extensions
-                Some(self.decode_register(rm_num, prefix, OperandSize::QWord))
+                // Use decode_rm_register to properly handle REX.B extensions
+                Some(self.decode_rm_register(rm_bits, prefix, OperandSize::QWord))
             }
         };
 
@@ -1654,6 +1612,24 @@ impl Decoder {
         let extended = prefix.rex.as_ref().is_some_and(|r| r.r);
         let reg_num = if extended { reg + 8 } else { reg };
 
+        self.decode_register_by_num(reg_num, size)
+    }
+
+    fn decode_rm_register(&self, reg: u8, prefix: &InstructionPrefix, size: OperandSize) -> Register {
+        let extended = prefix.rex.as_ref().is_some_and(|r| r.b);
+        let reg_num = if extended { reg + 8 } else { reg };
+
+        self.decode_register_by_num(reg_num, size)
+    }
+
+    fn decode_index_register(&self, reg: u8, prefix: &InstructionPrefix, size: OperandSize) -> Register {
+        let extended = prefix.rex.as_ref().is_some_and(|r| r.x);
+        let reg_num = if extended { reg + 8 } else { reg };
+
+        self.decode_register_by_num(reg_num, size)
+    }
+
+    fn decode_register_by_num(&self, reg_num: u8, size: OperandSize) -> Register {
         match size {
             OperandSize::Byte => match reg_num {
                 0 => Register::AL,
@@ -1745,7 +1721,7 @@ impl Decoder {
     ) -> Register {
         let extended = prefix.rex.as_ref().is_some_and(|r| r.b);
         let reg_num = if extended { reg + 8 } else { reg };
-        self.decode_register(reg_num, prefix, size)
+        self.decode_register_by_num(reg_num, size)
     }
 
     fn operand_size(&self, prefix: &InstructionPrefix) -> OperandSize {
