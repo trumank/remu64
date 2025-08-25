@@ -1036,7 +1036,19 @@ impl Decoder {
                 }
                 let modrm = bytes[offset];
                 let reg_bits = (modrm >> 3) & 0x07;
-                let (rm_op, _, consumed) = self.decode_modrm_operands(&bytes[offset..], prefix)?;
+
+                // For CALL and JMP in 64-bit mode, we need 64-bit operands
+                let (rm_op, _, consumed) = if (reg_bits == 2 || reg_bits == 4)
+                    && matches!(self.mode, DecoderMode::Mode64)
+                {
+                    self.decode_modrm_operands_with_size(
+                        &bytes[offset..],
+                        prefix,
+                        OperandSize::QWord,
+                    )?
+                } else {
+                    self.decode_modrm_operands(&bytes[offset..], prefix)?
+                };
                 offset += consumed;
 
                 match reg_bits {
@@ -1254,6 +1266,66 @@ impl Decoder {
         };
 
         Ok((opcode, operands, offset))
+    }
+
+    fn decode_modrm_operands_with_size(
+        &self,
+        bytes: &[u8],
+        prefix: &InstructionPrefix,
+        forced_size: OperandSize,
+    ) -> Result<(Operand, Operand, usize)> {
+        if bytes.is_empty() {
+            return Err(EmulatorError::InvalidInstruction(0));
+        }
+
+        let modrm = bytes[0];
+        let mod_bits = (modrm >> 6) & 0x03;
+        let reg_bits = (modrm >> 3) & 0x07;
+        let rm_bits = modrm & 0x07;
+
+        let size = forced_size;
+        let reg = self.decode_register(reg_bits, prefix, size);
+
+        let mut offset = 1;
+
+        let rm_operand = match mod_bits {
+            0x03 => {
+                let rm_reg = self.decode_register(rm_bits, prefix, size);
+                Operand::Register(rm_reg)
+            }
+            _ => {
+                let (base, index, scale, consumed_and_disp_size) =
+                    self.decode_sib_and_displacement(mod_bits, rm_bits, &bytes[offset..], prefix)?;
+
+                // Extract SIB byte consumption (1 if SIB was present, 0 otherwise)
+                let sib_consumed = if rm_bits == 4 { 1 } else { 0 };
+                let disp_size = if rm_bits == 4 {
+                    consumed_and_disp_size - 1 // Subtract the SIB byte
+                } else {
+                    consumed_and_disp_size
+                };
+
+                offset += sib_consumed;
+
+                let displacement = if disp_size > 0 {
+                    let disp = self.decode_displacement(&bytes[offset..], disp_size)?;
+                    offset += disp_size;
+                    disp
+                } else {
+                    0
+                };
+
+                Operand::Memory {
+                    base,
+                    index,
+                    scale,
+                    displacement,
+                    size,
+                }
+            }
+        };
+
+        Ok((rm_operand, Operand::Register(reg), offset))
     }
 
     fn decode_modrm_operands(
