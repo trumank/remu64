@@ -938,6 +938,11 @@ impl Decoder {
                         offset += 4;
                         (Opcode::JNZ, vec![Operand::Relative(rel)])
                     }
+                    0x87 => {
+                        let rel = self.decode_immediate(&bytes[offset..], OperandSize::DWord)?;
+                        offset += 4;
+                        (Opcode::JA, vec![Operand::Relative(rel)])
+                    }
                     0xB6 => {
                         // MOVZX r, r/m8 - Move with Zero-Extend byte to word/dword/qword
                         let (rm_op, reg_op, consumed) = self.decode_modrm_operands(&bytes[offset..], prefix)?;
