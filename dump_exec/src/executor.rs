@@ -228,7 +228,7 @@ impl FunctionExecutor {
         let module_info = self.memory_manager.get_loader().find_module_for_address(rip);
         let address_str = match module_info {
             Some((module_name, _base, offset)) => {
-                format!("{}+0x{:x}", module_name, offset)
+                format!("0x{:016x} ({}+0x{:x})", rip, module_name, offset)
             }
             None => format!("0x{:016x}", rip)
         };

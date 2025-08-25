@@ -123,10 +123,10 @@ impl InstructionTracer {
         let module_info = loader
             .and_then(|l| l.find_module_for_address(rip));
 
-        // Format the address with module information
+        // Format the address with module information and always show RIP
         let address_str = match module_info {
             Some((module_name, _base, offset)) => {
-                format!("{}+0x{:x}", module_name.green().bold(), offset)
+                format!("0x{:016x} ({}+0x{:x})", rip, module_name.green().bold(), offset)
             }
             None => format!("0x{:016x}", rip).yellow().to_string()
         };
