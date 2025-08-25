@@ -21,7 +21,7 @@ impl FastcallSetup {
         let mut float_args = Vec::new();
         let mut stack_args = Vec::new();
 
-        for (_i, arg) in args.into_iter().enumerate() {
+        for arg in args.into_iter() {
             match arg {
                 ArgumentType::Integer(val) | ArgumentType::Pointer(val) => {
                     if integer_args.len() < 4 {

@@ -190,6 +190,12 @@ impl Default for SegmentRegisters {
     }
 }
 
+impl Default for CpuState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CpuState {
     pub fn new() -> Self {
         Self {

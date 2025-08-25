@@ -31,6 +31,12 @@ pub struct HookManager {
     by_type: HashMap<HookType, Vec<HookId>>,
 }
 
+impl Default for HookManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl HookManager {
     pub fn new() -> Self {
         let mut by_type = HashMap::new();

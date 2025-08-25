@@ -52,6 +52,12 @@ pub struct MemoryManager {
     minidump_loader: Option<MinidumpLoader>,
 }
 
+impl Default for MemoryManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MemoryManager {
     pub fn new() -> Self {
         MemoryManager {
@@ -234,7 +240,7 @@ impl MemoryManager {
         let page_base = align_down(address, PAGE_SIZE);
         self.pages
             .get(&page_base)
-            .map_or(false, |page| page.executable)
+            .is_some_and(|page| page.executable)
     }
 
     pub fn get_loader(&self) -> &MinidumpLoader {

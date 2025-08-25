@@ -2,9 +2,9 @@ use crate::fastcall::{ArgumentType, CallingConvention};
 use crate::memory_manager::MemoryManager;
 use crate::minidump_loader::MinidumpLoader;
 use crate::tracer::InstructionTracer;
-use amd64_emu::{EmulatorError, Engine, EngineMode, HookType, Permission, Register};
+use amd64_emu::{EmulatorError, Engine, EngineMode, Permission, Register};
 use anyhow::{Context, Result};
-use iced_x86::{Decoder, DecoderOptions, Formatter, Instruction, IntelFormatter};
+use iced_x86::Formatter;
 
 pub struct FunctionExecutor {
     engine: Engine,
@@ -27,7 +27,7 @@ impl FunctionExecutor {
             .mem_map(stack_base - 0x10000, 0x10000, Permission::ALL)
             .context("Failed to map stack memory")?;
 
-        let mut tracer = InstructionTracer::new(false);
+        let tracer = InstructionTracer::new(false);
 
         let mut executor = FunctionExecutor {
             engine,
@@ -222,11 +222,11 @@ impl FunctionExecutor {
         e: EmulatorError,
     ) -> Result<()> {
         // Enhanced error reporting with instruction details
-        let instruction_len = if instruction_bytes.len() >= 1 {
+        let instruction_len = if !instruction_bytes.is_empty() {
             // Try to decode to get actual length
             let mut decoder = iced_x86::Decoder::with_ip(
                 64,
-                &instruction_bytes,
+                instruction_bytes,
                 rip,
                 iced_x86::DecoderOptions::NONE,
             );

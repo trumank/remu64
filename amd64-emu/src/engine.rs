@@ -475,7 +475,7 @@ impl Engine {
             .set(Flags::OF, dst_sign == src_sign && dst_sign != res_sign);
 
         // Parity flag
-        let parity = (result_masked as u8).count_ones() % 2 == 0;
+        let parity = (result_masked as u8).count_ones().is_multiple_of(2);
         self.cpu.rflags.set(Flags::PF, parity);
 
         self.write_operand(&inst.operands[0], result)?;
@@ -514,7 +514,7 @@ impl Engine {
         self.cpu.rflags.set(Flags::OF, overflow);
 
         // Parity flag
-        let parity = (result as u8).count_ones() % 2 == 0;
+        let parity = (result as u8).count_ones().is_multiple_of(2);
         self.cpu.rflags.set(Flags::PF, parity);
 
         self.write_operand(&inst.operands[0], result)?;
@@ -1168,7 +1168,7 @@ impl Engine {
 
     fn execute_movs(&mut self, inst: &Instruction) -> Result<()> {
         // Determine operand size from the size indicator operand
-        let size = if let Some(Operand::Immediate(1)) = inst.operands.get(0) {
+        let size = if let Some(Operand::Immediate(1)) = inst.operands.first() {
             OperandSize::Byte
         } else {
             inst.operand_size
@@ -1235,7 +1235,7 @@ impl Engine {
 
     fn execute_cmps(&mut self, inst: &Instruction) -> Result<()> {
         // Determine operand size from the size indicator operand
-        let size = if let Some(Operand::Immediate(1)) = inst.operands.get(0) {
+        let size = if let Some(Operand::Immediate(1)) = inst.operands.first() {
             OperandSize::Byte
         } else {
             inst.operand_size
@@ -1327,7 +1327,7 @@ impl Engine {
 
     fn execute_scas(&mut self, inst: &Instruction) -> Result<()> {
         // Determine operand size from the size indicator operand
-        let size = if let Some(Operand::Immediate(1)) = inst.operands.get(0) {
+        let size = if let Some(Operand::Immediate(1)) = inst.operands.first() {
             OperandSize::Byte
         } else {
             inst.operand_size
@@ -1415,7 +1415,7 @@ impl Engine {
 
     fn execute_stos(&mut self, inst: &Instruction) -> Result<()> {
         // Determine operand size from the size indicator operand
-        let size = if let Some(Operand::Immediate(1)) = inst.operands.get(0) {
+        let size = if let Some(Operand::Immediate(1)) = inst.operands.first() {
             OperandSize::Byte
         } else {
             inst.operand_size
@@ -1477,7 +1477,7 @@ impl Engine {
 
     fn execute_lods(&mut self, inst: &Instruction) -> Result<()> {
         // Determine operand size from the size indicator operand
-        let size = if let Some(Operand::Immediate(1)) = inst.operands.get(0) {
+        let size = if let Some(Operand::Immediate(1)) = inst.operands.first() {
             OperandSize::Byte
         } else {
             inst.operand_size
@@ -1623,7 +1623,7 @@ impl Engine {
                 .set(Flags::OF, dst_sign == src_sign && dst_sign != res_sign);
         }
 
-        let parity = (result as u8).count_ones() % 2 == 0;
+        let parity = (result as u8).count_ones().is_multiple_of(2);
         self.cpu.rflags.set(Flags::PF, parity);
     }
 
@@ -1633,7 +1633,7 @@ impl Engine {
         self.cpu.rflags.set(Flags::CF, false);
         self.cpu.rflags.set(Flags::OF, false);
 
-        let parity = (result as u8).count_ones() % 2 == 0;
+        let parity = (result as u8).count_ones().is_multiple_of(2);
         self.cpu.rflags.set(Flags::PF, parity);
     }
 
@@ -2117,7 +2117,7 @@ impl Engine {
                 .set(Flags::OF, dst_sign == src_sign && dst_sign != res_sign);
         }
 
-        let parity = (result_masked as u8).count_ones() % 2 == 0;
+        let parity = (result_masked as u8).count_ones().is_multiple_of(2);
         self.cpu.rflags.set(Flags::PF, parity);
     }
 

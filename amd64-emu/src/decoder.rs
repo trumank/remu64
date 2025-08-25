@@ -283,7 +283,7 @@ impl Decoder {
                 // ADD rAX, imm
                 let imm = self.decode_immediate(&bytes[offset..], self.operand_size(prefix))?;
                 offset += self.operand_size(prefix).bytes();
-                let reg = if prefix.rex.as_ref().map_or(false, |r| r.w) {
+                let reg = if prefix.rex.as_ref().is_some_and(|r| r.w) {
                     Register::RAX
                 } else if prefix.operand_size_override {
                     Register::AX
@@ -328,7 +328,7 @@ impl Decoder {
                 // OR rAX, imm
                 let imm = self.decode_immediate(&bytes[offset..], self.operand_size(prefix))?;
                 offset += self.operand_size(prefix).bytes();
-                let reg = if prefix.rex.as_ref().map_or(false, |r| r.w) {
+                let reg = if prefix.rex.as_ref().is_some_and(|r| r.w) {
                     Register::RAX
                 } else if prefix.operand_size_override {
                     Register::AX
@@ -373,7 +373,7 @@ impl Decoder {
                 // ADC rAX, imm
                 let imm = self.decode_immediate(&bytes[offset..], self.operand_size(prefix))?;
                 offset += self.operand_size(prefix).bytes();
-                let reg = if prefix.rex.as_ref().map_or(false, |r| r.w) {
+                let reg = if prefix.rex.as_ref().is_some_and(|r| r.w) {
                     Register::RAX
                 } else if prefix.operand_size_override {
                     Register::AX
@@ -418,7 +418,7 @@ impl Decoder {
                 // SBB rAX, imm
                 let imm = self.decode_immediate(&bytes[offset..], self.operand_size(prefix))?;
                 offset += self.operand_size(prefix).bytes();
-                let reg = if prefix.rex.as_ref().map_or(false, |r| r.w) {
+                let reg = if prefix.rex.as_ref().is_some_and(|r| r.w) {
                     Register::RAX
                 } else if prefix.operand_size_override {
                     Register::AX
@@ -463,7 +463,7 @@ impl Decoder {
                 // AND rAX, imm
                 let imm = self.decode_immediate(&bytes[offset..], self.operand_size(prefix))?;
                 offset += self.operand_size(prefix).bytes();
-                let reg = if prefix.rex.as_ref().map_or(false, |r| r.w) {
+                let reg = if prefix.rex.as_ref().is_some_and(|r| r.w) {
                     Register::RAX
                 } else if prefix.operand_size_override {
                     Register::AX
@@ -508,7 +508,7 @@ impl Decoder {
                 // SUB rAX, imm
                 let imm = self.decode_immediate(&bytes[offset..], self.operand_size(prefix))?;
                 offset += self.operand_size(prefix).bytes();
-                let reg = if prefix.rex.as_ref().map_or(false, |r| r.w) {
+                let reg = if prefix.rex.as_ref().is_some_and(|r| r.w) {
                     Register::RAX
                 } else if prefix.operand_size_override {
                     Register::AX
@@ -1337,7 +1337,7 @@ impl Decoder {
                 None // [disp32] or [index*scale + disp32]
             } else {
                 // For SIB base register, use REX.B extension
-                let extended = prefix.rex.as_ref().map_or(false, |r| r.b);
+                let extended = prefix.rex.as_ref().is_some_and(|r| r.b);
                 let base_reg_num = if extended { base_bits + 8 } else { base_bits };
                 Some(match base_reg_num {
                     0 => Register::RAX,
@@ -1364,7 +1364,7 @@ impl Decoder {
                 None // No index register (RSP can't be index)
             } else {
                 // For SIB index register, use REX.X extension
-                let extended = prefix.rex.as_ref().map_or(false, |r| r.x);
+                let extended = prefix.rex.as_ref().is_some_and(|r| r.x);
                 let index_reg_num = if extended { index_bits + 8 } else { index_bits };
                 Some(match index_reg_num {
                     0 => Register::RAX,
@@ -1399,7 +1399,7 @@ impl Decoder {
         }
 
         // Non-SIB cases - need to handle REX.B extension
-        let extended_rm = prefix.rex.as_ref().map_or(false, |r| r.b);
+        let extended_rm = prefix.rex.as_ref().is_some_and(|r| r.b);
         let rm_num = if extended_rm { rm_bits + 8 } else { rm_bits };
 
         let base = match rm_bits {
@@ -1428,7 +1428,7 @@ impl Decoder {
     }
 
     fn decode_register(&self, reg: u8, prefix: &InstructionPrefix, size: OperandSize) -> Register {
-        let extended = prefix.rex.as_ref().map_or(false, |r| r.r);
+        let extended = prefix.rex.as_ref().is_some_and(|r| r.r);
         let reg_num = if extended { reg + 8 } else { reg };
 
         match size {
@@ -1512,13 +1512,13 @@ impl Decoder {
         prefix: &InstructionPrefix,
         size: OperandSize,
     ) -> Register {
-        let extended = prefix.rex.as_ref().map_or(false, |r| r.b);
+        let extended = prefix.rex.as_ref().is_some_and(|r| r.b);
         let reg_num = if extended { reg + 8 } else { reg };
         self.decode_register(reg_num, prefix, size)
     }
 
     fn operand_size(&self, prefix: &InstructionPrefix) -> OperandSize {
-        if prefix.rex.as_ref().map_or(false, |r| r.w) {
+        if prefix.rex.as_ref().is_some_and(|r| r.w) {
             OperandSize::QWord
         } else if prefix.operand_size_override {
             OperandSize::Word
@@ -1533,8 +1533,7 @@ impl Decoder {
 
     fn decode_immediate(&self, bytes: &[u8], size: OperandSize) -> Result<i64> {
         match size {
-            OperandSize::Byte => bytes
-                .get(0)
+            OperandSize::Byte => bytes.first()
                 .map(|&b| b as i8 as i64)
                 .ok_or(EmulatorError::InvalidInstruction(0)),
             OperandSize::Word => {
@@ -1563,8 +1562,7 @@ impl Decoder {
 
     fn decode_displacement(&self, bytes: &[u8], size: usize) -> Result<i64> {
         match size {
-            1 => bytes
-                .get(0)
+            1 => bytes.first()
                 .map(|&b| b as i8 as i64)
                 .ok_or(EmulatorError::InvalidInstruction(0)),
             4 => {

@@ -51,8 +51,8 @@ fn main() -> Result<()> {
         return Ok(());
     };
 
-    let function_address = if function_address_str.starts_with("0x") {
-        u64::from_str_radix(&function_address_str[2..], 16)
+    let function_address = if let Some(hex) = function_address_str.strip_prefix("0x") {
+        u64::from_str_radix(hex, 16)
     } else {
         function_address_str.parse::<u64>()
     }
@@ -60,12 +60,12 @@ fn main() -> Result<()> {
 
     let mut function_args = Vec::new();
     for arg in &cli.args {
-        if arg.starts_with("ptr:0x") {
-            let ptr_value = u64::from_str_radix(&arg[6..], 16)
+        if let Some(rest) = arg.strip_prefix("ptr:0x") {
+            let ptr_value = u64::from_str_radix(rest, 16)
                 .map_err(|_| anyhow::anyhow!("Invalid pointer argument: {}", arg))?;
             function_args.push(ArgumentType::Pointer(ptr_value));
-        } else if arg.starts_with("ptr:") {
-            let ptr_value = arg[4..]
+        } else if let Some(rest) = arg.strip_prefix("ptr:") {
+            let ptr_value = rest
                 .parse::<u64>()
                 .map_err(|_| anyhow::anyhow!("Invalid pointer argument: {}", arg))?;
             function_args.push(ArgumentType::Pointer(ptr_value));

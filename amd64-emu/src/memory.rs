@@ -53,6 +53,12 @@ pub struct Memory {
     page_size: usize,
 }
 
+impl Default for Memory {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Memory {
     pub fn new() -> Self {
         Self {
@@ -72,7 +78,7 @@ impl Memory {
 
         let end = aligned_addr + aligned_size as u64;
 
-        for (_, region) in &self.regions {
+        for region in self.regions.values() {
             if (aligned_addr >= region.start && aligned_addr < region.end)
                 || (end > region.start && end <= region.end)
                 || (aligned_addr <= region.start && end >= region.end)
@@ -115,9 +121,7 @@ impl Memory {
 
     pub fn find_region(&self, addr: u64) -> Option<&MemoryRegion> {
         self.regions
-            .range(..=addr)
-            .rev()
-            .next()
+            .range(..=addr).next_back()
             .and_then(|(_, region)| {
                 if region.contains(addr) {
                     Some(region)
@@ -129,9 +133,7 @@ impl Memory {
 
     pub fn find_region_mut(&mut self, addr: u64) -> Option<&mut MemoryRegion> {
         self.regions
-            .range_mut(..=addr)
-            .rev()
-            .next()
+            .range_mut(..=addr).next_back()
             .and_then(|(_, region)| {
                 if region.contains(addr) {
                     Some(region)
