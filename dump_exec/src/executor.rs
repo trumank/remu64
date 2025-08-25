@@ -130,6 +130,11 @@ impl FunctionExecutor {
     fn ensure_memory_mapped(&mut self, address: u64) -> Result<()> {
         let page_base = address & !0xfff;
         
+        // NEVER map the null page (address 0) - this should always be unmapped
+        if page_base == 0 {
+            anyhow::bail!("Attempt to access null page at address 0x{:x} - this should never be mapped", address);
+        }
+        
         // Try to read from minidump and map it
         if let Ok(page_data) = self.memory_manager.read_memory(page_base, 4096) {
             // Map the page if not already mapped
