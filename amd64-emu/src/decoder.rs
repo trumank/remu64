@@ -1041,12 +1041,11 @@ impl Decoder {
             return Ok((base, index, scale, disp_size + 1));
         }
         
-        // Non-SIB cases
+        // Non-SIB cases - need to handle REX.B extension
+        let extended_rm = prefix.rex.as_ref().map_or(false, |r| r.b);
+        let rm_num = if extended_rm { rm_bits + 8 } else { rm_bits };
+        
         let base = match rm_bits {
-            0 => Some(Register::RAX),
-            1 => Some(Register::RCX),
-            2 => Some(Register::RDX),
-            3 => Some(Register::RBX),
             5 if mod_bits == 0 => {
                 // In 64-bit mode, [disp32] is RIP-relative
                 if matches!(self.mode, DecoderMode::Mode64) {
@@ -1055,10 +1054,10 @@ impl Decoder {
                     None  // Absolute addressing in 32/16-bit modes
                 }
             }
-            5 => Some(Register::RBP),
-            6 => Some(Register::RSI),
-            7 => Some(Register::RDI),
-            _ => None,
+            _ => {
+                // Use decode_register to properly handle REX extensions
+                Some(self.decode_register(rm_num, prefix, OperandSize::QWord))
+            }
         };
         
         let disp_size = match mod_bits {
