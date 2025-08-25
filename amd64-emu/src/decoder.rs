@@ -1919,7 +1919,15 @@ impl Decoder {
                 5 => Register::BPL,
                 6 => Register::SIL,
                 7 => Register::DIL,
-                _ => Register::AL,
+                8 => Register::R8B,
+                9 => Register::R9B,
+                10 => Register::R10B,
+                11 => Register::R11B,
+                12 => Register::R12B,
+                13 => Register::R13B,
+                14 => Register::R14B,
+                15 => Register::R15B,
+                _ => unreachable!(),
             },
             OperandSize::Word => match reg_num {
                 0 => Register::AX,
@@ -1930,7 +1938,15 @@ impl Decoder {
                 5 => Register::BP,
                 6 => Register::SI,
                 7 => Register::DI,
-                _ => Register::AX,
+                8 => Register::R8W,
+                9 => Register::R9W,
+                10 => Register::R10W,
+                11 => Register::R11W,
+                12 => Register::R12W,
+                13 => Register::R13W,
+                14 => Register::R14W,
+                15 => Register::R15W,
+                _ => unreachable!(),
             },
             OperandSize::DWord => match reg_num {
                 0 => Register::EAX,
@@ -1941,15 +1957,15 @@ impl Decoder {
                 5 => Register::EBP,
                 6 => Register::ESI,
                 7 => Register::EDI,
-                8 => Register::R8, // R8D -> R8 (write_reg will zero upper 32 bits)
-                9 => Register::R9, // R9D -> R9
-                10 => Register::R10, // R10D -> R10
-                11 => Register::R11, // R11D -> R11
-                12 => Register::R12, // R12D -> R12
-                13 => Register::R13, // R13D -> R13
-                14 => Register::R14, // R14D -> R14
-                15 => Register::R15, // R15D -> R15
-                _ => Register::EAX,
+                8 => Register::R8D,
+                9 => Register::R9D,
+                10 => Register::R10D,
+                11 => Register::R11D,
+                12 => Register::R12D,
+                13 => Register::R13D,
+                14 => Register::R14D,
+                15 => Register::R15D,
+                _ => unreachable!(),
             },
             OperandSize::QWord => match reg_num {
                 0 => Register::RAX,
@@ -1968,7 +1984,7 @@ impl Decoder {
                 13 => Register::R13,
                 14 => Register::R14,
                 15 => Register::R15,
-                _ => Register::RAX,
+                _ => unreachable!(),
             },
             OperandSize::XmmWord => match reg_num {
                 0 => Register::XMM0,
@@ -1987,7 +2003,7 @@ impl Decoder {
                 13 => Register::XMM13,
                 14 => Register::XMM14,
                 15 => Register::XMM15,
-                _ => Register::XMM0,
+                _ => unreachable!(),
             },
             OperandSize::YmmWord => match reg_num {
                 0 => Register::YMM0,
@@ -2006,7 +2022,7 @@ impl Decoder {
                 13 => Register::YMM13,
                 14 => Register::YMM14,
                 15 => Register::YMM15,
-                _ => Register::YMM0,
+                _ => unreachable!(),
             },
         }
     }
