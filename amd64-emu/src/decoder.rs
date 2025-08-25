@@ -269,6 +269,130 @@ impl Decoder {
                 };
                 (Opcode::ADD, vec![Operand::Register(reg), Operand::Immediate(imm)])
             }
+            0x08 | 0x09 => {
+                // OR r/m, r - memory/rm is destination
+                let (rm_op, reg_op, consumed) = self.decode_modrm_operands(&bytes[offset..], prefix)?;
+                offset += consumed;
+                (Opcode::OR, vec![rm_op, reg_op])
+            }
+            0x0A | 0x0B => {
+                // OR r, r/m - register is destination
+                let (rm_op, reg_op, consumed) = self.decode_modrm_operands(&bytes[offset..], prefix)?;
+                offset += consumed;
+                (Opcode::OR, vec![reg_op, rm_op])
+            }
+            0x0C => {
+                // OR AL, imm8
+                let imm = bytes.get(offset).copied().ok_or(EmulatorError::InvalidInstruction(0))?;
+                offset += 1;
+                (Opcode::OR, vec![Operand::Register(Register::AL), Operand::Immediate(imm as i64)])
+            }
+            0x0D => {
+                // OR rAX, imm
+                let imm = self.decode_immediate(&bytes[offset..], self.operand_size(prefix))?;
+                offset += self.operand_size(prefix).bytes();
+                let reg = if prefix.rex.as_ref().map_or(false, |r| r.w) {
+                    Register::RAX
+                } else if prefix.operand_size_override {
+                    Register::AX
+                } else {
+                    Register::EAX
+                };
+                (Opcode::OR, vec![Operand::Register(reg), Operand::Immediate(imm)])
+            }
+            0x10 | 0x11 => {
+                // ADC r/m, r - memory/rm is destination
+                let (rm_op, reg_op, consumed) = self.decode_modrm_operands(&bytes[offset..], prefix)?;
+                offset += consumed;
+                (Opcode::ADC, vec![rm_op, reg_op])
+            }
+            0x12 | 0x13 => {
+                // ADC r, r/m - register is destination
+                let (rm_op, reg_op, consumed) = self.decode_modrm_operands(&bytes[offset..], prefix)?;
+                offset += consumed;
+                (Opcode::ADC, vec![reg_op, rm_op])
+            }
+            0x14 => {
+                // ADC AL, imm8
+                let imm = bytes.get(offset).copied().ok_or(EmulatorError::InvalidInstruction(0))?;
+                offset += 1;
+                (Opcode::ADC, vec![Operand::Register(Register::AL), Operand::Immediate(imm as i64)])
+            }
+            0x15 => {
+                // ADC rAX, imm
+                let imm = self.decode_immediate(&bytes[offset..], self.operand_size(prefix))?;
+                offset += self.operand_size(prefix).bytes();
+                let reg = if prefix.rex.as_ref().map_or(false, |r| r.w) {
+                    Register::RAX
+                } else if prefix.operand_size_override {
+                    Register::AX
+                } else {
+                    Register::EAX
+                };
+                (Opcode::ADC, vec![Operand::Register(reg), Operand::Immediate(imm)])
+            }
+            0x18 | 0x19 => {
+                // SBB r/m, r - memory/rm is destination
+                let (rm_op, reg_op, consumed) = self.decode_modrm_operands(&bytes[offset..], prefix)?;
+                offset += consumed;
+                (Opcode::SBB, vec![rm_op, reg_op])
+            }
+            0x1A | 0x1B => {
+                // SBB r, r/m - register is destination
+                let (rm_op, reg_op, consumed) = self.decode_modrm_operands(&bytes[offset..], prefix)?;
+                offset += consumed;
+                (Opcode::SBB, vec![reg_op, rm_op])
+            }
+            0x1C => {
+                // SBB AL, imm8
+                let imm = bytes.get(offset).copied().ok_or(EmulatorError::InvalidInstruction(0))?;
+                offset += 1;
+                (Opcode::SBB, vec![Operand::Register(Register::AL), Operand::Immediate(imm as i64)])
+            }
+            0x1D => {
+                // SBB rAX, imm
+                let imm = self.decode_immediate(&bytes[offset..], self.operand_size(prefix))?;
+                offset += self.operand_size(prefix).bytes();
+                let reg = if prefix.rex.as_ref().map_or(false, |r| r.w) {
+                    Register::RAX
+                } else if prefix.operand_size_override {
+                    Register::AX
+                } else {
+                    Register::EAX
+                };
+                (Opcode::SBB, vec![Operand::Register(reg), Operand::Immediate(imm)])
+            }
+            0x20 | 0x21 => {
+                // AND r/m, r - memory/rm is destination
+                let (rm_op, reg_op, consumed) = self.decode_modrm_operands(&bytes[offset..], prefix)?;
+                offset += consumed;
+                (Opcode::AND, vec![rm_op, reg_op])
+            }
+            0x22 | 0x23 => {
+                // AND r, r/m - register is destination
+                let (rm_op, reg_op, consumed) = self.decode_modrm_operands(&bytes[offset..], prefix)?;
+                offset += consumed;
+                (Opcode::AND, vec![reg_op, rm_op])
+            }
+            0x24 => {
+                // AND AL, imm8
+                let imm = bytes.get(offset).copied().ok_or(EmulatorError::InvalidInstruction(0))?;
+                offset += 1;
+                (Opcode::AND, vec![Operand::Register(Register::AL), Operand::Immediate(imm as i64)])
+            }
+            0x25 => {
+                // AND rAX, imm
+                let imm = self.decode_immediate(&bytes[offset..], self.operand_size(prefix))?;
+                offset += self.operand_size(prefix).bytes();
+                let reg = if prefix.rex.as_ref().map_or(false, |r| r.w) {
+                    Register::RAX
+                } else if prefix.operand_size_override {
+                    Register::AX
+                } else {
+                    Register::EAX
+                };
+                (Opcode::AND, vec![Operand::Register(reg), Operand::Immediate(imm)])
+            }
             0x28 | 0x29 => {
                 // SUB r/m, r - memory/rm is destination
                 let (rm_op, reg_op, consumed) = self.decode_modrm_operands(&bytes[offset..], prefix)?;
