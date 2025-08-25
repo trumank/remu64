@@ -490,6 +490,11 @@ impl Decoder {
                 offset += 1;
                 (Opcode::JS, vec![Operand::Relative(rel as i64)])
             }
+            0x73 => {
+                let rel = bytes.get(offset).copied().ok_or(EmulatorError::InvalidInstruction(0))? as i8;
+                offset += 1;
+                (Opcode::JAE, vec![Operand::Relative(rel as i64)])
+            }
             0x79 => {
                 let rel = bytes.get(offset).copied().ok_or(EmulatorError::InvalidInstruction(0))? as i8;
                 offset += 1;
