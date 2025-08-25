@@ -337,6 +337,33 @@ impl Decoder {
                 offset += 1;
                 (Opcode::JNZ, vec![Operand::Relative(rel as i64)])
             }
+            0x83 => {
+                // Arithmetic group with 8-bit immediate
+                if bytes.len() <= offset {
+                    return Err(EmulatorError::InvalidInstruction(0));
+                }
+                let modrm = bytes[offset];
+                let reg_bits = (modrm >> 3) & 0x07;
+                let (rm_op, _, consumed) = self.decode_modrm_operands(&bytes[offset..], prefix)?;
+                offset += consumed;
+                
+                // Get the 8-bit immediate value (sign-extended to 64-bit)
+                let imm = bytes.get(offset).copied().ok_or(EmulatorError::InvalidInstruction(0))? as i8 as i64;
+                offset += 1;
+                
+                let opcode = match reg_bits {
+                    0 => Opcode::ADD,  // ADD r/m, imm8
+                    1 => Opcode::OR,   // OR r/m, imm8
+                    2 => return Err(EmulatorError::UnsupportedInstruction("ADC".into())), // ADC r/m, imm8
+                    3 => return Err(EmulatorError::UnsupportedInstruction("SBB".into())), // SBB r/m, imm8
+                    4 => Opcode::AND,  // AND r/m, imm8
+                    5 => Opcode::SUB,  // SUB r/m, imm8
+                    6 => Opcode::XOR,  // XOR r/m, imm8
+                    7 => Opcode::CMP,  // CMP r/m, imm8
+                    _ => unreachable!(),
+                };
+                (opcode, vec![rm_op, Operand::Immediate(imm)])
+            }
             0x85 => {
                 let (op1, op2, consumed) = self.decode_modrm_operands(&bytes[offset..], prefix)?;
                 offset += consumed;
