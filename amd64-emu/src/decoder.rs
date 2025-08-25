@@ -128,6 +128,7 @@ pub enum Opcode {
     CMOVAE,
     CMOVE,
     CMOVG,
+    RDTSC,
     BT,
     BTS,
     BTR,
@@ -1087,6 +1088,7 @@ impl Decoder {
                 offset += 1;
                 match secondary {
                     0x05 => (Opcode::SYSCALL, vec![]),
+                    0x31 => (Opcode::RDTSC, vec![]),
                     0x10 => {
                         let (dst, src, consumed) =
                             self.decode_modrm_xmm(&bytes[offset..], prefix)?;

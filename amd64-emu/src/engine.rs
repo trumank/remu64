@@ -420,6 +420,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             Opcode::CMOVAE => self.execute_cmovae(inst),
             Opcode::CMOVE => self.execute_cmove(inst),
             Opcode::CMOVG => self.execute_cmovg(inst),
+            Opcode::RDTSC => self.execute_rdtsc(inst),
             Opcode::BT => self.execute_bt(inst),
             Opcode::BTS => self.execute_bts(inst),
             Opcode::BTR => self.execute_btr(inst),
@@ -1788,6 +1789,28 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             }
             _ => Err(EmulatorError::InvalidInstruction(0)),
         }
+    }
+
+    fn execute_rdtsc(&mut self, inst: &Instruction) -> Result<()> {
+        // RDTSC: Read Time-Stamp Counter
+        // Returns a 64-bit timestamp counter in EDX:EAX
+        if !inst.operands.is_empty() {
+            return Err(EmulatorError::InvalidInstruction(inst.address));
+        }
+
+        // Use a simple fake timestamp that increments with each instruction
+        // In a real CPU, this would be a high-resolution timestamp
+        let timestamp = self.engine.instruction_count * 1000; // Simple fake timestamp
+        
+        // Split the 64-bit timestamp into high and low 32-bit parts
+        let low_part = timestamp as u32;
+        let high_part = (timestamp >> 32) as u32;
+        
+        // Store in EAX (low part) and EDX (high part)
+        self.engine.cpu.write_reg(Register::EAX, low_part as u64);
+        self.engine.cpu.write_reg(Register::EDX, high_part as u64);
+        
+        Ok(())
     }
 
     fn execute_bt(&mut self, inst: &Instruction) -> Result<()> {
