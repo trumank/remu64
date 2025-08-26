@@ -451,6 +451,19 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             Mnemonic::Punpckhdq => self.execute_punpckhdq(inst),
             Mnemonic::Punpcklqdq => self.execute_punpcklqdq(inst),
             Mnemonic::Punpckhqdq => self.execute_punpckhqdq(inst),
+            // SSE4.1 move with sign/zero extension
+            Mnemonic::Pmovsxbw => self.execute_pmovsxbw(inst),
+            Mnemonic::Pmovsxbd => self.execute_pmovsxbd(inst),
+            Mnemonic::Pmovsxbq => self.execute_pmovsxbq(inst),
+            Mnemonic::Pmovsxwd => self.execute_pmovsxwd(inst),
+            Mnemonic::Pmovsxwq => self.execute_pmovsxwq(inst),
+            Mnemonic::Pmovsxdq => self.execute_pmovsxdq(inst),
+            Mnemonic::Pmovzxbw => self.execute_pmovzxbw(inst),
+            Mnemonic::Pmovzxbd => self.execute_pmovzxbd(inst),
+            Mnemonic::Pmovzxbq => self.execute_pmovzxbq(inst),
+            Mnemonic::Pmovzxwd => self.execute_pmovzxwd(inst),
+            Mnemonic::Pmovzxwq => self.execute_pmovzxwq(inst),
+            Mnemonic::Pmovzxdq => self.execute_pmovzxdq(inst),
             _ => {
                 println!(
                     "Unsupported instruction: {} ({:?}) at {:#x}",
@@ -6755,6 +6768,360 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         
         // Result contains high quadword from dst and high quadword from src
         let result = (dst_value >> 64) | ((src_value >> 64) << 64);
+        
+        self.engine.cpu.write_xmm(dst_reg, result);
+        Ok(())
+    }
+    
+    fn execute_pmovsxbw(&mut self, inst: &Instruction) -> Result<()> {
+        // PMOVSXBW: Sign extend 8 bytes to 8 words
+        let dst_reg = self.convert_register(inst.op_register(0))?;
+        let src_value = match inst.op_kind(1) {
+            OpKind::Register => {
+                let src_reg = self.convert_register(inst.op_register(1))?;
+                self.engine.cpu.read_xmm(src_reg) & 0xFFFFFFFFFFFFFFFF  // Take lower 64 bits (8 bytes)
+            }
+            OpKind::Memory => {
+                let addr = self.calculate_memory_address(inst, 1)?;
+                self.read_memory_64(addr)?
+            }
+            _ => {
+                return Err(EmulatorError::UnsupportedInstruction(
+                    "Invalid PMOVSXBW source".to_string(),
+                ))
+            }
+        };
+        
+        let mut result = 0u128;
+        for i in 0..8 {
+            let byte = ((src_value >> (i * 8)) & 0xFF) as i8;
+            let word = byte as i16 as u16;
+            result |= (word as u128) << (i * 16);
+        }
+        
+        self.engine.cpu.write_xmm(dst_reg, result);
+        Ok(())
+    }
+    
+    fn execute_pmovsxbd(&mut self, inst: &Instruction) -> Result<()> {
+        // PMOVSXBD: Sign extend 4 bytes to 4 doublewords
+        let dst_reg = self.convert_register(inst.op_register(0))?;
+        let src_value = match inst.op_kind(1) {
+            OpKind::Register => {
+                let src_reg = self.convert_register(inst.op_register(1))?;
+                self.engine.cpu.read_xmm(src_reg) & 0xFFFFFFFF  // Take lower 32 bits (4 bytes)
+            }
+            OpKind::Memory => {
+                let addr = self.calculate_memory_address(inst, 1)?;
+                self.read_memory_32(addr)? as u128
+            }
+            _ => {
+                return Err(EmulatorError::UnsupportedInstruction(
+                    "Invalid PMOVSXBD source".to_string(),
+                ))
+            }
+        };
+        
+        let mut result = 0u128;
+        for i in 0..4 {
+            let byte = ((src_value >> (i * 8)) & 0xFF) as i8;
+            let dword = byte as i32 as u32;
+            result |= (dword as u128) << (i * 32);
+        }
+        
+        self.engine.cpu.write_xmm(dst_reg, result);
+        Ok(())
+    }
+    
+    fn execute_pmovsxbq(&mut self, inst: &Instruction) -> Result<()> {
+        // PMOVSXBQ: Sign extend 2 bytes to 2 quadwords
+        let dst_reg = self.convert_register(inst.op_register(0))?;
+        let src_value = match inst.op_kind(1) {
+            OpKind::Register => {
+                let src_reg = self.convert_register(inst.op_register(1))?;
+                self.engine.cpu.read_xmm(src_reg) & 0xFFFF  // Take lower 16 bits (2 bytes)
+            }
+            OpKind::Memory => {
+                let addr = self.calculate_memory_address(inst, 1)?;
+                self.read_memory_16(addr)? as u128
+            }
+            _ => {
+                return Err(EmulatorError::UnsupportedInstruction(
+                    "Invalid PMOVSXBQ source".to_string(),
+                ))
+            }
+        };
+        
+        let mut result = 0u128;
+        for i in 0..2 {
+            let byte = ((src_value >> (i * 8)) & 0xFF) as i8;
+            let qword = byte as i64 as u64;
+            result |= (qword as u128) << (i * 64);
+        }
+        
+        self.engine.cpu.write_xmm(dst_reg, result);
+        Ok(())
+    }
+    
+    fn execute_pmovsxwd(&mut self, inst: &Instruction) -> Result<()> {
+        // PMOVSXWD: Sign extend 4 words to 4 doublewords
+        let dst_reg = self.convert_register(inst.op_register(0))?;
+        let src_value = match inst.op_kind(1) {
+            OpKind::Register => {
+                let src_reg = self.convert_register(inst.op_register(1))?;
+                self.engine.cpu.read_xmm(src_reg) & 0xFFFFFFFFFFFFFFFF  // Take lower 64 bits (4 words)
+            }
+            OpKind::Memory => {
+                let addr = self.calculate_memory_address(inst, 1)?;
+                self.read_memory_64(addr)?
+            }
+            _ => {
+                return Err(EmulatorError::UnsupportedInstruction(
+                    "Invalid PMOVSXWD source".to_string(),
+                ))
+            }
+        };
+        
+        let mut result = 0u128;
+        for i in 0..4 {
+            let word = ((src_value >> (i * 16)) & 0xFFFF) as i16;
+            let dword = word as i32 as u32;
+            result |= (dword as u128) << (i * 32);
+        }
+        
+        self.engine.cpu.write_xmm(dst_reg, result);
+        Ok(())
+    }
+    
+    fn execute_pmovsxwq(&mut self, inst: &Instruction) -> Result<()> {
+        // PMOVSXWQ: Sign extend 2 words to 2 quadwords
+        let dst_reg = self.convert_register(inst.op_register(0))?;
+        let src_value = match inst.op_kind(1) {
+            OpKind::Register => {
+                let src_reg = self.convert_register(inst.op_register(1))?;
+                self.engine.cpu.read_xmm(src_reg) & 0xFFFFFFFF  // Take lower 32 bits (2 words)
+            }
+            OpKind::Memory => {
+                let addr = self.calculate_memory_address(inst, 1)?;
+                self.read_memory_32(addr)? as u128
+            }
+            _ => {
+                return Err(EmulatorError::UnsupportedInstruction(
+                    "Invalid PMOVSXWQ source".to_string(),
+                ))
+            }
+        };
+        
+        let mut result = 0u128;
+        for i in 0..2 {
+            let word = ((src_value >> (i * 16)) & 0xFFFF) as i16;
+            let qword = word as i64 as u64;
+            result |= (qword as u128) << (i * 64);
+        }
+        
+        self.engine.cpu.write_xmm(dst_reg, result);
+        Ok(())
+    }
+    
+    fn execute_pmovsxdq(&mut self, inst: &Instruction) -> Result<()> {
+        // PMOVSXDQ: Sign extend 2 doublewords to 2 quadwords
+        let dst_reg = self.convert_register(inst.op_register(0))?;
+        let src_value = match inst.op_kind(1) {
+            OpKind::Register => {
+                let src_reg = self.convert_register(inst.op_register(1))?;
+                self.engine.cpu.read_xmm(src_reg) & 0xFFFFFFFFFFFFFFFF  // Take lower 64 bits (2 dwords)
+            }
+            OpKind::Memory => {
+                let addr = self.calculate_memory_address(inst, 1)?;
+                self.read_memory_64(addr)?
+            }
+            _ => {
+                return Err(EmulatorError::UnsupportedInstruction(
+                    "Invalid PMOVSXDQ source".to_string(),
+                ))
+            }
+        };
+        
+        let mut result = 0u128;
+        for i in 0..2 {
+            let dword = ((src_value >> (i * 32)) & 0xFFFFFFFF) as i32;
+            let qword = dword as i64 as u64;
+            result |= (qword as u128) << (i * 64);
+        }
+        
+        self.engine.cpu.write_xmm(dst_reg, result);
+        Ok(())
+    }
+    
+    fn execute_pmovzxbw(&mut self, inst: &Instruction) -> Result<()> {
+        // PMOVZXBW: Zero extend 8 bytes to 8 words
+        let dst_reg = self.convert_register(inst.op_register(0))?;
+        let src_value = match inst.op_kind(1) {
+            OpKind::Register => {
+                let src_reg = self.convert_register(inst.op_register(1))?;
+                self.engine.cpu.read_xmm(src_reg) & 0xFFFFFFFFFFFFFFFF  // Take lower 64 bits (8 bytes)
+            }
+            OpKind::Memory => {
+                let addr = self.calculate_memory_address(inst, 1)?;
+                self.read_memory_64(addr)?
+            }
+            _ => {
+                return Err(EmulatorError::UnsupportedInstruction(
+                    "Invalid PMOVZXBW source".to_string(),
+                ))
+            }
+        };
+        
+        let mut result = 0u128;
+        for i in 0..8 {
+            let byte = ((src_value >> (i * 8)) & 0xFF) as u16;
+            result |= (byte as u128) << (i * 16);
+        }
+        
+        self.engine.cpu.write_xmm(dst_reg, result);
+        Ok(())
+    }
+    
+    fn execute_pmovzxbd(&mut self, inst: &Instruction) -> Result<()> {
+        // PMOVZXBD: Zero extend 4 bytes to 4 doublewords
+        let dst_reg = self.convert_register(inst.op_register(0))?;
+        let src_value = match inst.op_kind(1) {
+            OpKind::Register => {
+                let src_reg = self.convert_register(inst.op_register(1))?;
+                self.engine.cpu.read_xmm(src_reg) & 0xFFFFFFFF  // Take lower 32 bits (4 bytes)
+            }
+            OpKind::Memory => {
+                let addr = self.calculate_memory_address(inst, 1)?;
+                self.read_memory_32(addr)? as u128
+            }
+            _ => {
+                return Err(EmulatorError::UnsupportedInstruction(
+                    "Invalid PMOVZXBD source".to_string(),
+                ))
+            }
+        };
+        
+        let mut result = 0u128;
+        for i in 0..4 {
+            let byte = ((src_value >> (i * 8)) & 0xFF) as u32;
+            result |= (byte as u128) << (i * 32);
+        }
+        
+        self.engine.cpu.write_xmm(dst_reg, result);
+        Ok(())
+    }
+    
+    fn execute_pmovzxbq(&mut self, inst: &Instruction) -> Result<()> {
+        // PMOVZXBQ: Zero extend 2 bytes to 2 quadwords
+        let dst_reg = self.convert_register(inst.op_register(0))?;
+        let src_value = match inst.op_kind(1) {
+            OpKind::Register => {
+                let src_reg = self.convert_register(inst.op_register(1))?;
+                self.engine.cpu.read_xmm(src_reg) & 0xFFFF  // Take lower 16 bits (2 bytes)
+            }
+            OpKind::Memory => {
+                let addr = self.calculate_memory_address(inst, 1)?;
+                self.read_memory_16(addr)? as u128
+            }
+            _ => {
+                return Err(EmulatorError::UnsupportedInstruction(
+                    "Invalid PMOVZXBQ source".to_string(),
+                ))
+            }
+        };
+        
+        let mut result = 0u128;
+        for i in 0..2 {
+            let byte = ((src_value >> (i * 8)) & 0xFF) as u64;
+            result |= (byte as u128) << (i * 64);
+        }
+        
+        self.engine.cpu.write_xmm(dst_reg, result);
+        Ok(())
+    }
+    
+    fn execute_pmovzxwd(&mut self, inst: &Instruction) -> Result<()> {
+        // PMOVZXWD: Zero extend 4 words to 4 doublewords
+        let dst_reg = self.convert_register(inst.op_register(0))?;
+        let src_value = match inst.op_kind(1) {
+            OpKind::Register => {
+                let src_reg = self.convert_register(inst.op_register(1))?;
+                self.engine.cpu.read_xmm(src_reg) & 0xFFFFFFFFFFFFFFFF  // Take lower 64 bits (4 words)
+            }
+            OpKind::Memory => {
+                let addr = self.calculate_memory_address(inst, 1)?;
+                self.read_memory_64(addr)?
+            }
+            _ => {
+                return Err(EmulatorError::UnsupportedInstruction(
+                    "Invalid PMOVZXWD source".to_string(),
+                ))
+            }
+        };
+        
+        let mut result = 0u128;
+        for i in 0..4 {
+            let word = ((src_value >> (i * 16)) & 0xFFFF) as u32;
+            result |= (word as u128) << (i * 32);
+        }
+        
+        self.engine.cpu.write_xmm(dst_reg, result);
+        Ok(())
+    }
+    
+    fn execute_pmovzxwq(&mut self, inst: &Instruction) -> Result<()> {
+        // PMOVZXWQ: Zero extend 2 words to 2 quadwords
+        let dst_reg = self.convert_register(inst.op_register(0))?;
+        let src_value = match inst.op_kind(1) {
+            OpKind::Register => {
+                let src_reg = self.convert_register(inst.op_register(1))?;
+                self.engine.cpu.read_xmm(src_reg) & 0xFFFFFFFF  // Take lower 32 bits (2 words)
+            }
+            OpKind::Memory => {
+                let addr = self.calculate_memory_address(inst, 1)?;
+                self.read_memory_32(addr)? as u128
+            }
+            _ => {
+                return Err(EmulatorError::UnsupportedInstruction(
+                    "Invalid PMOVZXWQ source".to_string(),
+                ))
+            }
+        };
+        
+        let mut result = 0u128;
+        for i in 0..2 {
+            let word = ((src_value >> (i * 16)) & 0xFFFF) as u64;
+            result |= (word as u128) << (i * 64);
+        }
+        
+        self.engine.cpu.write_xmm(dst_reg, result);
+        Ok(())
+    }
+    
+    fn execute_pmovzxdq(&mut self, inst: &Instruction) -> Result<()> {
+        // PMOVZXDQ: Zero extend 2 doublewords to 2 quadwords
+        let dst_reg = self.convert_register(inst.op_register(0))?;
+        let src_value = match inst.op_kind(1) {
+            OpKind::Register => {
+                let src_reg = self.convert_register(inst.op_register(1))?;
+                self.engine.cpu.read_xmm(src_reg) & 0xFFFFFFFFFFFFFFFF  // Take lower 64 bits (2 dwords)
+            }
+            OpKind::Memory => {
+                let addr = self.calculate_memory_address(inst, 1)?;
+                self.read_memory_64(addr)?
+            }
+            _ => {
+                return Err(EmulatorError::UnsupportedInstruction(
+                    "Invalid PMOVZXDQ source".to_string(),
+                ))
+            }
+        };
+        
+        let mut result = 0u128;
+        for i in 0..2 {
+            let dword = ((src_value >> (i * 32)) & 0xFFFFFFFF) as u64;
+            result |= (dword as u128) << (i * 64);
+        }
         
         self.engine.cpu.write_xmm(dst_reg, result);
         Ok(())
