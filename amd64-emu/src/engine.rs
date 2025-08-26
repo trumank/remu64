@@ -322,10 +322,13 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             Mnemonic::Cmovbe => self.execute_cmovbe(inst),
             Mnemonic::Cmovns => self.execute_cmovns(inst),
             Mnemonic::Cmova => self.execute_cmova(inst),
+            Mnemonic::Cmovl => self.execute_cmovl(inst),
             Mnemonic::Cmovle => self.execute_cmovle(inst),
             Mnemonic::Cmove => self.execute_cmove(inst),
+            Mnemonic::Cmovne => self.execute_cmovne(inst),
             Mnemonic::Vmovdqu => self.execute_vmovdqu(inst),
             Mnemonic::Vmovdqa => self.execute_vmovdqa(inst),
+            Mnemonic::Movups => self.execute_movups(inst),
             Mnemonic::Movdqu => self.execute_movdqu(inst),
             Mnemonic::Movdqa => self.execute_movdqa(inst),
             Mnemonic::Movd => self.execute_movd(inst),
@@ -999,6 +1002,20 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         Ok(())
     }
 
+    fn execute_cmovl(&mut self, inst: &Instruction) -> Result<()> {
+        // CMOVL: Conditional move if less than (SF!=OF)
+        let sf = self.engine.cpu.rflags.contains(Flags::SF);
+        let of = self.engine.cpu.rflags.contains(Flags::OF);
+
+        if sf != of {
+            let src_value = self.read_operand(inst, 1)?;
+            self.write_operand(inst, 0, src_value)?;
+        }
+        // If condition is false, no move occurs
+
+        Ok(())
+    }
+
     fn execute_cmovle(&mut self, inst: &Instruction) -> Result<()> {
         // CMOVLE: Conditional move if less than or equal (ZF=1 or SF!=OF)
         let zf = self.engine.cpu.rflags.contains(Flags::ZF);
@@ -1019,6 +1036,19 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         let zf = self.engine.cpu.rflags.contains(Flags::ZF);
 
         if zf {
+            let src_value = self.read_operand(inst, 1)?;
+            self.write_operand(inst, 0, src_value)?;
+        }
+        // If condition is false, no move occurs
+
+        Ok(())
+    }
+
+    fn execute_cmovne(&mut self, inst: &Instruction) -> Result<()> {
+        // CMOVNE: Conditional move if not equal (ZF=0)
+        let zf = self.engine.cpu.rflags.contains(Flags::ZF);
+
+        if !zf {
             let src_value = self.read_operand(inst, 1)?;
             self.write_operand(inst, 0, src_value)?;
         }
@@ -1090,6 +1120,41 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             }
             _ => Err(EmulatorError::UnsupportedInstruction(format!(
                 "Unsupported VMOVDQA operand types: {:?}, {:?}",
+                inst.op_kind(0),
+                inst.op_kind(1)
+            ))),
+        }
+    }
+
+    fn execute_movups(&mut self, inst: &Instruction) -> Result<()> {
+        // MOVUPS: Move Unaligned Packed Single Precision Floating-Point Values (128-bit SSE)
+        match (inst.op_kind(0), inst.op_kind(1)) {
+            (OpKind::Register, OpKind::Memory) => {
+                // xmm, [mem] - load from memory to XMM register
+                let addr = self.calculate_memory_address(inst, 1)?;
+                let src_data = self.read_memory_128(addr)?;
+                let dst_reg = self.convert_register(inst.op_register(0))?;
+                self.engine.cpu.write_xmm(dst_reg, src_data);
+                Ok(())
+            }
+            (OpKind::Memory, OpKind::Register) => {
+                // [mem], xmm - store from XMM register to memory
+                let addr = self.calculate_memory_address(inst, 0)?;
+                let src_reg = self.convert_register(inst.op_register(1))?;
+                let src_data = self.engine.cpu.read_xmm(src_reg);
+                self.write_memory_128(addr, src_data)?;
+                Ok(())
+            }
+            (OpKind::Register, OpKind::Register) => {
+                // xmm, xmm - move XMM register to XMM register
+                let src_reg = self.convert_register(inst.op_register(1))?;
+                let dst_reg = self.convert_register(inst.op_register(0))?;
+                let src_data = self.engine.cpu.read_xmm(src_reg);
+                self.engine.cpu.write_xmm(dst_reg, src_data);
+                Ok(())
+            }
+            _ => Err(EmulatorError::UnsupportedInstruction(format!(
+                "Unsupported MOVUPS operand types: {:?}, {:?}",
                 inst.op_kind(0),
                 inst.op_kind(1)
             ))),
