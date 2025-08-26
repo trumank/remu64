@@ -1,11 +1,11 @@
-use amd64_emu::{Emulator, Register};
+use amd64_emu::{Engine, EngineMode, Permission, Register};
 
 #[test]
 fn test_paddb() {
-    let mut emu = Emulator::new_x86_64();
+    let mut engine = Engine::new(EngineMode::Mode64);
     
     // Map memory
-    emu.mem_map(0x1000, 0x1000, 7).unwrap();
+    engine.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
     
     // Test PADDB - Add packed bytes
     let code = vec![
@@ -37,15 +37,15 @@ fn test_paddb() {
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     ];
     
-    emu.mem_write(0x1000, &code).unwrap();
-    emu.set_reg(Register::RIP, 0x1000);
+    engine.mem_write(0x1000, &code).unwrap();
+    engine.reg_write(Register::RIP, 0x1000);
     
     // Execute instructions
-    assert!(emu.run(0x1000).is_ok());
+    assert!(engine.run(0x1000, 100000).is_ok());
     
     // Check result
     let mut result = vec![0u8; 16];
-    emu.mem_read(0x1040, &mut result).unwrap();
+    engine.mem_read(0x1040, &mut result).unwrap();
     
     // Expected: Each byte is the sum of corresponding bytes
     assert_eq!(result[0], 0x11);  // 0x10 + 0x01
@@ -68,10 +68,10 @@ fn test_paddb() {
 
 #[test]
 fn test_paddw() {
-    let mut emu = Emulator::new_x86_64();
+    let mut engine = Engine::new(EngineMode::Mode64);
     
     // Map memory
-    emu.mem_map(0x1000, 0x1000, 7).unwrap();
+    engine.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
     
     // Test PADDW - Add packed words (16-bit)
     let code = vec![
@@ -115,15 +115,15 @@ fn test_paddw() {
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     ];
     
-    emu.mem_write(0x1000, &code).unwrap();
-    emu.set_reg(Register::RIP, 0x1000);
+    engine.mem_write(0x1000, &code).unwrap();
+    engine.reg_write(Register::RIP, 0x1000);
     
     // Execute instructions
-    assert!(emu.run(0x1000).is_ok());
+    assert!(engine.run(0x1000, 100000).is_ok());
     
     // Check result
     let mut result = vec![0u8; 16];
-    emu.mem_read(0x1040, &mut result).unwrap();
+    engine.mem_read(0x1040, &mut result).unwrap();
     
     // Check each 16-bit word
     assert_eq!(&result[0..2], &[0x01, 0x10]);   // 0x1000 + 0x0001 = 0x1001
@@ -138,10 +138,10 @@ fn test_paddw() {
 
 #[test]
 fn test_paddd() {
-    let mut emu = Emulator::new_x86_64();
+    let mut engine = Engine::new(EngineMode::Mode64);
     
     // Map memory
-    emu.mem_map(0x1000, 0x1000, 7).unwrap();
+    engine.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
     
     // Test PADDD - Add packed doublewords (32-bit)
     let code = vec![
@@ -177,15 +177,15 @@ fn test_paddd() {
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     ];
     
-    emu.mem_write(0x1000, &code).unwrap();
-    emu.set_reg(Register::RIP, 0x1000);
+    engine.mem_write(0x1000, &code).unwrap();
+    engine.reg_write(Register::RIP, 0x1000);
     
     // Execute instructions
-    assert!(emu.run(0x1000).is_ok());
+    assert!(engine.run(0x1000, 100000).is_ok());
     
     // Check result
     let mut result = vec![0u8; 16];
-    emu.mem_read(0x1040, &mut result).unwrap();
+    engine.mem_read(0x1040, &mut result).unwrap();
     
     // Check each 32-bit dword
     assert_eq!(&result[0..4], &[0x01, 0x00, 0x00, 0x10]);   // 0x10000000 + 0x00000001
@@ -196,10 +196,10 @@ fn test_paddd() {
 
 #[test]
 fn test_paddq() {
-    let mut emu = Emulator::new_x86_64();
+    let mut engine = Engine::new(EngineMode::Mode64);
     
     // Map memory
-    emu.mem_map(0x1000, 0x1000, 7).unwrap();
+    engine.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
     
     // Test PADDQ - Add packed quadwords (64-bit)
     let code = vec![
@@ -231,15 +231,15 @@ fn test_paddq() {
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     ];
     
-    emu.mem_write(0x1000, &code).unwrap();
-    emu.set_reg(Register::RIP, 0x1000);
+    engine.mem_write(0x1000, &code).unwrap();
+    engine.reg_write(Register::RIP, 0x1000);
     
     // Execute instructions
-    assert!(emu.run(0x1000).is_ok());
+    assert!(engine.run(0x1000, 100000).is_ok());
     
     // Check result
     let mut result = vec![0u8; 16];
-    emu.mem_read(0x1040, &mut result).unwrap();
+    engine.mem_read(0x1040, &mut result).unwrap();
     
     // Check each 64-bit qword
     assert_eq!(&result[0..8], &[0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10]); // 0x1000000000000000 + 1
@@ -248,10 +248,10 @@ fn test_paddq() {
 
 #[test]
 fn test_paddb_memory_operand() {
-    let mut emu = Emulator::new_x86_64();
+    let mut engine = Engine::new(EngineMode::Mode64);
     
     // Map memory
-    emu.mem_map(0x1000, 0x1000, 7).unwrap();
+    engine.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
     
     // Test PADDB with memory operand
     let code = vec![
@@ -281,15 +281,15 @@ fn test_paddb_memory_operand() {
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     ];
     
-    emu.mem_write(0x1000, &code).unwrap();
-    emu.set_reg(Register::RIP, 0x1000);
+    engine.mem_write(0x1000, &code).unwrap();
+    engine.reg_write(Register::RIP, 0x1000);
     
     // Execute instructions
-    assert!(emu.run(0x1000).is_ok());
+    assert!(engine.run(0x1000, 100000).is_ok());
     
     // Check result
     let mut result = vec![0u8; 16];
-    emu.mem_read(0x1040, &mut result).unwrap();
+    engine.mem_read(0x1040, &mut result).unwrap();
     
     // Check a few bytes
     assert_eq!(result[0], 0x11);  // 0x01 + 0x10
