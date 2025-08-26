@@ -432,6 +432,12 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             Mnemonic::Packsswb => self.execute_packsswb(inst),
             Mnemonic::Packuswb => self.execute_packuswb(inst),
             Mnemonic::Packssdw => self.execute_packssdw(inst),
+            Mnemonic::Punpcklbw => self.execute_punpcklbw(inst),
+            Mnemonic::Punpckhbw => self.execute_punpckhbw(inst),
+            Mnemonic::Punpckldq => self.execute_punpckldq(inst),
+            Mnemonic::Punpckhdq => self.execute_punpckhdq(inst),
+            Mnemonic::Punpcklqdq => self.execute_punpcklqdq(inst),
+            Mnemonic::Punpckhqdq => self.execute_punpckhqdq(inst),
             _ => {
                 println!(
                     "Unsupported instruction: {} ({:?}) at {:#x}",
