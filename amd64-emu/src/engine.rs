@@ -428,6 +428,9 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             Mnemonic::Psrlq => self.execute_psrlq(inst),
             Mnemonic::Psraw => self.execute_psraw(inst),
             Mnemonic::Psrad => self.execute_psrad(inst),
+            Mnemonic::Packsswb => self.execute_packsswb(inst),
+            Mnemonic::Packuswb => self.execute_packuswb(inst),
+            Mnemonic::Packssdw => self.execute_packssdw(inst),
             _ => {
                 println!(
                     "Unsupported instruction: {} ({:?}) at {:#x}",
@@ -5418,6 +5421,162 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             let dword = ((dst_value >> (i * 32)) & 0xFFFFFFFF) as u32 as i32;
             let shifted = (dword >> shift) as u32;
             result |= (shifted as u128) << (i * 32);
+        }
+        
+        self.engine.cpu.write_xmm(dst_reg, result);
+        Ok(())
+    }
+
+    fn execute_packsswb(&mut self, inst: &Instruction) -> Result<()> {
+        // PACKSSWB: Pack signed words to signed bytes with saturation
+        let dst_reg = self.convert_register(inst.op_register(0))?;
+        let src_value = match inst.op_kind(1) {
+            OpKind::Register => {
+                let src_reg = self.convert_register(inst.op_register(1))?;
+                self.engine.cpu.read_xmm(src_reg)
+            }
+            OpKind::Memory => {
+                let addr = self.calculate_memory_address(inst, 1)?;
+                self.read_memory_128(addr)?
+            }
+            _ => {
+                return Err(EmulatorError::UnsupportedInstruction(
+                    "Invalid PACKSSWB source".to_string(),
+                ))
+            }
+        };
+
+        let dst_value = self.engine.cpu.read_xmm(dst_reg);
+        let mut result = 0u128;
+        
+        // Process destination words (low 8 bytes of result)
+        for i in 0..8 {
+            let word = ((dst_value >> (i * 16)) & 0xFFFF) as i16;
+            let byte = if word > 127 {
+                127i8
+            } else if word < -128 {
+                -128i8
+            } else {
+                word as i8
+            };
+            result |= ((byte as u8) as u128) << (i * 8);
+        }
+        
+        // Process source words (high 8 bytes of result)
+        for i in 0..8 {
+            let word = ((src_value >> (i * 16)) & 0xFFFF) as i16;
+            let byte = if word > 127 {
+                127i8
+            } else if word < -128 {
+                -128i8
+            } else {
+                word as i8
+            };
+            result |= ((byte as u8) as u128) << ((i + 8) * 8);
+        }
+        
+        self.engine.cpu.write_xmm(dst_reg, result);
+        Ok(())
+    }
+
+    fn execute_packuswb(&mut self, inst: &Instruction) -> Result<()> {
+        // PACKUSWB: Pack signed words to unsigned bytes with saturation
+        let dst_reg = self.convert_register(inst.op_register(0))?;
+        let src_value = match inst.op_kind(1) {
+            OpKind::Register => {
+                let src_reg = self.convert_register(inst.op_register(1))?;
+                self.engine.cpu.read_xmm(src_reg)
+            }
+            OpKind::Memory => {
+                let addr = self.calculate_memory_address(inst, 1)?;
+                self.read_memory_128(addr)?
+            }
+            _ => {
+                return Err(EmulatorError::UnsupportedInstruction(
+                    "Invalid PACKUSWB source".to_string(),
+                ))
+            }
+        };
+
+        let dst_value = self.engine.cpu.read_xmm(dst_reg);
+        let mut result = 0u128;
+        
+        // Process destination words (low 8 bytes of result)
+        for i in 0..8 {
+            let word = ((dst_value >> (i * 16)) & 0xFFFF) as i16;
+            let byte = if word > 255 {
+                255u8
+            } else if word < 0 {
+                0u8
+            } else {
+                word as u8
+            };
+            result |= (byte as u128) << (i * 8);
+        }
+        
+        // Process source words (high 8 bytes of result)
+        for i in 0..8 {
+            let word = ((src_value >> (i * 16)) & 0xFFFF) as i16;
+            let byte = if word > 255 {
+                255u8
+            } else if word < 0 {
+                0u8
+            } else {
+                word as u8
+            };
+            result |= (byte as u128) << ((i + 8) * 8);
+        }
+        
+        self.engine.cpu.write_xmm(dst_reg, result);
+        Ok(())
+    }
+
+    fn execute_packssdw(&mut self, inst: &Instruction) -> Result<()> {
+        // PACKSSDW: Pack signed doublewords to signed words with saturation
+        let dst_reg = self.convert_register(inst.op_register(0))?;
+        let src_value = match inst.op_kind(1) {
+            OpKind::Register => {
+                let src_reg = self.convert_register(inst.op_register(1))?;
+                self.engine.cpu.read_xmm(src_reg)
+            }
+            OpKind::Memory => {
+                let addr = self.calculate_memory_address(inst, 1)?;
+                self.read_memory_128(addr)?
+            }
+            _ => {
+                return Err(EmulatorError::UnsupportedInstruction(
+                    "Invalid PACKSSDW source".to_string(),
+                ))
+            }
+        };
+
+        let dst_value = self.engine.cpu.read_xmm(dst_reg);
+        let mut result = 0u128;
+        
+        // Process destination dwords (low 4 words of result)
+        for i in 0..4 {
+            let dword = ((dst_value >> (i * 32)) & 0xFFFFFFFF) as i32;
+            let word = if dword > 32767 {
+                32767i16
+            } else if dword < -32768 {
+                -32768i16
+            } else {
+                dword as i16
+            };
+            result |= ((word as u16) as u128) << (i * 16);
+        }
+        
+        // Process source dwords (high 4 words of result)
+        for i in 0..4 {
+            let dword = ((src_value >> (i * 32)) & 0xFFFFFFFF) as i32;
+            let word = if dword > 32767 {
+                32767i16
+            } else if dword < -32768 {
+                -32768i16
+            } else {
+                dword as i16
+            };
+            result |= ((word as u16) as u128) << ((i + 4) * 16);
         }
         
         self.engine.cpu.write_xmm(dst_reg, result);
