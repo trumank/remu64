@@ -1,5 +1,4 @@
 pub mod cpu;
-pub mod decoder;
 pub mod engine;
 pub mod error;
 pub mod hooks;

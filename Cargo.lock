@@ -18,6 +18,7 @@ dependencies = [
  "bitflags",
  "criterion",
  "env_logger",
+ "iced-x86",
  "log",
  "proptest",
  "thiserror",
