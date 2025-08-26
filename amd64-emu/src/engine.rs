@@ -406,6 +406,10 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             Mnemonic::Psubw => self.execute_psubw(inst),
             Mnemonic::Psubd => self.execute_psubd(inst),
             Mnemonic::Psubq => self.execute_psubq(inst),
+            Mnemonic::Pmullw => self.execute_pmullw(inst),
+            Mnemonic::Pmulhw => self.execute_pmulhw(inst),
+            Mnemonic::Pmulhuw => self.execute_pmulhuw(inst),
+            Mnemonic::Pmuludq => self.execute_pmuludq(inst),
             Mnemonic::Pand => self.execute_pand(inst),
             Mnemonic::Pandn => self.execute_pandn(inst),
             Mnemonic::Por => self.execute_por(inst),
@@ -3116,6 +3120,144 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         let diff_high = dst_high.wrapping_sub(src_high);
         
         let result = (diff_low as u128) | ((diff_high as u128) << 64);
+        
+        self.engine.cpu.write_xmm(dst_reg, result);
+        Ok(())
+    }
+
+    fn execute_pmullw(&mut self, inst: &Instruction) -> Result<()> {
+        // PMULLW: Multiply packed signed word integers and store low result
+        let dst_reg = self.convert_register(inst.op_register(0))?;
+        let src_value = match inst.op_kind(1) {
+            OpKind::Register => {
+                let src_reg = self.convert_register(inst.op_register(1))?;
+                self.engine.cpu.read_xmm(src_reg)
+            }
+            OpKind::Memory => {
+                let addr = self.calculate_memory_address(inst, 1)?;
+                self.read_memory_128(addr)?
+            }
+            _ => {
+                return Err(EmulatorError::UnsupportedInstruction(
+                    "Invalid PMULLW source".to_string(),
+                ))
+            }
+        };
+        
+        let dst_value = self.engine.cpu.read_xmm(dst_reg);
+        let mut result = 0u128;
+        
+        // Multiply each pair of 16-bit signed integers and store low 16 bits
+        for i in 0..8 {
+            let dst_word = ((dst_value >> (i * 16)) & 0xFFFF) as i16;
+            let src_word = ((src_value >> (i * 16)) & 0xFFFF) as i16;
+            let product = (dst_word as i32) * (src_word as i32);
+            result |= ((product & 0xFFFF) as u128) << (i * 16);
+        }
+        
+        self.engine.cpu.write_xmm(dst_reg, result);
+        Ok(())
+    }
+
+    fn execute_pmulhw(&mut self, inst: &Instruction) -> Result<()> {
+        // PMULHW: Multiply packed signed word integers and store high result
+        let dst_reg = self.convert_register(inst.op_register(0))?;
+        let src_value = match inst.op_kind(1) {
+            OpKind::Register => {
+                let src_reg = self.convert_register(inst.op_register(1))?;
+                self.engine.cpu.read_xmm(src_reg)
+            }
+            OpKind::Memory => {
+                let addr = self.calculate_memory_address(inst, 1)?;
+                self.read_memory_128(addr)?
+            }
+            _ => {
+                return Err(EmulatorError::UnsupportedInstruction(
+                    "Invalid PMULHW source".to_string(),
+                ))
+            }
+        };
+        
+        let dst_value = self.engine.cpu.read_xmm(dst_reg);
+        let mut result = 0u128;
+        
+        // Multiply each pair of 16-bit signed integers and store high 16 bits
+        for i in 0..8 {
+            let dst_word = ((dst_value >> (i * 16)) & 0xFFFF) as i16;
+            let src_word = ((src_value >> (i * 16)) & 0xFFFF) as i16;
+            let product = (dst_word as i32) * (src_word as i32);
+            result |= (((product >> 16) & 0xFFFF) as u128) << (i * 16);
+        }
+        
+        self.engine.cpu.write_xmm(dst_reg, result);
+        Ok(())
+    }
+
+    fn execute_pmulhuw(&mut self, inst: &Instruction) -> Result<()> {
+        // PMULHUW: Multiply packed unsigned word integers and store high result
+        let dst_reg = self.convert_register(inst.op_register(0))?;
+        let src_value = match inst.op_kind(1) {
+            OpKind::Register => {
+                let src_reg = self.convert_register(inst.op_register(1))?;
+                self.engine.cpu.read_xmm(src_reg)
+            }
+            OpKind::Memory => {
+                let addr = self.calculate_memory_address(inst, 1)?;
+                self.read_memory_128(addr)?
+            }
+            _ => {
+                return Err(EmulatorError::UnsupportedInstruction(
+                    "Invalid PMULHUW source".to_string(),
+                ))
+            }
+        };
+        
+        let dst_value = self.engine.cpu.read_xmm(dst_reg);
+        let mut result = 0u128;
+        
+        // Multiply each pair of 16-bit unsigned integers and store high 16 bits
+        for i in 0..8 {
+            let dst_word = ((dst_value >> (i * 16)) & 0xFFFF) as u16;
+            let src_word = ((src_value >> (i * 16)) & 0xFFFF) as u16;
+            let product = (dst_word as u32) * (src_word as u32);
+            result |= (((product >> 16) & 0xFFFF) as u128) << (i * 16);
+        }
+        
+        self.engine.cpu.write_xmm(dst_reg, result);
+        Ok(())
+    }
+
+    fn execute_pmuludq(&mut self, inst: &Instruction) -> Result<()> {
+        // PMULUDQ: Multiply packed unsigned doubleword integers
+        let dst_reg = self.convert_register(inst.op_register(0))?;
+        let src_value = match inst.op_kind(1) {
+            OpKind::Register => {
+                let src_reg = self.convert_register(inst.op_register(1))?;
+                self.engine.cpu.read_xmm(src_reg)
+            }
+            OpKind::Memory => {
+                let addr = self.calculate_memory_address(inst, 1)?;
+                self.read_memory_128(addr)?
+            }
+            _ => {
+                return Err(EmulatorError::UnsupportedInstruction(
+                    "Invalid PMULUDQ source".to_string(),
+                ))
+            }
+        };
+        
+        let dst_value = self.engine.cpu.read_xmm(dst_reg);
+        
+        // Multiply low dwords of each 64-bit element, store 64-bit results
+        let dst_low_dword = (dst_value & 0xFFFFFFFF) as u32;
+        let src_low_dword = (src_value & 0xFFFFFFFF) as u32;
+        let product_low = (dst_low_dword as u64) * (src_low_dword as u64);
+        
+        let dst_high_dword = ((dst_value >> 64) & 0xFFFFFFFF) as u32;
+        let src_high_dword = ((src_value >> 64) & 0xFFFFFFFF) as u32;
+        let product_high = (dst_high_dword as u64) * (src_high_dword as u64);
+        
+        let result = (product_low as u128) | ((product_high as u128) << 64);
         
         self.engine.cpu.write_xmm(dst_reg, result);
         Ok(())
