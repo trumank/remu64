@@ -394,6 +394,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             Mnemonic::Loopne => self.execute_loopne(inst),
             Mnemonic::Shufps => self.execute_shufps(inst),
             Mnemonic::Unpcklps => self.execute_unpcklps(inst),
+            Mnemonic::Unpckhps => self.execute_unpckhps(inst),
             _ => {
                 println!(
                     "Unsupported instruction: {} ({:?}) at {:#x}",
@@ -2675,6 +2676,40 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             | ((src_float0 as u128) << 32)
             | ((dst_float1 as u128) << 64)
             | ((src_float1 as u128) << 96);
+            
+        self.engine.cpu.write_xmm(dst_reg, result);
+        Ok(())
+    }
+
+    fn execute_unpckhps(&mut self, inst: &Instruction) -> Result<()> {
+        // UNPCKHPS: Unpack and Interleave High Packed Single-Precision Floating-Point Values
+        // Interleaves the high quadword (2 floats) of destination and source
+        let dst_reg = self.convert_register(inst.op_register(0))?;
+        let src_value = match inst.op_kind(1) {
+            OpKind::Register => {
+                let src_reg = self.convert_register(inst.op_register(1))?;
+                self.engine.cpu.read_xmm(src_reg)
+            }
+            OpKind::Memory => {
+                let addr = self.calculate_memory_address(inst, 1)?;
+                self.read_memory_128(addr)?
+            }
+            _ => return Err(EmulatorError::UnsupportedOperandType),
+        };
+        
+        let dst_value = self.engine.cpu.read_xmm(dst_reg);
+        
+        // Extract the high quadword (last 2 floats) from each operand
+        let dst_float2 = (dst_value >> 64) as u32;
+        let dst_float3 = (dst_value >> 96) as u32;
+        let src_float2 = (src_value >> 64) as u32;
+        let src_float3 = (src_value >> 96) as u32;
+        
+        // Interleave: dst[2], src[2], dst[3], src[3]
+        let result = (dst_float2 as u128)
+            | ((src_float2 as u128) << 32)
+            | ((dst_float3 as u128) << 64)
+            | ((src_float3 as u128) << 96);
             
         self.engine.cpu.write_xmm(dst_reg, result);
         Ok(())
