@@ -224,7 +224,7 @@ impl MemoryManager {
     }
 
     pub fn allocate_stack(&mut self, size: u64) -> Result<u64> {
-        let stack_base = 0x7fff_0000_0000u64;
+        let stack_base = 0x500000u64;
         let aligned_size = align_up(size as usize, PAGE_SIZE as usize);
 
         for i in 0..(aligned_size / PAGE_SIZE as usize) {
