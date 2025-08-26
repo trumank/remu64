@@ -107,7 +107,7 @@ fn test_pmulhw() {
     assert_eq!(u16::from_le_bytes([result[8], result[9]]), 0xFFFF);  // (-32768 * 2) >> 16 = -1
     assert_eq!(u16::from_le_bytes([result[10], result[11]]), 0xFFFF); // (-1 * 0x1000) >> 16
     assert_eq!(u16::from_le_bytes([result[12], result[13]]), 0xFFFF); // (-16384 * 4) >> 16 = -1
-    assert_eq!(u16::from_le_bytes([result[14], result[15]]), 0x00C);  // (0x6000 * 0x200) >> 16
+    assert_eq!(u16::from_le_bytes([result[14], result[15]]), 0x00C0);  // (0x6000 * 0x200) >> 16
 }
 
 #[test]
@@ -161,8 +161,8 @@ fn test_pmulhuw() {
     assert_eq!(u16::from_le_bytes([result[6], result[7]]), 1);       // (0xFFFF * 2) >> 16 = 1
     assert_eq!(u16::from_le_bytes([result[8], result[9]]), 1);       // (0x8000 * 2) >> 16 = 1
     assert_eq!(u16::from_le_bytes([result[10], result[11]]), 0);     // (0xFFFF * 1) >> 16 = 0
-    assert_eq!(u16::from_le_bytes([result[12], result[13]]), 2);     // (0xC000 * 4) >> 16 = 2
-    assert_eq!(u16::from_le_bytes([result[14], result[15]]), 0x0C);  // (0x6000 * 0x200) >> 16
+    assert_eq!(u16::from_le_bytes([result[12], result[13]]), 3);     // (0xC000 * 4) >> 16 = 3
+    assert_eq!(u16::from_le_bytes([result[14], result[15]]), 0xC0);  // (0x6000 * 0x200) >> 16
 }
 
 #[test]
@@ -215,7 +215,7 @@ fn test_pmuludq() {
                0x20000000000000);  // 0x10000000 * 0x02000000
     assert_eq!(u64::from_le_bytes([result[8], result[9], result[10], result[11],
                                    result[12], result[13], result[14], result[15]]), 
-               0xFFFF0000);  // 0xFFFFFFFF * 0x00010000
+               0xFFFFFFFF0000);  // 0xFFFFFFFF * 0x00010000
 }
 
 #[test]
