@@ -18,52 +18,75 @@ impl<'a> HookManager for ExecutionHooks<'a> {
         &mut self,
         engine: &mut Engine,
         address: u64,
-        _size: usize,
+        size: usize,
     ) -> amd64_emu::Result<bool> {
-        let page_base = address & !0xfff;
+        // Calculate all pages that need to be mapped for this memory access
+        let start_page = address & !0xfff;
+        let end_address = address + size as u64 - 1;
+        let end_page = end_address & !0xfff;
 
-        // NEVER map the null page (address 0)
-        if page_base == 0 {
-            return Ok(false); // Don't handle null page faults
-        }
+        let mut success = true;
+        let mut current_page = start_page;
 
-        // Try to read from minidump and map it in the engine
-        if let Ok(page_data) = self.memory_manager.read_memory(page_base, 4096) {
-            // Map the page in the engine
-            match engine.mem_map(page_base, 4096, Permission::ALL) {
-                Ok(()) => {
-                    // Write the data to the mapped page
-                    match engine.mem_write(page_base, &page_data) {
-                        Ok(()) => {
-                            Ok(true) // Successfully handled the fault
-                        }
-                        Err(_) => {
-                            println!("Failed to write data to mapped page at 0x{:x}", page_base);
-                            Ok(false) // Failed to write data
-                        }
-                    }
-                }
-                Err(_) => {
-                    // Page might already be mapped, try to write anyway
-                    match engine.mem_write(page_base, &page_data) {
-                        Ok(()) => {
-                            println!("Page already mapped, wrote data at 0x{:x}", page_base);
-                            Ok(true) // Successfully handled the fault
-                        }
-                        Err(_) => {
-                            println!("Failed to map or write page at 0x{:x}", page_base);
-                            Ok(false) // Failed to handle
-                        }
-                    }
-                }
+        // Map all pages that are touched by this memory access
+        while current_page <= end_page {
+            // NEVER map the null page (address 0)
+            if current_page == 0 {
+                println!("Refusing to map null page");
+                success = false;
+                break;
             }
-        } else {
-            println!("No data in minidump for page at 0x{:x}", page_base);
-            Ok(false) // Can't handle this fault - no data in minidump
+
+            // Try to read from minidump and map this page in the engine
+            if let Ok(page_data) = self.memory_manager.read_memory(current_page, 4096) {
+                // Map the page in the engine
+                match engine.mem_map(current_page, 4096, Permission::ALL) {
+                    Ok(()) => {
+                        // Write the data to the mapped page
+                        match engine.mem_write(current_page, &page_data) {
+                            Ok(()) => {
+                                // Successfully mapped this page
+                            }
+                            Err(_) => {
+                                println!(
+                                    "Failed to write data to mapped page at 0x{:x}",
+                                    current_page
+                                );
+                                success = false;
+                                break;
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        // Page might already be mapped, try to write anyway
+                        match engine.mem_write(current_page, &page_data) {
+                            Ok(()) => {
+                                println!("Page already mapped, wrote data at 0x{:x}", current_page);
+                            }
+                            Err(_) => {
+                                println!("Failed to map or write page at 0x{:x}", current_page);
+                                success = false;
+                                break;
+                            }
+                        }
+                    }
+                }
+            } else {
+                println!("No data in minidump for page at 0x{:x}", current_page);
+                success = false;
+                break;
+            }
+
+            current_page += 4096; // Move to next page
         }
+
+        Ok(success)
     }
 
     fn on_code(&mut self, engine: &mut Engine, address: u64, size: usize) -> amd64_emu::Result<()> {
+        // Increment instruction counter
+        self.instruction_count += 1;
+
         // Handle instruction tracing
         if self.tracer.is_enabled() {
             let mut instruction_bytes = vec![0; size];

@@ -319,10 +319,14 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             Mnemonic::Cmovb => self.execute_cmovb(inst),
             Mnemonic::Cmovg => self.execute_cmovg(inst),
             Mnemonic::Cmovbe => self.execute_cmovbe(inst),
+            Mnemonic::Cmovns => self.execute_cmovns(inst),
             Mnemonic::Vmovdqu => self.execute_vmovdqu(inst),
             Mnemonic::Vzeroupper => self.execute_vzeroupper(inst),
             Mnemonic::Imul => self.execute_imul(inst),
             Mnemonic::Nop => self.execute_nop(inst),
+            Mnemonic::Neg => self.execute_neg(inst),
+            Mnemonic::Sbb => self.execute_sbb(inst),
+            Mnemonic::Rol => self.execute_rol(inst),
             _ => {
                 println!(
                     "Unsupported instruction: {} ({:?}) at {:#x}",
@@ -788,6 +792,19 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         Ok(())
     }
 
+    fn execute_cmovns(&mut self, inst: &Instruction) -> Result<()> {
+        // CMOVNS: Conditional move if not sign (SF=0)
+        let sf = self.engine.cpu.rflags.contains(Flags::SF);
+
+        if !sf {
+            let src_value = self.read_operand(inst, 1)?;
+            self.write_operand(inst, 0, src_value)?;
+        }
+        // If condition is false, no move occurs
+
+        Ok(())
+    }
+
     fn execute_vmovdqu(&mut self, inst: &Instruction) -> Result<()> {
         // VMOVDQU: Vector Move Unaligned Packed Integer Values (256-bit)
         // Can move from YMM to memory, memory to YMM, or YMM to YMM
@@ -839,38 +856,169 @@ impl<H: HookManager> ExecutionContext<'_, H> {
 
     fn execute_imul(&mut self, inst: &Instruction) -> Result<()> {
         // IMUL: Integer Multiply (signed)
-        // Handle 2-operand form: reg = reg * r/m
-        if inst.op_count() != 2 {
-            return Err(EmulatorError::UnsupportedInstruction(format!(
-                "IMUL with {} operands not supported",
-                inst.op_count()
-            )));
+        match inst.op_count() {
+            1 => {
+                // 1-operand form: RAX = RAX * operand, result in RDX:RAX
+                let multiplicand = self.engine.cpu.read_reg(Register::RAX) as i64;
+                let multiplier = self.read_operand(inst, 0)? as i64;
+                let result = (multiplicand as i128) * (multiplier as i128);
+
+                // Store low part in RAX, high part in RDX
+                self.engine.cpu.write_reg(Register::RAX, result as u64);
+                self.engine
+                    .cpu
+                    .write_reg(Register::RDX, (result >> 64) as u64);
+
+                // Set CF and OF if high part is not sign extension of low part
+                let low_part = result as i64;
+                let high_part = (result >> 64) as i64;
+                let overflow = high_part != if low_part < 0 { -1 } else { 0 };
+
+                self.engine.cpu.rflags.set(Flags::CF, overflow);
+                self.engine.cpu.rflags.set(Flags::OF, overflow);
+            }
+            2 => {
+                // 2-operand form: reg = reg * r/m
+                let multiplicand = self.read_operand(inst, 0)? as i64;
+                let multiplier = self.read_operand(inst, 1)? as i64;
+                let result = (multiplicand as i128) * (multiplier as i128);
+
+                // Store result in destination register
+                self.write_operand(inst, 0, result as u64)?;
+
+                // Set CF and OF if result doesn't fit in destination size (signed)
+                let dest_size = self.get_operand_size_from_instruction(inst, 0)?;
+                let dest_bits = dest_size * 8;
+                let max_positive = (1i128 << (dest_bits - 1)) - 1;
+                let min_negative = -(1i128 << (dest_bits - 1));
+                let overflow = result > max_positive || result < min_negative;
+
+                self.engine.cpu.rflags.set(Flags::CF, overflow);
+                self.engine.cpu.rflags.set(Flags::OF, overflow);
+            }
+            3 => {
+                // 3-operand form: reg = r/m * immediate
+                let multiplicand = self.read_operand(inst, 1)? as i64;
+                let multiplier = self.read_operand(inst, 2)? as i64;
+                let result = (multiplicand as i128) * (multiplier as i128);
+
+                // Store result in destination register
+                self.write_operand(inst, 0, result as u64)?;
+
+                // Set CF and OF if result doesn't fit in destination size (signed)
+                let dest_size = self.get_operand_size_from_instruction(inst, 0)?;
+                let dest_bits = dest_size * 8;
+                let max_positive = (1i128 << (dest_bits - 1)) - 1;
+                let min_negative = -(1i128 << (dest_bits - 1));
+                let overflow = result > max_positive || result < min_negative;
+
+                self.engine.cpu.rflags.set(Flags::CF, overflow);
+                self.engine.cpu.rflags.set(Flags::OF, overflow);
+            }
+            _ => {
+                return Err(EmulatorError::UnsupportedInstruction(format!(
+                    "IMUL with {} operands not supported",
+                    inst.op_count()
+                )));
+            }
         }
-
-        let multiplicand = self.read_operand(inst, 0)? as i64;
-        let multiplier = self.read_operand(inst, 1)? as i64;
-
-        let result = (multiplicand as i128) * (multiplier as i128);
-
-        // Store result in destination register
-        self.write_operand(inst, 0, result as u64)?;
-
-        // Set CF and OF if result doesn't fit in destination size (signed)
-        let dest_size = self.get_operand_size_from_instruction(inst, 0)?;
-        let dest_bits = dest_size * 8;
-
-        let max_positive = (1i128 << (dest_bits - 1)) - 1;
-        let min_negative = -(1i128 << (dest_bits - 1));
-        let overflow = result > max_positive || result < min_negative;
-
-        self.engine.cpu.rflags.set(Flags::CF, overflow);
-        self.engine.cpu.rflags.set(Flags::OF, overflow);
 
         Ok(())
     }
 
     fn execute_nop(&mut self, _inst: &Instruction) -> Result<()> {
         // NOP: No Operation - do nothing
+        Ok(())
+    }
+
+    fn execute_neg(&mut self, inst: &Instruction) -> Result<()> {
+        // NEG: Two's complement negation
+        let dst_value = self.read_operand(inst, 0)?;
+        let result = (!dst_value).wrapping_add(1);
+
+        // Update flags - NEG is like SUB 0, dst
+        self.update_flags_arithmetic_iced(0, dst_value, result, true, inst)?;
+
+        // Special case: CF is always set unless operand was 0
+        if dst_value == 0 {
+            self.engine.cpu.rflags.remove(Flags::CF);
+        } else {
+            self.engine.cpu.rflags.insert(Flags::CF);
+        }
+
+        // Write result back to destination
+        self.write_operand(inst, 0, result)?;
+        Ok(())
+    }
+
+    fn execute_sbb(&mut self, inst: &Instruction) -> Result<()> {
+        // SBB: Subtract with borrow (carry flag)
+        let dst_value = self.read_operand(inst, 0)?;
+        let src_value = self.read_operand(inst, 1)?;
+        let carry = if self.engine.cpu.rflags.contains(Flags::CF) {
+            1
+        } else {
+            0
+        };
+
+        let result = dst_value.wrapping_sub(src_value).wrapping_sub(carry);
+
+        // Update flags - SBB is like SUB but includes carry
+        self.update_flags_arithmetic_iced(dst_value, src_value + carry, result, true, inst)?;
+
+        // Write result back to destination
+        self.write_operand(inst, 0, result)?;
+        Ok(())
+    }
+
+    fn execute_rol(&mut self, inst: &Instruction) -> Result<()> {
+        // ROL: Rotate left
+        let dst_value = self.read_operand(inst, 0)?;
+        let count = (self.read_operand(inst, 1)? & 0x3F) as u32; // Only use bottom 6 bits for 64-bit
+
+        if count == 0 {
+            return Ok(()); // No rotation, no flag changes
+        }
+
+        let size = self.get_operand_size_from_instruction(inst, 0)?;
+        let bit_count = size * 8;
+        let effective_count = count % bit_count as u32;
+
+        let result = match size {
+            1 => {
+                let val = dst_value as u8;
+                ((val << effective_count) | (val >> (8 - effective_count))) as u64
+            }
+            2 => {
+                let val = dst_value as u16;
+                ((val << effective_count) | (val >> (16 - effective_count))) as u64
+            }
+            4 => {
+                let val = dst_value as u32;
+                ((val << effective_count) | (val >> (32 - effective_count))) as u64
+            }
+            8 => (dst_value << effective_count) | (dst_value >> (64 - effective_count)),
+            _ => {
+                return Err(EmulatorError::UnsupportedInstruction(format!(
+                    "Unsupported size for ROL: {}",
+                    size
+                )));
+            }
+        };
+
+        // Update flags: CF = MSB of result, OF = MSB ^ (MSB-1) if count is 1
+        let msb_mask = 1u64 << (bit_count - 1);
+        let cf = (result & msb_mask) != 0;
+        self.engine.cpu.rflags.set(Flags::CF, cf);
+
+        if count == 1 {
+            let msb_minus_1_mask = 1u64 << (bit_count - 2);
+            let of = ((result & msb_mask) != 0) ^ ((result & msb_minus_1_mask) != 0);
+            self.engine.cpu.rflags.set(Flags::OF, of);
+        }
+
+        // Write result back to destination
+        self.write_operand(inst, 0, result)?;
         Ok(())
     }
 
