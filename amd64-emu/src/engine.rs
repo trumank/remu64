@@ -366,6 +366,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             Mnemonic::Pmaxsw => self.execute_pmaxsw(inst),
             Mnemonic::Pminub => self.execute_pminub(inst),
             Mnemonic::Pminsw => self.execute_pminsw(inst),
+            Mnemonic::Psadbw => self.execute_psadbw(inst),
             Mnemonic::Xorps => self.execute_xorps(inst),
             Mnemonic::Cmpps => self.execute_cmpps(inst),
             Mnemonic::Cmpss => self.execute_cmpss(inst),
@@ -2512,6 +2513,96 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             }
             _ => Err(EmulatorError::UnsupportedInstruction(format!(
                 "Unsupported PMINSW operand types: {:?}, {:?}",
+                inst.op_kind(0),
+                inst.op_kind(1)
+            ))),
+        }
+    }
+
+    fn execute_psadbw(&mut self, inst: &Instruction) -> Result<()> {
+        // PSADBW: Packed Sum of Absolute Differences
+        // Computes absolute differences between unsigned bytes, then sums them
+        // Result is two 16-bit sums stored in bits [15:0] and [79:64] of destination
+
+        match (inst.op_kind(0), inst.op_kind(1)) {
+            (OpKind::Register, OpKind::Register) => {
+                let dst_reg = self.convert_register(inst.op_register(0))?;
+                let src_reg = self.convert_register(inst.op_register(1))?;
+
+                if !dst_reg.is_xmm() || !src_reg.is_xmm() {
+                    return Err(EmulatorError::UnsupportedInstruction(
+                        "PSADBW requires XMM registers".to_string(),
+                    ));
+                }
+
+                let dst_value = self.engine.cpu.read_xmm(dst_reg);
+                let src_value = self.engine.cpu.read_xmm(src_reg);
+
+                // Compute sum of absolute differences for low 8 bytes
+                let mut sum_low = 0u16;
+                for i in 0..8 {
+                    let shift = i * 8;
+                    let dst_byte = ((dst_value >> shift) & 0xFF) as u8;
+                    let src_byte = ((src_value >> shift) & 0xFF) as u8;
+                    sum_low += dst_byte.abs_diff(src_byte) as u16;
+                }
+
+                // Compute sum of absolute differences for high 8 bytes
+                let mut sum_high = 0u16;
+                for i in 8..16 {
+                    let shift = i * 8;
+                    let dst_byte = ((dst_value >> shift) & 0xFF) as u8;
+                    let src_byte = ((src_value >> shift) & 0xFF) as u8;
+                    sum_high += dst_byte.abs_diff(src_byte) as u16;
+                }
+
+                // Store results: low sum in bits [15:0], high sum in bits [79:64]
+                // All other bits are zeroed
+                let result = (sum_low as u128) | ((sum_high as u128) << 64);
+
+                self.engine.cpu.write_xmm(dst_reg, result);
+                Ok(())
+            }
+            (OpKind::Register, OpKind::Memory) => {
+                let dst_reg = self.convert_register(inst.op_register(0))?;
+
+                if !dst_reg.is_xmm() {
+                    return Err(EmulatorError::UnsupportedInstruction(
+                        "PSADBW requires XMM register as destination".to_string(),
+                    ));
+                }
+
+                let addr = self.calculate_memory_address(inst, 1)?;
+                let src_value = self.read_memory_128(addr)?;
+                let dst_value = self.engine.cpu.read_xmm(dst_reg);
+
+                // Compute sum of absolute differences for low 8 bytes
+                let mut sum_low = 0u16;
+                for i in 0..8 {
+                    let shift = i * 8;
+                    let dst_byte = ((dst_value >> shift) & 0xFF) as u8;
+                    let src_byte = ((src_value >> shift) & 0xFF) as u8;
+                    sum_low += dst_byte.abs_diff(src_byte) as u16;
+                }
+
+                // Compute sum of absolute differences for high 8 bytes
+                let mut sum_high = 0u16;
+                for i in 8..16 {
+                    let shift = i * 8;
+                    let dst_byte = ((dst_value >> shift) & 0xFF) as u8;
+                    let src_byte = ((src_value >> shift) & 0xFF) as u8;
+                    sum_high += dst_byte.abs_diff(src_byte) as u16;
+                }
+
+                // Store results: low sum in bits [15:0], high sum in bits [79:64]
+                // All other bits are zeroed
+                let result = (sum_low as u128) | ((sum_high as u128) << 64);
+
+                self.engine.cpu.write_xmm(dst_reg, result);
+                Ok(())
+            }
+            _ => Err(EmulatorError::UnsupportedInstruction(format!(
+                "Unsupported PSADBW operand types: {:?}, {:?}",
                 inst.op_kind(0),
                 inst.op_kind(1)
             ))),
