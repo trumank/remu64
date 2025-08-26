@@ -339,6 +339,12 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             Mnemonic::Sbb => self.execute_sbb(inst),
             Mnemonic::Rol => self.execute_rol(inst),
             Mnemonic::Cmpxchg => self.execute_cmpxchg(inst),
+            Mnemonic::Bt => self.execute_bt(inst),
+            Mnemonic::Bts => self.execute_bts(inst),
+            Mnemonic::Btr => self.execute_btr(inst),
+            Mnemonic::Btc => self.execute_btc(inst),
+            Mnemonic::Bsf => self.execute_bsf(inst),
+            Mnemonic::Bsr => self.execute_bsr(inst),
             Mnemonic::Punpcklwd => self.execute_punpcklwd(inst),
             Mnemonic::Pshufd => self.execute_pshufd(inst),
             Mnemonic::Xorps => self.execute_xorps(inst),
@@ -2633,6 +2639,149 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             self.engine.cpu.rip = target_address;
         }
 
+        Ok(())
+    }
+
+    fn execute_bt(&mut self, inst: &Instruction) -> Result<()> {
+        // BT: Bit Test - Test bit in first operand by second operand, set CF accordingly
+        let bit_base = self.read_operand_value(inst, 0)?;
+        let bit_offset = self.read_operand_value(inst, 1)?;
+        
+        // Calculate effective bit position (modulo based on operand size)
+        let size = self.get_operand_size_from_instruction(inst, 0)?;
+        let bit_pos = (bit_offset & ((size * 8 - 1) as u64)) as u32;
+        
+        // Test the bit
+        let bit_value = (bit_base >> bit_pos) & 1;
+        
+        // Set CF to the bit value
+        if bit_value != 0 {
+            self.engine.cpu.rflags.insert(Flags::CF);
+        } else {
+            self.engine.cpu.rflags.remove(Flags::CF);
+        }
+        
+        Ok(())
+    }
+
+    fn execute_bts(&mut self, inst: &Instruction) -> Result<()> {
+        // BTS: Bit Test and Set - Test bit and set it to 1
+        let bit_base = self.read_operand_value(inst, 0)?;
+        let bit_offset = self.read_operand_value(inst, 1)?;
+        
+        // Calculate effective bit position
+        let size = self.get_operand_size_from_instruction(inst, 0)?;
+        let bit_pos = (bit_offset & ((size * 8 - 1) as u64)) as u32;
+        
+        // Test the bit (set CF)
+        let bit_value = (bit_base >> bit_pos) & 1;
+        if bit_value != 0 {
+            self.engine.cpu.rflags.insert(Flags::CF);
+        } else {
+            self.engine.cpu.rflags.remove(Flags::CF);
+        }
+        
+        // Set the bit to 1
+        let new_value = bit_base | (1u64 << bit_pos);
+        self.write_operand_value(inst, 0, new_value)?;
+        
+        Ok(())
+    }
+
+    fn execute_btr(&mut self, inst: &Instruction) -> Result<()> {
+        // BTR: Bit Test and Reset - Test bit and set it to 0
+        let bit_base = self.read_operand_value(inst, 0)?;
+        let bit_offset = self.read_operand_value(inst, 1)?;
+        
+        // Calculate effective bit position
+        let size = self.get_operand_size_from_instruction(inst, 0)?;
+        let bit_pos = (bit_offset & ((size * 8 - 1) as u64)) as u32;
+        
+        // Test the bit (set CF)
+        let bit_value = (bit_base >> bit_pos) & 1;
+        if bit_value != 0 {
+            self.engine.cpu.rflags.insert(Flags::CF);
+        } else {
+            self.engine.cpu.rflags.remove(Flags::CF);
+        }
+        
+        // Reset the bit to 0
+        let new_value = bit_base & !(1u64 << bit_pos);
+        self.write_operand_value(inst, 0, new_value)?;
+        
+        Ok(())
+    }
+
+    fn execute_btc(&mut self, inst: &Instruction) -> Result<()> {
+        // BTC: Bit Test and Complement - Test bit and flip it
+        let bit_base = self.read_operand_value(inst, 0)?;
+        let bit_offset = self.read_operand_value(inst, 1)?;
+        
+        // Calculate effective bit position
+        let size = self.get_operand_size_from_instruction(inst, 0)?;
+        let bit_pos = (bit_offset & ((size * 8 - 1) as u64)) as u32;
+        
+        // Test the bit (set CF)
+        let bit_value = (bit_base >> bit_pos) & 1;
+        if bit_value != 0 {
+            self.engine.cpu.rflags.insert(Flags::CF);
+        } else {
+            self.engine.cpu.rflags.remove(Flags::CF);
+        }
+        
+        // Complement the bit
+        let new_value = bit_base ^ (1u64 << bit_pos);
+        self.write_operand_value(inst, 0, new_value)?;
+        
+        Ok(())
+    }
+
+    fn execute_bsf(&mut self, inst: &Instruction) -> Result<()> {
+        // BSF: Bit Scan Forward - Find first set bit (from LSB)
+        let source = self.read_operand_value(inst, 1)?;
+        
+        if source == 0 {
+            // If source is 0, set ZF and destination is undefined
+            self.engine.cpu.rflags.insert(Flags::ZF);
+        } else {
+            // Find the position of the first set bit
+            let bit_pos = source.trailing_zeros() as u64;
+            self.engine.cpu.rflags.remove(Flags::ZF);
+            
+            // Write result to destination
+            self.write_operand_value(inst, 0, bit_pos)?;
+        }
+        
+        Ok(())
+    }
+
+    fn execute_bsr(&mut self, inst: &Instruction) -> Result<()> {
+        // BSR: Bit Scan Reverse - Find first set bit (from MSB)
+        let source = self.read_operand_value(inst, 1)?;
+        
+        if source == 0 {
+            // If source is 0, set ZF and destination is undefined
+            self.engine.cpu.rflags.insert(Flags::ZF);
+        } else {
+            // Find the position of the first set bit from MSB
+            let size = self.get_operand_size_from_instruction(inst, 1)?;
+            let bit_pos = match size {
+                1 => 7 - (source as u8).leading_zeros() as u64,
+                2 => 15 - (source as u16).leading_zeros() as u64,
+                4 => 31 - (source as u32).leading_zeros() as u64,
+                8 => 63 - source.leading_zeros() as u64,
+                _ => return Err(EmulatorError::UnsupportedInstruction(format!(
+                    "Unsupported BSR operand size: {}",
+                    size
+                ))),
+            };
+            
+            self.engine.cpu.rflags.remove(Flags::ZF);
+            
+            // Write result to destination
+            self.write_operand_value(inst, 0, bit_pos)?;
+        }
+        
         Ok(())
     }
 
