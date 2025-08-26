@@ -17,12 +17,10 @@ fn test_paddb() {
         0x66, 0x0F, 0xFC, 0xC1,  // paddb xmm0, xmm1
         // Move result to memory for checking
         0x66, 0x0F, 0x7F, 0x05, 0x30, 0x00, 0x00, 0x00,  // movdqa [rip + 0x30], xmm0
-        // Halt
-        0xF4,
         
-        // Padding
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 
+        // Padding to align data
+        0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90,
+        0x90, 0x90, 0x90, 0x90,
         
         // Data at offset 0x20: XMM0 initial value
         0x10, 0x20, 0x30, 0x40, 0x50, 0x60, 0x70, 0x80,
@@ -40,8 +38,8 @@ fn test_paddb() {
     engine.mem_write(0x1000, &code).unwrap();
     engine.reg_write(Register::RIP, 0x1000);
     
-    // Execute instructions
-    assert!(engine.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0).is_ok());
+    // Execute instructions (stop after the 4 instructions)
+    assert!(engine.emu_start(0x1000, 0x1000 + 0x1C, 0, 0).is_ok());
     
     // Check result
     let mut result = vec![0u8; 16];
@@ -83,12 +81,10 @@ fn test_paddw() {
         0x66, 0x0F, 0xFD, 0xC1,  // paddw xmm0, xmm1
         // Move result to memory for checking
         0x66, 0x0F, 0x7F, 0x05, 0x30, 0x00, 0x00, 0x00,  // movdqa [rip + 0x30], xmm0
-        // Halt
-        0xF4,
         
-        // Padding
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00,
+        // Padding to align data
+        0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90,
+        0x90, 0x90, 0x90, 0x90,
         
         // Data at offset 0x20: XMM0 initial value (8 words)
         0x00, 0x10,  // 0x1000
@@ -118,8 +114,8 @@ fn test_paddw() {
     engine.mem_write(0x1000, &code).unwrap();
     engine.reg_write(Register::RIP, 0x1000);
     
-    // Execute instructions
-    assert!(engine.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0).is_ok());
+    // Execute instructions (stop after the 4 instructions)
+    assert!(engine.emu_start(0x1000, 0x1000 + 0x1C, 0, 0).is_ok());
     
     // Check result
     let mut result = vec![0u8; 16];
@@ -153,12 +149,10 @@ fn test_paddd() {
         0x66, 0x0F, 0xFE, 0xC1,  // paddd xmm0, xmm1
         // Move result to memory for checking
         0x66, 0x0F, 0x7F, 0x05, 0x30, 0x00, 0x00, 0x00,  // movdqa [rip + 0x30], xmm0
-        // Halt
-        0xF4,
         
-        // Padding
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00,
+        // Padding to align data
+        0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90,
+        0x90, 0x90, 0x90, 0x90,
         
         // Data at offset 0x20: XMM0 initial value (4 dwords)
         0x00, 0x00, 0x00, 0x10,  // 0x10000000
@@ -180,8 +174,8 @@ fn test_paddd() {
     engine.mem_write(0x1000, &code).unwrap();
     engine.reg_write(Register::RIP, 0x1000);
     
-    // Execute instructions
-    assert!(engine.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0).is_ok());
+    // Execute instructions (stop after the 4 instructions)
+    assert!(engine.emu_start(0x1000, 0x1000 + 0x1C, 0, 0).is_ok());
     
     // Check result
     let mut result = vec![0u8; 16];
@@ -211,12 +205,10 @@ fn test_paddq() {
         0x66, 0x0F, 0xD4, 0xC1,  // paddq xmm0, xmm1
         // Move result to memory for checking
         0x66, 0x0F, 0x7F, 0x05, 0x30, 0x00, 0x00, 0x00,  // movdqa [rip + 0x30], xmm0
-        // Halt
-        0xF4,
         
-        // Padding
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00,
+        // Padding to align data
+        0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90,
+        0x90, 0x90, 0x90, 0x90,
         
         // Data at offset 0x20: XMM0 initial value (2 qwords)
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10,  // 0x1000000000000000
@@ -234,8 +226,8 @@ fn test_paddq() {
     engine.mem_write(0x1000, &code).unwrap();
     engine.reg_write(Register::RIP, 0x1000);
     
-    // Execute instructions
-    assert!(engine.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0).is_ok());
+    // Execute instructions (stop after the 4 instructions)
+    assert!(engine.emu_start(0x1000, 0x1000 + 0x1C, 0, 0).is_ok());
     
     // Check result
     let mut result = vec![0u8; 16];
@@ -261,12 +253,10 @@ fn test_paddb_memory_operand() {
         0x66, 0x0F, 0xFC, 0x05, 0x28, 0x00, 0x00, 0x00,  // paddb xmm0, [rip + 0x28]
         // Move result to memory for checking
         0x66, 0x0F, 0x7F, 0x05, 0x30, 0x00, 0x00, 0x00,  // movdqa [rip + 0x30], xmm0
-        // Halt
-        0xF4,
         
-        // Padding
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00,
+        // Padding to align data
+        0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90,
+        0x90, 0x90, 0x90, 0x90,
         
         // Data at offset 0x20: XMM0 initial value
         0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
@@ -284,8 +274,8 @@ fn test_paddb_memory_operand() {
     engine.mem_write(0x1000, &code).unwrap();
     engine.reg_write(Register::RIP, 0x1000);
     
-    // Execute instructions
-    assert!(engine.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0).is_ok());
+    // Execute instructions (stop after the 3 instructions)
+    assert!(engine.emu_start(0x1000, 0x1000 + 0x18, 0, 0).is_ok());
     
     // Check result
     let mut result = vec![0u8; 16];
