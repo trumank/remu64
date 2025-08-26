@@ -362,6 +362,10 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             Mnemonic::Pmovmskb => self.execute_pmovmskb(inst),
             Mnemonic::Pavgb => self.execute_pavgb(inst),
             Mnemonic::Pavgw => self.execute_pavgw(inst),
+            Mnemonic::Pmaxub => self.execute_pmaxub(inst),
+            Mnemonic::Pmaxsw => self.execute_pmaxsw(inst),
+            Mnemonic::Pminub => self.execute_pminub(inst),
+            Mnemonic::Pminsw => self.execute_pminsw(inst),
             Mnemonic::Xorps => self.execute_xorps(inst),
             Mnemonic::Cmpps => self.execute_cmpps(inst),
             Mnemonic::Cmpss => self.execute_cmpss(inst),
@@ -2248,6 +2252,266 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             }
             _ => Err(EmulatorError::UnsupportedInstruction(format!(
                 "Unsupported PAVGW operand types: {:?}, {:?}",
+                inst.op_kind(0),
+                inst.op_kind(1)
+            ))),
+        }
+    }
+
+    fn execute_pmaxub(&mut self, inst: &Instruction) -> Result<()> {
+        // PMAXUB: Packed Maximum Unsigned Bytes
+        // Compares unsigned bytes and stores the maximum values
+
+        match (inst.op_kind(0), inst.op_kind(1)) {
+            (OpKind::Register, OpKind::Register) => {
+                let dst_reg = self.convert_register(inst.op_register(0))?;
+                let src_reg = self.convert_register(inst.op_register(1))?;
+
+                if !dst_reg.is_xmm() || !src_reg.is_xmm() {
+                    return Err(EmulatorError::UnsupportedInstruction(
+                        "PMAXUB requires XMM registers".to_string(),
+                    ));
+                }
+
+                let dst_value = self.engine.cpu.read_xmm(dst_reg);
+                let src_value = self.engine.cpu.read_xmm(src_reg);
+                let mut result = 0u128;
+
+                // Process 16 bytes
+                for i in 0..16 {
+                    let shift = i * 8;
+                    let dst_byte = ((dst_value >> shift) & 0xFF) as u8;
+                    let src_byte = ((src_value >> shift) & 0xFF) as u8;
+                    let max = std::cmp::max(dst_byte, src_byte) as u128;
+                    result |= max << shift;
+                }
+
+                self.engine.cpu.write_xmm(dst_reg, result);
+                Ok(())
+            }
+            (OpKind::Register, OpKind::Memory) => {
+                let dst_reg = self.convert_register(inst.op_register(0))?;
+
+                if !dst_reg.is_xmm() {
+                    return Err(EmulatorError::UnsupportedInstruction(
+                        "PMAXUB requires XMM register as destination".to_string(),
+                    ));
+                }
+
+                let addr = self.calculate_memory_address(inst, 1)?;
+                let src_value = self.read_memory_128(addr)?;
+                let dst_value = self.engine.cpu.read_xmm(dst_reg);
+                let mut result = 0u128;
+
+                // Process 16 bytes
+                for i in 0..16 {
+                    let shift = i * 8;
+                    let dst_byte = ((dst_value >> shift) & 0xFF) as u8;
+                    let src_byte = ((src_value >> shift) & 0xFF) as u8;
+                    let max = std::cmp::max(dst_byte, src_byte) as u128;
+                    result |= max << shift;
+                }
+
+                self.engine.cpu.write_xmm(dst_reg, result);
+                Ok(())
+            }
+            _ => Err(EmulatorError::UnsupportedInstruction(format!(
+                "Unsupported PMAXUB operand types: {:?}, {:?}",
+                inst.op_kind(0),
+                inst.op_kind(1)
+            ))),
+        }
+    }
+
+    fn execute_pmaxsw(&mut self, inst: &Instruction) -> Result<()> {
+        // PMAXSW: Packed Maximum Signed Words
+        // Compares signed words and stores the maximum values
+
+        match (inst.op_kind(0), inst.op_kind(1)) {
+            (OpKind::Register, OpKind::Register) => {
+                let dst_reg = self.convert_register(inst.op_register(0))?;
+                let src_reg = self.convert_register(inst.op_register(1))?;
+
+                if !dst_reg.is_xmm() || !src_reg.is_xmm() {
+                    return Err(EmulatorError::UnsupportedInstruction(
+                        "PMAXSW requires XMM registers".to_string(),
+                    ));
+                }
+
+                let dst_value = self.engine.cpu.read_xmm(dst_reg);
+                let src_value = self.engine.cpu.read_xmm(src_reg);
+                let mut result = 0u128;
+
+                // Process 8 words
+                for i in 0..8 {
+                    let shift = i * 16;
+                    let dst_word = ((dst_value >> shift) & 0xFFFF) as i16;
+                    let src_word = ((src_value >> shift) & 0xFFFF) as i16;
+                    let max = std::cmp::max(dst_word, src_word) as u16 as u128;
+                    result |= max << shift;
+                }
+
+                self.engine.cpu.write_xmm(dst_reg, result);
+                Ok(())
+            }
+            (OpKind::Register, OpKind::Memory) => {
+                let dst_reg = self.convert_register(inst.op_register(0))?;
+
+                if !dst_reg.is_xmm() {
+                    return Err(EmulatorError::UnsupportedInstruction(
+                        "PMAXSW requires XMM register as destination".to_string(),
+                    ));
+                }
+
+                let addr = self.calculate_memory_address(inst, 1)?;
+                let src_value = self.read_memory_128(addr)?;
+                let dst_value = self.engine.cpu.read_xmm(dst_reg);
+                let mut result = 0u128;
+
+                // Process 8 words
+                for i in 0..8 {
+                    let shift = i * 16;
+                    let dst_word = ((dst_value >> shift) & 0xFFFF) as i16;
+                    let src_word = ((src_value >> shift) & 0xFFFF) as i16;
+                    let max = std::cmp::max(dst_word, src_word) as u16 as u128;
+                    result |= max << shift;
+                }
+
+                self.engine.cpu.write_xmm(dst_reg, result);
+                Ok(())
+            }
+            _ => Err(EmulatorError::UnsupportedInstruction(format!(
+                "Unsupported PMAXSW operand types: {:?}, {:?}",
+                inst.op_kind(0),
+                inst.op_kind(1)
+            ))),
+        }
+    }
+
+    fn execute_pminub(&mut self, inst: &Instruction) -> Result<()> {
+        // PMINUB: Packed Minimum Unsigned Bytes
+        // Compares unsigned bytes and stores the minimum values
+
+        match (inst.op_kind(0), inst.op_kind(1)) {
+            (OpKind::Register, OpKind::Register) => {
+                let dst_reg = self.convert_register(inst.op_register(0))?;
+                let src_reg = self.convert_register(inst.op_register(1))?;
+
+                if !dst_reg.is_xmm() || !src_reg.is_xmm() {
+                    return Err(EmulatorError::UnsupportedInstruction(
+                        "PMINUB requires XMM registers".to_string(),
+                    ));
+                }
+
+                let dst_value = self.engine.cpu.read_xmm(dst_reg);
+                let src_value = self.engine.cpu.read_xmm(src_reg);
+                let mut result = 0u128;
+
+                // Process 16 bytes
+                for i in 0..16 {
+                    let shift = i * 8;
+                    let dst_byte = ((dst_value >> shift) & 0xFF) as u8;
+                    let src_byte = ((src_value >> shift) & 0xFF) as u8;
+                    let min = std::cmp::min(dst_byte, src_byte) as u128;
+                    result |= min << shift;
+                }
+
+                self.engine.cpu.write_xmm(dst_reg, result);
+                Ok(())
+            }
+            (OpKind::Register, OpKind::Memory) => {
+                let dst_reg = self.convert_register(inst.op_register(0))?;
+
+                if !dst_reg.is_xmm() {
+                    return Err(EmulatorError::UnsupportedInstruction(
+                        "PMINUB requires XMM register as destination".to_string(),
+                    ));
+                }
+
+                let addr = self.calculate_memory_address(inst, 1)?;
+                let src_value = self.read_memory_128(addr)?;
+                let dst_value = self.engine.cpu.read_xmm(dst_reg);
+                let mut result = 0u128;
+
+                // Process 16 bytes
+                for i in 0..16 {
+                    let shift = i * 8;
+                    let dst_byte = ((dst_value >> shift) & 0xFF) as u8;
+                    let src_byte = ((src_value >> shift) & 0xFF) as u8;
+                    let min = std::cmp::min(dst_byte, src_byte) as u128;
+                    result |= min << shift;
+                }
+
+                self.engine.cpu.write_xmm(dst_reg, result);
+                Ok(())
+            }
+            _ => Err(EmulatorError::UnsupportedInstruction(format!(
+                "Unsupported PMINUB operand types: {:?}, {:?}",
+                inst.op_kind(0),
+                inst.op_kind(1)
+            ))),
+        }
+    }
+
+    fn execute_pminsw(&mut self, inst: &Instruction) -> Result<()> {
+        // PMINSW: Packed Minimum Signed Words
+        // Compares signed words and stores the minimum values
+
+        match (inst.op_kind(0), inst.op_kind(1)) {
+            (OpKind::Register, OpKind::Register) => {
+                let dst_reg = self.convert_register(inst.op_register(0))?;
+                let src_reg = self.convert_register(inst.op_register(1))?;
+
+                if !dst_reg.is_xmm() || !src_reg.is_xmm() {
+                    return Err(EmulatorError::UnsupportedInstruction(
+                        "PMINSW requires XMM registers".to_string(),
+                    ));
+                }
+
+                let dst_value = self.engine.cpu.read_xmm(dst_reg);
+                let src_value = self.engine.cpu.read_xmm(src_reg);
+                let mut result = 0u128;
+
+                // Process 8 words
+                for i in 0..8 {
+                    let shift = i * 16;
+                    let dst_word = ((dst_value >> shift) & 0xFFFF) as i16;
+                    let src_word = ((src_value >> shift) & 0xFFFF) as i16;
+                    let min = std::cmp::min(dst_word, src_word) as u16 as u128;
+                    result |= min << shift;
+                }
+
+                self.engine.cpu.write_xmm(dst_reg, result);
+                Ok(())
+            }
+            (OpKind::Register, OpKind::Memory) => {
+                let dst_reg = self.convert_register(inst.op_register(0))?;
+
+                if !dst_reg.is_xmm() {
+                    return Err(EmulatorError::UnsupportedInstruction(
+                        "PMINSW requires XMM register as destination".to_string(),
+                    ));
+                }
+
+                let addr = self.calculate_memory_address(inst, 1)?;
+                let src_value = self.read_memory_128(addr)?;
+                let dst_value = self.engine.cpu.read_xmm(dst_reg);
+                let mut result = 0u128;
+
+                // Process 8 words
+                for i in 0..8 {
+                    let shift = i * 16;
+                    let dst_word = ((dst_value >> shift) & 0xFFFF) as i16;
+                    let src_word = ((src_value >> shift) & 0xFFFF) as i16;
+                    let min = std::cmp::min(dst_word, src_word) as u16 as u128;
+                    result |= min << shift;
+                }
+
+                self.engine.cpu.write_xmm(dst_reg, result);
+                Ok(())
+            }
+            _ => Err(EmulatorError::UnsupportedInstruction(format!(
+                "Unsupported PMINSW operand types: {:?}, {:?}",
                 inst.op_kind(0),
                 inst.op_kind(1)
             ))),
