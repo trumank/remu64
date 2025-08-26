@@ -32,9 +32,9 @@ fn test_pmovsxbw() {
     
     emu.mem_write(0x100400, &test_data).unwrap();
     
-    emu.emu_start(0x1000, 0x1000 + code.len() as u64).unwrap();
+    emu.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 10).unwrap();
     
-    let result = emu.reg_read_xmm(Register::XMM1);
+    let result = emu.xmm_read(Register::XMM1);
     
     // Check each word - sign extended
     assert_eq!((result & 0xFFFF) as i16, 127i16);
@@ -75,9 +75,9 @@ fn test_pmovsxbd() {
     
     emu.mem_write(0x100400, &test_data).unwrap();
     
-    emu.emu_start(0x1000, 0x1000 + code.len() as u64).unwrap();
+    emu.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 10).unwrap();
     
-    let result = emu.reg_read_xmm(Register::XMM1);
+    let result = emu.xmm_read(Register::XMM1);
     
     // Check each doubleword - sign extended
     assert_eq!((result & 0xFFFFFFFF) as i32, 127i32);
@@ -112,9 +112,9 @@ fn test_pmovsxbq() {
     
     emu.mem_write(0x100400, &test_data).unwrap();
     
-    emu.emu_start(0x1000, 0x1000 + code.len() as u64).unwrap();
+    emu.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 10).unwrap();
     
-    let result = emu.reg_read_xmm(Register::XMM1);
+    let result = emu.xmm_read(Register::XMM1);
     
     // Check each quadword - sign extended
     assert_eq!((result & 0xFFFFFFFFFFFFFFFF) as i64, 127i64);
@@ -149,9 +149,9 @@ fn test_pmovsxwd() {
     
     emu.mem_write(0x100400, &test_data).unwrap();
     
-    emu.emu_start(0x1000, 0x1000 + code.len() as u64).unwrap();
+    emu.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 10).unwrap();
     
-    let result = emu.reg_read_xmm(Register::XMM1);
+    let result = emu.xmm_read(Register::XMM1);
     
     // Check each doubleword - sign extended
     assert_eq!((result & 0xFFFFFFFF) as i32, 32767i32);
@@ -186,9 +186,9 @@ fn test_pmovsxwq() {
     
     emu.mem_write(0x100400, &test_data).unwrap();
     
-    emu.emu_start(0x1000, 0x1000 + code.len() as u64).unwrap();
+    emu.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 10).unwrap();
     
-    let result = emu.reg_read_xmm(Register::XMM1);
+    let result = emu.xmm_read(Register::XMM1);
     
     // Check each quadword - sign extended
     assert_eq!((result & 0xFFFFFFFFFFFFFFFF) as i64, 32767i64);
@@ -221,9 +221,9 @@ fn test_pmovsxdq() {
     
     emu.mem_write(0x100400, &test_data).unwrap();
     
-    emu.emu_start(0x1000, 0x1000 + code.len() as u64).unwrap();
+    emu.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 10).unwrap();
     
-    let result = emu.reg_read_xmm(Register::XMM1);
+    let result = emu.xmm_read(Register::XMM1);
     
     // Check each quadword - sign extended
     assert_eq!((result & 0xFFFFFFFFFFFFFFFF) as i64, 2147483647i64);
@@ -262,9 +262,9 @@ fn test_pmovzxbw() {
     
     emu.mem_write(0x100400, &test_data).unwrap();
     
-    emu.emu_start(0x1000, 0x1000 + code.len() as u64).unwrap();
+    emu.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 10).unwrap();
     
-    let result = emu.reg_read_xmm(Register::XMM1);
+    let result = emu.xmm_read(Register::XMM1);
     
     // Check each word - zero extended
     assert_eq!((result & 0xFFFF) as u16, 255u16);
@@ -305,9 +305,9 @@ fn test_pmovzxbd() {
     
     emu.mem_write(0x100400, &test_data).unwrap();
     
-    emu.emu_start(0x1000, 0x1000 + code.len() as u64).unwrap();
+    emu.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 10).unwrap();
     
-    let result = emu.reg_read_xmm(Register::XMM1);
+    let result = emu.xmm_read(Register::XMM1);
     
     // Check each doubleword - zero extended
     assert_eq!((result & 0xFFFFFFFF) as u32, 255u32);
@@ -342,9 +342,9 @@ fn test_pmovzxbq() {
     
     emu.mem_write(0x100400, &test_data).unwrap();
     
-    emu.emu_start(0x1000, 0x1000 + code.len() as u64).unwrap();
+    emu.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 10).unwrap();
     
-    let result = emu.reg_read_xmm(Register::XMM1);
+    let result = emu.xmm_read(Register::XMM1);
     
     // Check each quadword - zero extended
     assert_eq!((result & 0xFFFFFFFFFFFFFFFF) as u64, 255u64);
@@ -379,9 +379,9 @@ fn test_pmovzxwd() {
     
     emu.mem_write(0x100400, &test_data).unwrap();
     
-    emu.emu_start(0x1000, 0x1000 + code.len() as u64).unwrap();
+    emu.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 10).unwrap();
     
-    let result = emu.reg_read_xmm(Register::XMM1);
+    let result = emu.xmm_read(Register::XMM1);
     
     // Check each doubleword - zero extended
     assert_eq!((result & 0xFFFFFFFF) as u32, 65535u32);
@@ -416,9 +416,9 @@ fn test_pmovzxwq() {
     
     emu.mem_write(0x100400, &test_data).unwrap();
     
-    emu.emu_start(0x1000, 0x1000 + code.len() as u64).unwrap();
+    emu.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 10).unwrap();
     
-    let result = emu.reg_read_xmm(Register::XMM1);
+    let result = emu.xmm_read(Register::XMM1);
     
     // Check each quadword - zero extended
     assert_eq!((result & 0xFFFFFFFFFFFFFFFF) as u64, 65535u64);
@@ -451,9 +451,9 @@ fn test_pmovzxdq() {
     
     emu.mem_write(0x100400, &test_data).unwrap();
     
-    emu.emu_start(0x1000, 0x1000 + code.len() as u64).unwrap();
+    emu.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 10).unwrap();
     
-    let result = emu.reg_read_xmm(Register::XMM1);
+    let result = emu.xmm_read(Register::XMM1);
     
     // Check each quadword - zero extended
     assert_eq!((result & 0xFFFFFFFFFFFFFFFF) as u64, 4294967295u64);
@@ -490,9 +490,9 @@ fn test_pmovsxbw_memory() {
     
     emu.mem_write(0x100400, &test_data).unwrap();
     
-    emu.emu_start(0x1000, 0x1000 + code.len() as u64).unwrap();
+    emu.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 10).unwrap();
     
-    let result = emu.reg_read_xmm(Register::XMM1);
+    let result = emu.xmm_read(Register::XMM1);
     
     // Check each word - sign extended
     assert_eq!((result & 0xFFFF) as i16, 127i16);
