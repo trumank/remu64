@@ -15,22 +15,30 @@ pub struct FunctionExecutor<'a> {
 
 impl<'a> FunctionExecutor<'a> {
     pub fn new(minidump_loader: &'a MinidumpLoader<'a>) -> Result<FunctionExecutor<'a>> {
-        let mut vm_context = VMContext::new(minidump_loader)?;
-
+        let vm_context = VMContext::new(minidump_loader)?;
         let stack_base = 0x7fff_f000_0000u64;
-        let stack_size = 0x10000;
-
-        vm_context.setup_stack(stack_base, stack_size)?;
-        vm_context.engine.reg_write(Register::RSP, stack_base - 8);
-
         let tracer = InstructionTracer::new(false);
 
-        Ok(FunctionExecutor {
+        let mut executor = FunctionExecutor {
             vm_context,
             stack_base,
             tracer,
             fstring_addresses: Vec::new(),
-        })
+        };
+
+        executor.setup_stack()?;
+        Ok(executor)
+    }
+
+    fn setup_stack(&mut self) -> Result<()> {
+        let stack_size = 0x10000;
+        self.vm_context.setup_stack(self.stack_base, stack_size)?;
+
+        // Set initial stack pointer
+        self.vm_context
+            .engine
+            .reg_write(Register::RSP, self.stack_base - 8);
+        Ok(())
     }
 
     pub fn execute_function(
@@ -40,18 +48,13 @@ impl<'a> FunctionExecutor<'a> {
     ) -> Result<()> {
         let return_address = 0xFFFF800000000000u64;
 
-        let (_struct_addresses, fstring_addresses) = CallingConvention::setup_fastcall(
-            &mut self.vm_context.engine,
-            args.clone(),
-            self.stack_base,
-            return_address,
-        )?;
+        let (_struct_addresses, fstring_addresses) =
+            CallingConvention::setup_fastcall(&mut self.vm_context, args, return_address)?;
 
         self.fstring_addresses = fstring_addresses;
         self.vm_context
             .engine
             .reg_write(Register::RIP, function_address);
-        self.vm_context.setup_gs_segment()?;
 
         let mut hooks = ExecutionHooks {
             minidump_loader: self.vm_context.minidump_loader,
@@ -105,5 +108,20 @@ impl<'a> FunctionExecutor<'a> {
             )?);
         }
         Ok(outputs)
+    }
+
+    /// Reset the VM state for reuse while keeping the base minidump memory
+    /// This clears the CowMemory overlay and rebuilds the stack
+    pub fn reset_for_reuse(&mut self) -> Result<()> {
+        self.vm_context.engine.memory.reset_to_base();
+        self.setup_stack()?;
+        self.fstring_addresses.clear();
+        Ok(())
+    }
+
+    /// Push raw bytes to the stack and return a pointer to them
+    /// Convenience method that delegates to VMContext
+    pub fn push_bytes_to_stack(&mut self, data: &[u8]) -> Result<u64> {
+        self.vm_context.push_bytes_to_stack(data)
     }
 }

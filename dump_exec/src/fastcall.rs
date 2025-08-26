@@ -1,8 +1,8 @@
-use crate::stack_manager::StackManager;
+use crate::vm_context::VMContext;
 use amd64_emu::{memory::MemoryTrait, Engine, Register};
 use anyhow::Result;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct FName {
     pub comparison_index: i32,
     pub value: i32,
@@ -38,57 +38,38 @@ impl CallingConvention {
         }
     }
 
-    pub fn push_fname_to_stack<M: MemoryTrait>(
-        engine: &mut Engine<M>,
-        stack: &mut StackManager,
-        fname: &FName,
-    ) -> Result<u64> {
-        let addr = stack.allocate(8);
-        let comparison_bytes = fname.comparison_index.to_le_bytes();
-        let value_bytes = fname.value.to_le_bytes();
-        engine.memory.write(addr, &comparison_bytes)?;
-        engine.memory.write(addr + 4, &value_bytes)?;
-        Ok(addr)
+    pub fn push_fname_to_stack(vm_context: &mut VMContext<'_>, fname: &FName) -> Result<u64> {
+        let fname_bytes = [
+            fname.comparison_index.to_le_bytes(),
+            fname.value.to_le_bytes(),
+        ]
+        .concat();
+        vm_context.push_bytes_to_stack(&fname_bytes)
     }
 
-    pub fn push_fstring_to_stack<M: MemoryTrait>(
-        engine: &mut Engine<M>,
-        stack: &mut StackManager,
-        fstring: &FString,
-    ) -> Result<u64> {
+    pub fn push_fstring_to_stack(vm_context: &mut VMContext<'_>, fstring: &FString) -> Result<u64> {
         let data_ptr = if let Some(ref data) = fstring.data {
-            let data_size = data.len() * 2;
-            let data_addr = stack.allocate(data_size as u64);
-            for (i, &wchar) in data.iter().enumerate() {
-                let wchar_bytes = wchar.to_le_bytes();
-                engine
-                    .memory
-                    .write(data_addr + (i * 2) as u64, &wchar_bytes)?;
+            let mut data_bytes = Vec::with_capacity(data.len() * 2);
+            for &wchar in data {
+                data_bytes.extend_from_slice(&wchar.to_le_bytes());
             }
-            data_addr
+            vm_context.push_bytes_to_stack(&data_bytes)?
         } else {
             0u64
         };
 
-        let struct_addr = stack.allocate(16);
-        let data_ptr_bytes = data_ptr.to_le_bytes();
-        let num_bytes = fstring.num.to_le_bytes();
-        let max_bytes = fstring.max.to_le_bytes();
-
-        engine.memory.write(struct_addr, &data_ptr_bytes)?;
-        engine.memory.write(struct_addr + 8, &num_bytes)?;
-        engine.memory.write(struct_addr + 12, &max_bytes)?;
-
-        Ok(struct_addr)
+        let mut fstring_bytes = Vec::with_capacity(16);
+        fstring_bytes.extend_from_slice(&data_ptr.to_le_bytes()); // 8 bytes
+        fstring_bytes.extend_from_slice(&fstring.num.to_le_bytes()); // 4 bytes
+        fstring_bytes.extend_from_slice(&fstring.max.to_le_bytes()); // 4 bytes
+        vm_context.push_bytes_to_stack(&fstring_bytes)
     }
 
-    pub fn setup_fastcall<M: MemoryTrait>(
-        engine: &mut Engine<M>,
+    pub fn setup_fastcall(
+        vm_context: &mut VMContext<'_>,
         args: Vec<ArgumentType>,
-        stack_pointer: u64,
         return_address: u64,
     ) -> Result<(Vec<u64>, Vec<u64>)> {
-        let mut stack = StackManager::new(stack_pointer);
         let mut register_args = Vec::new();
         let mut stack_args = Vec::new();
         let mut struct_addresses = Vec::new();
@@ -99,12 +80,12 @@ impl CallingConvention {
                 ArgumentType::Integer(val) | ArgumentType::Pointer(val) => val,
                 ArgumentType::Float(val) => val.to_bits(),
                 ArgumentType::FName(fname) => {
-                    let addr = Self::push_fname_to_stack(engine, &mut stack, &fname)?;
+                    let addr = Self::push_fname_to_stack(vm_context, &fname)?;
                     struct_addresses.push(addr);
                     addr
                 }
                 ArgumentType::FString(fstring) => {
-                    let addr = Self::push_fstring_to_stack(engine, &mut stack, &fstring)?;
+                    let addr = Self::push_fstring_to_stack(vm_context, &fstring)?;
                     fstring_addresses.push(addr);
                     addr
                 }
@@ -117,16 +98,14 @@ impl CallingConvention {
             }
         }
 
-        Self::set_register_args(engine, &register_args);
+        Self::set_register_args(&mut vm_context.engine, &register_args);
 
-        stack.reserve_shadow_space();
-        stack.push_u64(engine, return_address)?;
+        vm_context.reserve_stack_space(32); // shadow space
+        vm_context.push_u64(return_address)?;
 
         for &arg in stack_args.iter().rev() {
-            stack.push_u64(engine, arg)?;
+            vm_context.push_u64(arg)?;
         }
-
-        stack.set_stack_pointer(engine);
 
         Ok((struct_addresses, fstring_addresses))
     }
@@ -164,23 +143,5 @@ impl CallingConvention {
         };
 
         Ok(FString { data, num, max })
-    }
-
-    pub fn read_u64_from_stack<M: MemoryTrait>(
-        engine: &mut Engine<M>,
-        stack: &mut StackManager,
-    ) -> Result<u64> {
-        let mut bytes = [0u8; 8];
-        engine.memory.read(stack.current, &mut bytes)?;
-        stack.current += 8;
-        Ok(u64::from_le_bytes(bytes))
-    }
-
-    pub fn write_u64_to_stack<M: MemoryTrait>(
-        engine: &mut Engine<M>,
-        stack: &mut StackManager,
-        value: u64,
-    ) -> Result<()> {
-        stack.push_u64(engine, value)
     }
 }

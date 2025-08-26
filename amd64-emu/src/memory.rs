@@ -359,6 +359,12 @@ impl<T: MemoryTrait> CowMemory<T> {
         }
     }
 
+    /// Reset the copy-on-write overlay, discarding all modifications
+    /// and returning to the original base memory state
+    pub fn reset_to_base(&mut self) {
+        self.overlay.clear();
+    }
+
     pub fn base(&self) -> &T {
         &self.base
     }

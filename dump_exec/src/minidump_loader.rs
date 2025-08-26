@@ -119,7 +119,7 @@ impl<'a> MinidumpLoader<'a> {
     }
 
     pub fn get_dump(&self) -> &MmapMinidump {
-        &self.dump
+        self.dump
     }
 
     pub fn get_teb_address(&self) -> Result<u64> {
