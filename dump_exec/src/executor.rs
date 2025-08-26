@@ -20,7 +20,6 @@ impl<'a> HookManager for ExecutionHooks<'a> {
         address: u64,
         _size: usize,
     ) -> amd64_emu::Result<bool> {
-        println!("!!mem fault hook at 0x{:x}", address);
         let page_base = address & !0xfff;
 
         // NEVER map the null page (address 0)
@@ -36,7 +35,6 @@ impl<'a> HookManager for ExecutionHooks<'a> {
                     // Write the data to the mapped page
                     match engine.mem_write(page_base, &page_data) {
                         Ok(()) => {
-                            println!("Successfully mapped and wrote page at 0x{:x}", page_base);
                             Ok(true) // Successfully handled the fault
                         }
                         Err(_) => {
