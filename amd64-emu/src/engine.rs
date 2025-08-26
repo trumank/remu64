@@ -406,6 +406,10 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             Mnemonic::Psubw => self.execute_psubw(inst),
             Mnemonic::Psubd => self.execute_psubd(inst),
             Mnemonic::Psubq => self.execute_psubq(inst),
+            Mnemonic::Pand => self.execute_pand(inst),
+            Mnemonic::Pandn => self.execute_pandn(inst),
+            Mnemonic::Por => self.execute_por(inst),
+            Mnemonic::Pxor => self.execute_pxor(inst),
             _ => {
                 println!(
                     "Unsupported instruction: {} ({:?}) at {:#x}",
@@ -3098,6 +3102,114 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         let diff_high = dst_high.wrapping_sub(src_high);
         
         let result = (diff_low as u128) | ((diff_high as u128) << 64);
+        
+        self.engine.cpu.write_xmm(dst_reg, result);
+        Ok(())
+    }
+
+    fn execute_pand(&mut self, inst: &Instruction) -> Result<()> {
+        // PAND: Logical AND of packed data
+        let dst_reg = self.convert_register(inst.op_register(0))?;
+        let src_value = match inst.op_kind(1) {
+            OpKind::Register => {
+                let src_reg = self.convert_register(inst.op_register(1))?;
+                self.engine.cpu.read_xmm(src_reg)
+            }
+            OpKind::Memory => {
+                let addr = self.calculate_memory_address(inst, 1)?;
+                self.read_memory_128(addr)?
+            }
+            _ => {
+                return Err(EmulatorError::UnsupportedInstruction(
+                    "Invalid PAND source".to_string(),
+                ))
+            }
+        };
+        let dst_value = self.engine.cpu.read_xmm(dst_reg);
+        
+        // Perform bitwise AND on the entire 128-bit value
+        let result = dst_value & src_value;
+        
+        self.engine.cpu.write_xmm(dst_reg, result);
+        Ok(())
+    }
+
+    fn execute_pandn(&mut self, inst: &Instruction) -> Result<()> {
+        // PANDN: Logical AND NOT of packed data (NOT dst AND src)
+        let dst_reg = self.convert_register(inst.op_register(0))?;
+        let src_value = match inst.op_kind(1) {
+            OpKind::Register => {
+                let src_reg = self.convert_register(inst.op_register(1))?;
+                self.engine.cpu.read_xmm(src_reg)
+            }
+            OpKind::Memory => {
+                let addr = self.calculate_memory_address(inst, 1)?;
+                self.read_memory_128(addr)?
+            }
+            _ => {
+                return Err(EmulatorError::UnsupportedInstruction(
+                    "Invalid PANDN source".to_string(),
+                ))
+            }
+        };
+        let dst_value = self.engine.cpu.read_xmm(dst_reg);
+        
+        // Perform bitwise AND NOT: (~dst) & src
+        let result = (!dst_value) & src_value;
+        
+        self.engine.cpu.write_xmm(dst_reg, result);
+        Ok(())
+    }
+
+    fn execute_por(&mut self, inst: &Instruction) -> Result<()> {
+        // POR: Logical OR of packed data
+        let dst_reg = self.convert_register(inst.op_register(0))?;
+        let src_value = match inst.op_kind(1) {
+            OpKind::Register => {
+                let src_reg = self.convert_register(inst.op_register(1))?;
+                self.engine.cpu.read_xmm(src_reg)
+            }
+            OpKind::Memory => {
+                let addr = self.calculate_memory_address(inst, 1)?;
+                self.read_memory_128(addr)?
+            }
+            _ => {
+                return Err(EmulatorError::UnsupportedInstruction(
+                    "Invalid POR source".to_string(),
+                ))
+            }
+        };
+        let dst_value = self.engine.cpu.read_xmm(dst_reg);
+        
+        // Perform bitwise OR on the entire 128-bit value
+        let result = dst_value | src_value;
+        
+        self.engine.cpu.write_xmm(dst_reg, result);
+        Ok(())
+    }
+
+    fn execute_pxor(&mut self, inst: &Instruction) -> Result<()> {
+        // PXOR: Logical XOR of packed data
+        let dst_reg = self.convert_register(inst.op_register(0))?;
+        let src_value = match inst.op_kind(1) {
+            OpKind::Register => {
+                let src_reg = self.convert_register(inst.op_register(1))?;
+                self.engine.cpu.read_xmm(src_reg)
+            }
+            OpKind::Memory => {
+                let addr = self.calculate_memory_address(inst, 1)?;
+                self.read_memory_128(addr)?
+            }
+            _ => {
+                return Err(EmulatorError::UnsupportedInstruction(
+                    "Invalid PXOR source".to_string(),
+                ))
+            }
+        };
+        let dst_value = self.engine.cpu.read_xmm(dst_reg);
+        
+        // Perform bitwise XOR on the entire 128-bit value
+        let result = dst_value ^ src_value;
         
         self.engine.cpu.write_xmm(dst_reg, result);
         Ok(())
