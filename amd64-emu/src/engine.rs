@@ -5633,4 +5633,206 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         self.engine.cpu.write_xmm(dst_reg, result);
         Ok(())
     }
+
+    fn execute_punpcklbw(&mut self, inst: &Instruction) -> Result<()> {
+        // PUNPCKLBW: Unpack and interleave low-order bytes
+        let dst_reg = self.convert_register(inst.op_register(0))?;
+        let src_value = match inst.op_kind(1) {
+            OpKind::Register => {
+                let src_reg = self.convert_register(inst.op_register(1))?;
+                self.engine.cpu.read_xmm(src_reg)
+            }
+            OpKind::Memory => {
+                let addr = self.calculate_memory_address(inst, 1)?;
+                self.read_memory_128(addr)?
+            }
+            _ => {
+                return Err(EmulatorError::UnsupportedInstruction(
+                    "Invalid PUNPCKLBW source".to_string(),
+                ))
+            }
+        };
+
+        let dst_value = self.engine.cpu.read_xmm(dst_reg);
+        let mut result = 0u128;
+        
+        // Interleave the low 8 bytes from dst and src
+        for i in 0..8 {
+            let dst_byte = ((dst_value >> (i * 8)) & 0xFF) as u8;
+            let src_byte = ((src_value >> (i * 8)) & 0xFF) as u8;
+            
+            // Place dst byte in even position, src byte in odd position
+            result |= (dst_byte as u128) << (i * 16);
+            result |= (src_byte as u128) << (i * 16 + 8);
+        }
+        
+        self.engine.cpu.write_xmm(dst_reg, result);
+        Ok(())
+    }
+
+    fn execute_punpckhbw(&mut self, inst: &Instruction) -> Result<()> {
+        // PUNPCKHBW: Unpack and interleave high-order bytes
+        let dst_reg = self.convert_register(inst.op_register(0))?;
+        let src_value = match inst.op_kind(1) {
+            OpKind::Register => {
+                let src_reg = self.convert_register(inst.op_register(1))?;
+                self.engine.cpu.read_xmm(src_reg)
+            }
+            OpKind::Memory => {
+                let addr = self.calculate_memory_address(inst, 1)?;
+                self.read_memory_128(addr)?
+            }
+            _ => {
+                return Err(EmulatorError::UnsupportedInstruction(
+                    "Invalid PUNPCKHBW source".to_string(),
+                ))
+            }
+        };
+
+        let dst_value = self.engine.cpu.read_xmm(dst_reg);
+        let mut result = 0u128;
+        
+        // Interleave the high 8 bytes from dst and src
+        for i in 0..8 {
+            let dst_byte = ((dst_value >> ((i + 8) * 8)) & 0xFF) as u8;
+            let src_byte = ((src_value >> ((i + 8) * 8)) & 0xFF) as u8;
+            
+            // Place dst byte in even position, src byte in odd position
+            result |= (dst_byte as u128) << (i * 16);
+            result |= (src_byte as u128) << (i * 16 + 8);
+        }
+        
+        self.engine.cpu.write_xmm(dst_reg, result);
+        Ok(())
+    }
+
+    fn execute_punpckldq(&mut self, inst: &Instruction) -> Result<()> {
+        // PUNPCKLDQ: Unpack and interleave low-order doublewords
+        let dst_reg = self.convert_register(inst.op_register(0))?;
+        let src_value = match inst.op_kind(1) {
+            OpKind::Register => {
+                let src_reg = self.convert_register(inst.op_register(1))?;
+                self.engine.cpu.read_xmm(src_reg)
+            }
+            OpKind::Memory => {
+                let addr = self.calculate_memory_address(inst, 1)?;
+                self.read_memory_128(addr)?
+            }
+            _ => {
+                return Err(EmulatorError::UnsupportedInstruction(
+                    "Invalid PUNPCKLDQ source".to_string(),
+                ))
+            }
+        };
+
+        let dst_value = self.engine.cpu.read_xmm(dst_reg);
+        let mut result = 0u128;
+        
+        // Interleave the low 2 doublewords from dst and src
+        let dst_dw0 = (dst_value & 0xFFFFFFFF) as u32;
+        let dst_dw1 = ((dst_value >> 32) & 0xFFFFFFFF) as u32;
+        let src_dw0 = (src_value & 0xFFFFFFFF) as u32;
+        let src_dw1 = ((src_value >> 32) & 0xFFFFFFFF) as u32;
+        
+        result |= dst_dw0 as u128;
+        result |= (src_dw0 as u128) << 32;
+        result |= (dst_dw1 as u128) << 64;
+        result |= (src_dw1 as u128) << 96;
+        
+        self.engine.cpu.write_xmm(dst_reg, result);
+        Ok(())
+    }
+
+    fn execute_punpckhdq(&mut self, inst: &Instruction) -> Result<()> {
+        // PUNPCKHDQ: Unpack and interleave high-order doublewords
+        let dst_reg = self.convert_register(inst.op_register(0))?;
+        let src_value = match inst.op_kind(1) {
+            OpKind::Register => {
+                let src_reg = self.convert_register(inst.op_register(1))?;
+                self.engine.cpu.read_xmm(src_reg)
+            }
+            OpKind::Memory => {
+                let addr = self.calculate_memory_address(inst, 1)?;
+                self.read_memory_128(addr)?
+            }
+            _ => {
+                return Err(EmulatorError::UnsupportedInstruction(
+                    "Invalid PUNPCKHDQ source".to_string(),
+                ))
+            }
+        };
+
+        let dst_value = self.engine.cpu.read_xmm(dst_reg);
+        let mut result = 0u128;
+        
+        // Interleave the high 2 doublewords from dst and src
+        let dst_dw2 = ((dst_value >> 64) & 0xFFFFFFFF) as u32;
+        let dst_dw3 = ((dst_value >> 96) & 0xFFFFFFFF) as u32;
+        let src_dw2 = ((src_value >> 64) & 0xFFFFFFFF) as u32;
+        let src_dw3 = ((src_value >> 96) & 0xFFFFFFFF) as u32;
+        
+        result |= dst_dw2 as u128;
+        result |= (src_dw2 as u128) << 32;
+        result |= (dst_dw3 as u128) << 64;
+        result |= (src_dw3 as u128) << 96;
+        
+        self.engine.cpu.write_xmm(dst_reg, result);
+        Ok(())
+    }
+
+    fn execute_punpcklqdq(&mut self, inst: &Instruction) -> Result<()> {
+        // PUNPCKLQDQ: Unpack and interleave low-order quadwords
+        let dst_reg = self.convert_register(inst.op_register(0))?;
+        let src_value = match inst.op_kind(1) {
+            OpKind::Register => {
+                let src_reg = self.convert_register(inst.op_register(1))?;
+                self.engine.cpu.read_xmm(src_reg)
+            }
+            OpKind::Memory => {
+                let addr = self.calculate_memory_address(inst, 1)?;
+                self.read_memory_128(addr)?
+            }
+            _ => {
+                return Err(EmulatorError::UnsupportedInstruction(
+                    "Invalid PUNPCKLQDQ source".to_string(),
+                ))
+            }
+        };
+
+        let dst_value = self.engine.cpu.read_xmm(dst_reg);
+        
+        // Result contains low quadword from dst and low quadword from src
+        let result = (dst_value & 0xFFFFFFFFFFFFFFFF) | ((src_value & 0xFFFFFFFFFFFFFFFF) << 64);
+        
+        self.engine.cpu.write_xmm(dst_reg, result);
+        Ok(())
+    }
+
+    fn execute_punpckhqdq(&mut self, inst: &Instruction) -> Result<()> {
+        // PUNPCKHQDQ: Unpack and interleave high-order quadwords
+        let dst_reg = self.convert_register(inst.op_register(0))?;
+        let src_value = match inst.op_kind(1) {
+            OpKind::Register => {
+                let src_reg = self.convert_register(inst.op_register(1))?;
+                self.engine.cpu.read_xmm(src_reg)
+            }
+            OpKind::Memory => {
+                let addr = self.calculate_memory_address(inst, 1)?;
+                self.read_memory_128(addr)?
+            }
+            _ => {
+                return Err(EmulatorError::UnsupportedInstruction(
+                    "Invalid PUNPCKHQDQ source".to_string(),
+                ))
+            }
+        };
+
+        let dst_value = self.engine.cpu.read_xmm(dst_reg);
+        
+        // Result contains high quadword from dst and high quadword from src
+        let result = (dst_value >> 64) | ((src_value >> 64) << 64);
+        
+        self.engine.cpu.write_xmm(dst_reg, result);
+        Ok(())
+    }
 }
