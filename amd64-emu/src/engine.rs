@@ -2644,8 +2644,8 @@ impl<H: HookManager> ExecutionContext<'_, H> {
 
     fn execute_bt(&mut self, inst: &Instruction) -> Result<()> {
         // BT: Bit Test - Test bit in first operand by second operand, set CF accordingly
-        let bit_base = self.read_operand_value(inst, 0)?;
-        let bit_offset = self.read_operand_value(inst, 1)?;
+        let bit_base = self.read_operand(inst, 0)?;
+        let bit_offset = self.read_operand(inst, 1)?;
         
         // Calculate effective bit position (modulo based on operand size)
         let size = self.get_operand_size_from_instruction(inst, 0)?;
@@ -2666,8 +2666,8 @@ impl<H: HookManager> ExecutionContext<'_, H> {
 
     fn execute_bts(&mut self, inst: &Instruction) -> Result<()> {
         // BTS: Bit Test and Set - Test bit and set it to 1
-        let bit_base = self.read_operand_value(inst, 0)?;
-        let bit_offset = self.read_operand_value(inst, 1)?;
+        let bit_base = self.read_operand(inst, 0)?;
+        let bit_offset = self.read_operand(inst, 1)?;
         
         // Calculate effective bit position
         let size = self.get_operand_size_from_instruction(inst, 0)?;
@@ -2683,15 +2683,15 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         
         // Set the bit to 1
         let new_value = bit_base | (1u64 << bit_pos);
-        self.write_operand_value(inst, 0, new_value)?;
+        self.write_operand(inst, 0, new_value)?;
         
         Ok(())
     }
 
     fn execute_btr(&mut self, inst: &Instruction) -> Result<()> {
         // BTR: Bit Test and Reset - Test bit and set it to 0
-        let bit_base = self.read_operand_value(inst, 0)?;
-        let bit_offset = self.read_operand_value(inst, 1)?;
+        let bit_base = self.read_operand(inst, 0)?;
+        let bit_offset = self.read_operand(inst, 1)?;
         
         // Calculate effective bit position
         let size = self.get_operand_size_from_instruction(inst, 0)?;
@@ -2707,15 +2707,15 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         
         // Reset the bit to 0
         let new_value = bit_base & !(1u64 << bit_pos);
-        self.write_operand_value(inst, 0, new_value)?;
+        self.write_operand(inst, 0, new_value)?;
         
         Ok(())
     }
 
     fn execute_btc(&mut self, inst: &Instruction) -> Result<()> {
         // BTC: Bit Test and Complement - Test bit and flip it
-        let bit_base = self.read_operand_value(inst, 0)?;
-        let bit_offset = self.read_operand_value(inst, 1)?;
+        let bit_base = self.read_operand(inst, 0)?;
+        let bit_offset = self.read_operand(inst, 1)?;
         
         // Calculate effective bit position
         let size = self.get_operand_size_from_instruction(inst, 0)?;
@@ -2731,14 +2731,14 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         
         // Complement the bit
         let new_value = bit_base ^ (1u64 << bit_pos);
-        self.write_operand_value(inst, 0, new_value)?;
+        self.write_operand(inst, 0, new_value)?;
         
         Ok(())
     }
 
     fn execute_bsf(&mut self, inst: &Instruction) -> Result<()> {
         // BSF: Bit Scan Forward - Find first set bit (from LSB)
-        let source = self.read_operand_value(inst, 1)?;
+        let source = self.read_operand(inst, 1)?;
         
         if source == 0 {
             // If source is 0, set ZF and destination is undefined
@@ -2749,7 +2749,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             self.engine.cpu.rflags.remove(Flags::ZF);
             
             // Write result to destination
-            self.write_operand_value(inst, 0, bit_pos)?;
+            self.write_operand(inst, 0, bit_pos)?;
         }
         
         Ok(())
@@ -2757,7 +2757,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
 
     fn execute_bsr(&mut self, inst: &Instruction) -> Result<()> {
         // BSR: Bit Scan Reverse - Find first set bit (from MSB)
-        let source = self.read_operand_value(inst, 1)?;
+        let source = self.read_operand(inst, 1)?;
         
         if source == 0 {
             // If source is 0, set ZF and destination is undefined
@@ -2779,7 +2779,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             self.engine.cpu.rflags.remove(Flags::ZF);
             
             // Write result to destination
-            self.write_operand_value(inst, 0, bit_pos)?;
+            self.write_operand(inst, 0, bit_pos)?;
         }
         
         Ok(())
