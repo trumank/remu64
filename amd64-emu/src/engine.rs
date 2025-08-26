@@ -396,6 +396,8 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             Mnemonic::Unpcklps => self.execute_unpcklps(inst),
             Mnemonic::Unpckhps => self.execute_unpckhps(inst),
             Mnemonic::Shufpd => self.execute_shufpd(inst),
+            Mnemonic::Unpcklpd => self.execute_unpcklpd(inst),
+            Mnemonic::Unpckhpd => self.execute_unpckhpd(inst),
             _ => {
                 println!(
                     "Unsupported instruction: {} ({:?}) at {:#x}",
@@ -2754,6 +2756,64 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         
         // Pack results into u128
         let result = (result0 as u128) | ((result1 as u128) << 64);
+            
+        self.engine.cpu.write_xmm(dst_reg, result);
+        Ok(())
+    }
+
+    fn execute_unpcklpd(&mut self, inst: &Instruction) -> Result<()> {
+        // UNPCKLPD: Unpack and Interleave Low Packed Double-Precision Floating-Point Values
+        // Takes the low double from each operand
+        let dst_reg = self.convert_register(inst.op_register(0))?;
+        let src_value = match inst.op_kind(1) {
+            OpKind::Register => {
+                let src_reg = self.convert_register(inst.op_register(1))?;
+                self.engine.cpu.read_xmm(src_reg)
+            }
+            OpKind::Memory => {
+                let addr = self.calculate_memory_address(inst, 1)?;
+                self.read_memory_128(addr)?
+            }
+            _ => return Err(EmulatorError::UnsupportedOperandType),
+        };
+        
+        let dst_value = self.engine.cpu.read_xmm(dst_reg);
+        
+        // Extract the low double from each operand
+        let dst_low = dst_value as u64;
+        let src_low = src_value as u64;
+        
+        // Result is: dst[0], src[0]
+        let result = (dst_low as u128) | ((src_low as u128) << 64);
+            
+        self.engine.cpu.write_xmm(dst_reg, result);
+        Ok(())
+    }
+
+    fn execute_unpckhpd(&mut self, inst: &Instruction) -> Result<()> {
+        // UNPCKHPD: Unpack and Interleave High Packed Double-Precision Floating-Point Values
+        // Takes the high double from each operand
+        let dst_reg = self.convert_register(inst.op_register(0))?;
+        let src_value = match inst.op_kind(1) {
+            OpKind::Register => {
+                let src_reg = self.convert_register(inst.op_register(1))?;
+                self.engine.cpu.read_xmm(src_reg)
+            }
+            OpKind::Memory => {
+                let addr = self.calculate_memory_address(inst, 1)?;
+                self.read_memory_128(addr)?
+            }
+            _ => return Err(EmulatorError::UnsupportedOperandType),
+        };
+        
+        let dst_value = self.engine.cpu.read_xmm(dst_reg);
+        
+        // Extract the high double from each operand
+        let dst_high = (dst_value >> 64) as u64;
+        let src_high = (src_value >> 64) as u64;
+        
+        // Result is: dst[1], src[1]
+        let result = (dst_high as u128) | ((src_high as u128) << 64);
             
         self.engine.cpu.write_xmm(dst_reg, result);
         Ok(())
