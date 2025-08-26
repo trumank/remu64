@@ -1,5 +1,5 @@
 use crate::minidump_loader::MinidumpLoader;
-use amd64_emu::Engine;
+use amd64_emu::{Engine, Memory};
 use anyhow::{Context, Result};
 use std::collections::HashMap;
 
@@ -73,7 +73,11 @@ impl MemoryManager {
         }
     }
 
-    pub fn handle_page_fault(&mut self, address: u64, _engine: &mut Engine) -> Result<bool> {
+    pub fn handle_page_fault(
+        &mut self,
+        address: u64,
+        _engine: &mut Engine<Memory>,
+    ) -> Result<bool> {
         let page_base = align_down(address, PAGE_SIZE);
 
         if self.pages.contains_key(&page_base) {

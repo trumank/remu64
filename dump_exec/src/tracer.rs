@@ -1,5 +1,5 @@
 use crate::MinidumpLoader;
-use amd64_emu::{Engine, Register};
+use amd64_emu::{memory::MemoryTrait, Engine, Register};
 use anyhow::Result;
 use colored::*;
 use iced_x86::{
@@ -91,11 +91,11 @@ impl InstructionTracer {
         self.full_trace
     }
 
-    pub fn trace_instruction(
+    pub fn trace_instruction<M: MemoryTrait>(
         &mut self,
         rip: u64,
         instruction_bytes: &[u8],
-        engine: &Engine,
+        engine: &Engine<M>,
         loader: Option<&MinidumpLoader>,
     ) -> Result<()> {
         if !self.enabled {

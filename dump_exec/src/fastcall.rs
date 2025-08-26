@@ -1,4 +1,4 @@
-use amd64_emu::{Engine, Register};
+use amd64_emu::{memory::MemoryTrait, Engine, Register};
 use anyhow::Result;
 
 #[derive(Debug, Clone)]
@@ -26,8 +26,8 @@ pub enum ArgumentType {
 pub struct CallingConvention;
 
 impl CallingConvention {
-    pub fn setup_fastcall(
-        engine: &mut Engine,
+    pub fn setup_fastcall<M: MemoryTrait>(
+        engine: &mut Engine<M>,
         args: Vec<ArgumentType>,
         stack_pointer: u64,
         return_address: u64,
@@ -70,8 +70,8 @@ impl CallingConvention {
                     // Write FName data to stack
                     let comparison_bytes = fname.comparison_index.to_le_bytes();
                     let value_bytes = fname.value.to_le_bytes();
-                    engine.mem_write(struct_addr, &comparison_bytes)?;
-                    engine.mem_write(struct_addr + 4, &value_bytes)?;
+                    engine.memory.write(struct_addr, &comparison_bytes)?;
+                    engine.memory.write(struct_addr + 4, &value_bytes)?;
 
                     struct_addresses.push(struct_addr);
 
@@ -96,7 +96,9 @@ impl CallingConvention {
                         // Write wide character data to stack
                         for (i, &wchar) in data.iter().enumerate() {
                             let wchar_bytes = wchar.to_le_bytes();
-                            engine.mem_write(data_addr + (i * 2) as u64, &wchar_bytes)?;
+                            engine
+                                .memory
+                                .write(data_addr + (i * 2) as u64, &wchar_bytes)?;
                         }
                         data_addr
                     } else {
@@ -108,9 +110,9 @@ impl CallingConvention {
                     let num_bytes = fstring.num.to_le_bytes();
                     let max_bytes = fstring.max.to_le_bytes();
 
-                    engine.mem_write(struct_addr, &data_ptr_bytes)?; // data pointer
-                    engine.mem_write(struct_addr + 8, &num_bytes)?; // num
-                    engine.mem_write(struct_addr + 12, &max_bytes)?; // max
+                    engine.memory.write(struct_addr, &data_ptr_bytes)?; // data pointer
+                    engine.memory.write(struct_addr + 8, &num_bytes)?; // num
+                    engine.memory.write(struct_addr + 12, &max_bytes)?; // max
 
                     fstring_addresses.push(struct_addr);
 
@@ -137,13 +139,13 @@ impl CallingConvention {
         // Push the return address to the stack (simulating a CALL instruction)
         current_stack -= 8;
         let return_bytes = return_address.to_le_bytes();
-        engine.mem_write(current_stack, &return_bytes)?;
+        engine.memory.write(current_stack, &return_bytes)?;
 
         // Push any stack arguments
         for &arg in stack_args.iter().rev() {
             current_stack -= 8;
             let bytes = arg.to_le_bytes();
-            engine.mem_write(current_stack, &bytes)?;
+            engine.memory.write(current_stack, &bytes)?;
         }
 
         // Set RSP to point to the return address location
@@ -152,18 +154,21 @@ impl CallingConvention {
         Ok((struct_addresses, fstring_addresses))
     }
 
-    pub fn read_fstring_output(engine: &mut Engine, fstring_addr: u64) -> Result<FString> {
+    pub fn read_fstring_output<M: MemoryTrait>(
+        engine: &mut Engine<M>,
+        fstring_addr: u64,
+    ) -> Result<FString> {
         // Read FString struct from memory
         let mut data_ptr_bytes = [0u8; 8];
-        engine.mem_read(fstring_addr, &mut data_ptr_bytes)?;
+        engine.memory.read(fstring_addr, &mut data_ptr_bytes)?;
         let data_ptr = u64::from_le_bytes(data_ptr_bytes);
 
         let mut num_bytes = [0u8; 4];
-        engine.mem_read(fstring_addr + 8, &mut num_bytes)?;
+        engine.memory.read(fstring_addr + 8, &mut num_bytes)?;
         let num = i32::from_le_bytes(num_bytes);
 
         let mut max_bytes = [0u8; 4];
-        engine.mem_read(fstring_addr + 12, &mut max_bytes)?;
+        engine.memory.read(fstring_addr + 12, &mut max_bytes)?;
         let max = i32::from_le_bytes(max_bytes);
 
         // Read wide character data if pointer is valid and num > 0
@@ -171,7 +176,9 @@ impl CallingConvention {
             let mut wide_chars = Vec::new();
             for i in 0..num {
                 let mut wchar_bytes = [0u8; 2];
-                engine.mem_read(data_ptr + (i * 2) as u64, &mut wchar_bytes)?;
+                engine
+                    .memory
+                    .read(data_ptr + (i * 2) as u64, &mut wchar_bytes)?;
                 wide_chars.push(u16::from_le_bytes(wchar_bytes));
             }
             Some(wide_chars)

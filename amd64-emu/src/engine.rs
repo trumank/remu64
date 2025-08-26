@@ -1,7 +1,7 @@
 use crate::cpu::{CpuState, Flags, Register};
 use crate::error::{EmulatorError, Result};
 use crate::hooks::{HookManager, NoHooks};
-use crate::memory::{Memory, Permission};
+use crate::memory::MemoryTrait;
 use iced_x86::{
     Code, Decoder, DecoderOptions, Instruction, Mnemonic, OpKind, Register as IcedRegister,
 };
@@ -13,66 +13,18 @@ pub enum EngineMode {
     Mode64,
 }
 
-pub struct Engine {
+pub struct Engine<M: MemoryTrait> {
     pub cpu: CpuState,
-    pub memory: Memory,
+    pub memory: M,
     mode: EngineMode,
-    instruction_count: u64,
 }
 
-impl Engine {
-    pub fn new(mode: EngineMode) -> Self {
+impl<M: MemoryTrait> Engine<M> {
+    pub fn new(mode: EngineMode, memory: M) -> Self {
         Self {
             cpu: CpuState::new(),
-            memory: Memory::new(),
+            memory,
             mode,
-            instruction_count: 0,
-        }
-    }
-
-    pub fn mem_map(&mut self, address: u64, size: usize, perms: Permission) -> Result<()> {
-        self.memory.map(address, size, perms)
-    }
-
-    pub fn mem_unmap(&mut self, address: u64, size: usize) -> Result<()> {
-        self.memory.unmap(address, size)
-    }
-
-    pub fn mem_protect(&mut self, address: u64, size: usize, perms: Permission) -> Result<()> {
-        self.memory.protect(address, size, perms)
-    }
-
-    pub fn mem_write(&mut self, address: u64, data: &[u8]) -> Result<()> {
-        // For code loading, bypass permission checks and write directly
-        self.memory.write_bytes(address, data)
-    }
-
-    pub fn mem_read(&mut self, address: u64, buf: &mut [u8]) -> Result<()> {
-        self.memory.read(address, buf)
-    }
-
-    fn mem_read_with_hooks<H: HookManager>(
-        &mut self,
-        address: u64,
-        buf: &mut [u8],
-        hooks: &mut H,
-    ) -> Result<()> {
-        hooks.on_mem_read(self, address, buf.len())?;
-
-        // Try to read memory, handle faults with hooks
-        match self.memory.read(address, buf) {
-            Ok(()) => Ok(()),
-            Err(EmulatorError::UnmappedMemory(_)) => {
-                // Try to handle the fault with memory fault hooks
-                if hooks.on_mem_fault(self, address, buf.len())? {
-                    // Hook handled the fault, try reading again
-                    self.memory.read(address, buf)
-                } else {
-                    // No hook handled the fault, return original error
-                    Err(EmulatorError::UnmappedMemory(address))
-                }
-            }
-            Err(e) => Err(e),
         }
     }
 
@@ -114,8 +66,7 @@ impl Engine {
         self.emu_start_with_hooks(begin, until, timeout, count, &mut no_hooks)
     }
 
-    /// Start emulation with custom hooks
-    pub fn emu_start_with_hooks<H: HookManager>(
+    pub fn emu_start_with_hooks<H: HookManager<M>>(
         &mut self,
         begin: u64,
         until: u64,
@@ -123,8 +74,24 @@ impl Engine {
         count: usize,
         hooks: &mut H,
     ) -> Result<()> {
-        self.cpu.rip = begin;
-        self.instruction_count = 0;
+        ExecutionContext {
+            engine: self,
+            hooks,
+        }
+        .emu_start(begin, until, timeout, count)
+    }
+}
+
+struct ExecutionContext<'a, H: HookManager<M>, M: MemoryTrait> {
+    engine: &'a mut Engine<M>,
+    hooks: &'a mut H,
+}
+
+impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
+    /// Start emulation with custom hooks
+    fn emu_start(&mut self, begin: u64, until: u64, timeout: u64, count: usize) -> Result<()> {
+        self.engine.cpu.rip = begin;
+        let mut instruction_count = 0;
 
         let start_time = std::time::Instant::now();
         let timeout_duration = if timeout > 0 {
@@ -134,11 +101,11 @@ impl Engine {
         };
 
         loop {
-            if self.cpu.rip == until && until != 0 {
+            if self.engine.cpu.rip == until && until != 0 {
                 break;
             }
 
-            if count > 0 && self.instruction_count >= count as u64 {
+            if count > 0 && instruction_count >= count as u64 {
                 break;
             }
 
@@ -148,37 +115,39 @@ impl Engine {
                 }
             }
 
-            self.step(hooks)?;
+            self.step()?;
+
+            instruction_count += 1;
         }
 
         Ok(())
     }
 
-    fn step<H: HookManager>(&mut self, hooks: &mut H) -> Result<()> {
-        let rip = self.cpu.rip;
+    fn step(&mut self) -> Result<()> {
+        let rip = self.engine.cpu.rip;
 
         // Check if we can execute at this address, but allow memory fault hooks to handle unmapped memory
-        match self.memory.check_exec(rip) {
+        match self.engine.memory.check_exec(rip) {
             Ok(()) => {} // Memory is mapped and executable, continue
             Err(EmulatorError::UnmappedMemory(_)) => {
                 // Memory is unmapped, try to handle with memory fault hooks
                 // Try to let the memory fault hook handle this
                 // TODO refactor the decoder to do memory reads instead of operate on a slice of data
-                if !hooks.on_mem_fault(self, rip, 1)? {
+                if !self.hooks.on_mem_fault(self.engine, rip, 1)? {
                     // Hook couldn't handle it, return the original error
                     return Err(EmulatorError::UnmappedMemory(rip));
                 }
                 // Hook handled it, try check_exec again
-                self.memory.check_exec(rip)?;
+                self.engine.memory.check_exec(rip)?;
             }
             Err(e) => return Err(e), // Other errors (like permission denied) are fatal
         }
 
         let mut inst_bytes = vec![0u8; 15];
-        self.mem_read_with_hooks(rip, &mut inst_bytes, hooks)?;
+        self.mem_read_with_hooks(rip, &mut inst_bytes)?;
 
         // Create iced_x86 decoder for this instruction
-        let bitness = match self.mode {
+        let bitness = match self.engine.mode {
             EngineMode::Mode16 => 16,
             EngineMode::Mode32 => 32,
             EngineMode::Mode64 => 64,
@@ -187,28 +156,15 @@ impl Engine {
 
         let inst = decoder.decode();
 
-        hooks.on_code(self, rip, inst.len())?;
+        self.hooks.on_code(self.engine, rip, inst.len())?;
 
-        self.cpu.rip = rip + inst.len() as u64;
+        self.engine.cpu.rip = rip + inst.len() as u64;
 
-        ExecutionContext {
-            engine: self,
-            hooks,
-        }
-        .execute_instruction(&inst)?;
-
-        self.instruction_count += 1;
+        self.execute_instruction(&inst)?;
 
         Ok(())
     }
-}
 
-struct ExecutionContext<'a, H: HookManager> {
-    engine: &'a mut Engine,
-    hooks: &'a mut H,
-}
-
-impl<H: HookManager> ExecutionContext<'_, H> {
     fn mem_read_with_hooks(&mut self, address: u64, buf: &mut [u8]) -> Result<()> {
         self.hooks.on_mem_read(self.engine, address, buf.len())?;
 

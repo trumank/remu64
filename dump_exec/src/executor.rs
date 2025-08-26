@@ -2,7 +2,8 @@ use crate::fastcall::{ArgumentType, CallingConvention, FString};
 use crate::memory_manager::MemoryManager;
 use crate::minidump_loader::MinidumpLoader;
 use crate::tracer::InstructionTracer;
-use amd64_emu::{EmulatorError, Engine, EngineMode, HookManager, Permission, Register};
+use amd64_emu::memory::MemoryTrait;
+use amd64_emu::{EmulatorError, Engine, EngineMode, HookManager, Memory, Permission, Register};
 use anyhow::{Context, Result};
 use iced_x86::Formatter;
 
@@ -13,10 +14,10 @@ struct ExecutionHooks<'a> {
     instruction_count: u64,
 }
 
-impl<'a> HookManager for ExecutionHooks<'a> {
+impl<'a, M: MemoryTrait> HookManager<M> for ExecutionHooks<'a> {
     fn on_mem_fault(
         &mut self,
-        engine: &mut Engine,
+        engine: &mut Engine<M>,
         address: u64,
         size: usize,
     ) -> amd64_emu::Result<bool> {
@@ -40,10 +41,10 @@ impl<'a> HookManager for ExecutionHooks<'a> {
             // Try to read from minidump and map this page in the engine
             if let Ok(page_data) = self.memory_manager.read_memory(current_page, 4096) {
                 // Map the page in the engine
-                match engine.mem_map(current_page, 4096, Permission::ALL) {
+                match engine.memory.map(current_page, 4096, Permission::ALL) {
                     Ok(()) => {
                         // Write the data to the mapped page
-                        match engine.mem_write(current_page, &page_data) {
+                        match engine.memory.write(current_page, &page_data) {
                             Ok(()) => {
                                 // Successfully mapped this page
                             }
@@ -59,7 +60,7 @@ impl<'a> HookManager for ExecutionHooks<'a> {
                     }
                     Err(_) => {
                         // Page might already be mapped, try to write anyway
-                        match engine.mem_write(current_page, &page_data) {
+                        match engine.memory.write(current_page, &page_data) {
                             Ok(()) => {
                                 println!("Page already mapped, wrote data at 0x{:x}", current_page);
                             }
@@ -83,14 +84,19 @@ impl<'a> HookManager for ExecutionHooks<'a> {
         Ok(success)
     }
 
-    fn on_code(&mut self, engine: &mut Engine, address: u64, size: usize) -> amd64_emu::Result<()> {
+    fn on_code(
+        &mut self,
+        engine: &mut Engine<M>,
+        address: u64,
+        size: usize,
+    ) -> amd64_emu::Result<()> {
         // Increment instruction counter
         self.instruction_count += 1;
 
         // Handle instruction tracing
         if self.tracer.is_enabled() {
             let mut instruction_bytes = vec![0; size];
-            engine.mem_read(address, &mut instruction_bytes).unwrap();
+            engine.memory.read(address, &mut instruction_bytes).unwrap();
             self.tracer
                 .trace_instruction(
                     address,
@@ -146,7 +152,7 @@ impl<'a> HookManager for ExecutionHooks<'a> {
 }
 
 pub struct FunctionExecutor {
-    engine: Engine,
+    engine: Engine<Memory>,
     memory_manager: MemoryManager,
     stack_base: u64,
     tracer: InstructionTracer,
@@ -155,7 +161,7 @@ pub struct FunctionExecutor {
 
 impl FunctionExecutor {
     pub fn new(minidump_loader: MinidumpLoader) -> Result<Self> {
-        let mut engine = Engine::new(EngineMode::Mode64);
+        let mut engine = Engine::new(EngineMode::Mode64, Memory::new());
         let mut memory_manager = MemoryManager::with_minidump(minidump_loader);
 
         let stack_size = 0x10000;
@@ -165,7 +171,8 @@ impl FunctionExecutor {
 
         // Map stack memory in engine
         engine
-            .mem_map(
+            .memory
+            .map(
                 stack_base - stack_size,
                 stack_size as usize,
                 Permission::ALL,
@@ -262,7 +269,7 @@ impl FunctionExecutor {
 
         // Read up to 15 bytes for the instruction (max x86-64 instruction length)
         let mut instruction_bytes = vec![0u8; 15];
-        self.engine.mem_read(address, &mut instruction_bytes)?;
+        self.engine.memory.read(address, &mut instruction_bytes)?;
         Ok(instruction_bytes)
     }
 
@@ -282,10 +289,11 @@ impl FunctionExecutor {
             // Map the page if not already mapped
             if self
                 .engine
-                .mem_map(page_base, 4096, Permission::ALL)
+                .memory
+                .map(page_base, 4096, Permission::ALL)
                 .is_ok()
             {
-                self.engine.mem_write(page_base, &page_data)?;
+                self.engine.memory.write(page_base, &page_data)?;
             }
         }
         Ok(())
@@ -295,11 +303,11 @@ impl FunctionExecutor {
         self.engine.reg_read(Register::RAX)
     }
 
-    pub fn get_engine(&self) -> &Engine {
+    pub fn get_engine(&self) -> &Engine<Memory> {
         &self.engine
     }
 
-    pub fn get_engine_mut(&mut self) -> &mut Engine {
+    pub fn get_engine_mut(&mut self) -> &mut Engine<Memory> {
         &mut self.engine
     }
 
