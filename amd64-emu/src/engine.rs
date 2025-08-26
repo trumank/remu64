@@ -357,6 +357,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             Mnemonic::Pshufd => self.execute_pshufd(inst),
             Mnemonic::Pshuflw => self.execute_pshuflw(inst),
             Mnemonic::Pshufhw => self.execute_pshufhw(inst),
+            Mnemonic::Pextrw => self.execute_pextrw(inst),
             Mnemonic::Xorps => self.execute_xorps(inst),
             Mnemonic::Cmpps => self.execute_cmpps(inst),
             Mnemonic::Cmpss => self.execute_cmpss(inst),
@@ -1934,6 +1935,52 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             }
             _ => Err(EmulatorError::UnsupportedInstruction(format!(
                 "Unsupported PSHUFHW operand types: {:?}, {:?}, {:?}",
+                inst.op_kind(0),
+                inst.op_kind(1),
+                inst.op_kind(2)
+            ))),
+        }
+    }
+
+    fn execute_pextrw(&mut self, inst: &Instruction) -> Result<()> {
+        // PEXTRW: Extract Word
+        // Extracts a 16-bit word from an XMM register based on an immediate index
+        // The word is zero-extended to 32 bits and stored in a general-purpose register
+
+        if inst.op_count() != 3 {
+            return Err(EmulatorError::UnsupportedInstruction(
+                "PEXTRW requires exactly 3 operands".to_string(),
+            ));
+        }
+
+        match (inst.op_kind(0), inst.op_kind(1), inst.op_kind(2)) {
+            (OpKind::Register, OpKind::Register, OpKind::Immediate8) => {
+                let dst_reg = self.convert_register(inst.op_register(0))?;
+                let src_reg = self.convert_register(inst.op_register(1))?;
+                let imm8 = inst.immediate8();
+
+                // Check if source is XMM register and destination is general-purpose register
+                if !src_reg.is_xmm() {
+                    return Err(EmulatorError::UnsupportedInstruction(
+                        "PEXTRW requires XMM register as source".to_string(),
+                    ));
+                }
+
+                let src_value = self.engine.cpu.read_xmm(src_reg);
+
+                // Extract word index (only low 3 bits are used for 8 words)
+                let word_index = (imm8 & 0x07) as u32;
+
+                // Extract the selected word (16 bits)
+                let shift_amount = word_index * 16;
+                let extracted_word = ((src_value >> shift_amount) & 0xFFFF) as u64;
+
+                // Zero-extend to destination size and write to general-purpose register
+                self.write_register(dst_reg, extracted_word)?;
+                Ok(())
+            }
+            _ => Err(EmulatorError::UnsupportedInstruction(format!(
+                "Unsupported PEXTRW operand types: {:?}, {:?}, {:?}",
                 inst.op_kind(0),
                 inst.op_kind(1),
                 inst.op_kind(2)
