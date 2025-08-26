@@ -11,14 +11,14 @@ fn test_movs_byte() {
     emu.mem_write(0x1500, b"Hello").unwrap();
 
     // Set up registers
-    emu.reg_write(Register::RSI, 0x1500).unwrap();
-    emu.reg_write(Register::RDI, 0x1600).unwrap();
+    emu.reg_write(Register::RSI, 0x1500);
+    emu.reg_write(Register::RDI, 0x1600);
 
     // MOVS BYTE instruction
     let code = vec![0xA4]; // MOVSB
     emu.mem_write(0x1000, &code).unwrap();
 
-    emu.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0, None)
+    emu.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
         .unwrap();
 
     // Check that byte was copied
@@ -27,8 +27,8 @@ fn test_movs_byte() {
     assert_eq!(buf[0], b'H');
 
     // Check RSI and RDI were incremented
-    assert_eq!(emu.reg_read(Register::RSI).unwrap(), 0x1501);
-    assert_eq!(emu.reg_read(Register::RDI).unwrap(), 0x1601);
+    assert_eq!(emu.reg_read(Register::RSI), 0x1501);
+    assert_eq!(emu.reg_read(Register::RDI), 0x1601);
 }
 
 #[test]
@@ -42,15 +42,15 @@ fn test_rep_movs() {
     emu.mem_write(0x1500, b"Hello, World!").unwrap();
 
     // Set up registers
-    emu.reg_write(Register::RSI, 0x1500).unwrap();
-    emu.reg_write(Register::RDI, 0x1600).unwrap();
-    emu.reg_write(Register::RCX, 13).unwrap(); // Length of "Hello, World!"
+    emu.reg_write(Register::RSI, 0x1500);
+    emu.reg_write(Register::RDI, 0x1600);
+    emu.reg_write(Register::RCX, 13); // Length of "Hello, World!"
 
     // REP MOVS BYTE instruction
     let code = vec![0xF3, 0xA4]; // REP MOVSB
     emu.mem_write(0x1000, &code).unwrap();
 
-    emu.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0, None)
+    emu.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
         .unwrap();
 
     // Check that string was copied
@@ -59,11 +59,11 @@ fn test_rep_movs() {
     assert_eq!(&buf, b"Hello, World!");
 
     // Check RCX is 0
-    assert_eq!(emu.reg_read(Register::RCX).unwrap(), 0);
+    assert_eq!(emu.reg_read(Register::RCX), 0);
 
     // Check RSI and RDI were updated
-    assert_eq!(emu.reg_read(Register::RSI).unwrap(), 0x150D);
-    assert_eq!(emu.reg_read(Register::RDI).unwrap(), 0x160D);
+    assert_eq!(emu.reg_read(Register::RSI), 0x150D);
+    assert_eq!(emu.reg_read(Register::RDI), 0x160D);
 }
 
 #[test]
@@ -74,14 +74,14 @@ fn test_stos_byte() {
     emu.mem_map(0x1000, 0x2000, Permission::all()).unwrap();
 
     // Set up registers
-    emu.reg_write(Register::AL, 0x41).unwrap(); // 'A'
-    emu.reg_write(Register::RDI, 0x1500).unwrap();
+    emu.reg_write(Register::AL, 0x41); // 'A'
+    emu.reg_write(Register::RDI, 0x1500);
 
     // STOS BYTE instruction
     let code = vec![0xAA]; // STOSB
     emu.mem_write(0x1000, &code).unwrap();
 
-    emu.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0, None)
+    emu.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
         .unwrap();
 
     // Check that byte was stored
@@ -90,7 +90,7 @@ fn test_stos_byte() {
     assert_eq!(buf[0], 0x41);
 
     // Check RDI was incremented
-    assert_eq!(emu.reg_read(Register::RDI).unwrap(), 0x1501);
+    assert_eq!(emu.reg_read(Register::RDI), 0x1501);
 }
 
 #[test]
@@ -101,9 +101,9 @@ fn test_rep_stos() {
     emu.mem_map(0x1000, 0x2000, Permission::all()).unwrap();
 
     // Set up registers
-    emu.reg_write(Register::AL, 0x00).unwrap(); // Fill with zeros
-    emu.reg_write(Register::RDI, 0x1500).unwrap();
-    emu.reg_write(Register::RCX, 16).unwrap(); // Fill 16 bytes
+    emu.reg_write(Register::AL, 0x00); // Fill with zeros
+    emu.reg_write(Register::RDI, 0x1500);
+    emu.reg_write(Register::RCX, 16); // Fill 16 bytes
 
     // Write non-zero data first
     emu.mem_write(0x1500, b"XXXXXXXXXXXXXXXX").unwrap();
@@ -112,7 +112,7 @@ fn test_rep_stos() {
     let code = vec![0xF3, 0xAA]; // REP STOSB
     emu.mem_write(0x1000, &code).unwrap();
 
-    emu.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0, None)
+    emu.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
         .unwrap();
 
     // Check that memory was zeroed
@@ -121,10 +121,10 @@ fn test_rep_stos() {
     assert_eq!(buf, vec![0u8; 16]);
 
     // Check RCX is 0
-    assert_eq!(emu.reg_read(Register::RCX).unwrap(), 0);
+    assert_eq!(emu.reg_read(Register::RCX), 0);
 
     // Check RDI was updated
-    assert_eq!(emu.reg_read(Register::RDI).unwrap(), 0x1510);
+    assert_eq!(emu.reg_read(Register::RDI), 0x1510);
 }
 
 #[test]
@@ -138,21 +138,21 @@ fn test_lods_byte() {
     emu.mem_write(0x1500, b"Z").unwrap();
 
     // Set up registers
-    emu.reg_write(Register::RSI, 0x1500).unwrap();
-    emu.reg_write(Register::AL, 0).unwrap(); // Clear AL
+    emu.reg_write(Register::RSI, 0x1500);
+    emu.reg_write(Register::AL, 0); // Clear AL
 
     // LODS BYTE instruction
     let code = vec![0xAC]; // LODSB
     emu.mem_write(0x1000, &code).unwrap();
 
-    emu.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0, None)
+    emu.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
         .unwrap();
 
     // Check that byte was loaded into AL
-    assert_eq!(emu.reg_read(Register::AL).unwrap(), b'Z' as u64);
+    assert_eq!(emu.reg_read(Register::AL), b'Z' as u64);
 
     // Check RSI was incremented
-    assert_eq!(emu.reg_read(Register::RSI).unwrap(), 0x1501);
+    assert_eq!(emu.reg_read(Register::RSI), 0x1501);
 }
 
 #[test]
@@ -166,22 +166,22 @@ fn test_scas_byte() {
     emu.mem_write(0x1500, b"Hello").unwrap();
 
     // Set up registers
-    emu.reg_write(Register::AL, b'e' as u64).unwrap();
-    emu.reg_write(Register::RDI, 0x1501).unwrap(); // Point to 'e'
+    emu.reg_write(Register::AL, b'e' as u64);
+    emu.reg_write(Register::RDI, 0x1501); // Point to 'e'
 
     // SCAS BYTE instruction
     let code = vec![0xAE]; // SCASB
     emu.mem_write(0x1000, &code).unwrap();
 
-    emu.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0, None)
+    emu.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
         .unwrap();
 
     // Check that ZF is set (match found)
-    let flags = emu.reg_read(Register::RFLAGS).unwrap();
+    let flags = emu.reg_read(Register::RFLAGS);
     assert!((flags & (1 << 6)) != 0); // ZF is bit 6
 
     // Check RDI was incremented
-    assert_eq!(emu.reg_read(Register::RDI).unwrap(), 0x1502);
+    assert_eq!(emu.reg_read(Register::RDI), 0x1502);
 }
 
 #[test]
@@ -195,23 +195,23 @@ fn test_repz_scas() {
     emu.mem_write(0x1500, b"AAAAAB").unwrap();
 
     // Set up registers
-    emu.reg_write(Register::AL, b'A' as u64).unwrap();
-    emu.reg_write(Register::RDI, 0x1500).unwrap();
-    emu.reg_write(Register::RCX, 6).unwrap(); // Scan 6 bytes
+    emu.reg_write(Register::AL, b'A' as u64);
+    emu.reg_write(Register::RDI, 0x1500);
+    emu.reg_write(Register::RCX, 6); // Scan 6 bytes
 
     // REPZ SCAS BYTE instruction - scan while equal
     let code = vec![0xF3, 0xAE]; // REPZ SCASB
     emu.mem_write(0x1000, &code).unwrap();
 
-    emu.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0, None)
+    emu.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
         .unwrap();
 
     // Check that scan stopped at 'B'
-    assert_eq!(emu.reg_read(Register::RDI).unwrap(), 0x1506);
-    assert_eq!(emu.reg_read(Register::RCX).unwrap(), 0);
+    assert_eq!(emu.reg_read(Register::RDI), 0x1506);
+    assert_eq!(emu.reg_read(Register::RCX), 0);
 
     // ZF should be clear (not equal)
-    let flags = emu.reg_read(Register::RFLAGS).unwrap();
+    let flags = emu.reg_read(Register::RFLAGS);
     assert!((flags & (1 << 6)) == 0); // ZF is bit 6
 }
 
@@ -227,24 +227,24 @@ fn test_cmps_byte() {
     emu.mem_write(0x1600, b"AC").unwrap();
 
     // Set up registers
-    emu.reg_write(Register::RSI, 0x1501).unwrap(); // Point to 'B'
-    emu.reg_write(Register::RDI, 0x1601).unwrap(); // Point to 'C'
+    emu.reg_write(Register::RSI, 0x1501); // Point to 'B'
+    emu.reg_write(Register::RDI, 0x1601); // Point to 'C'
 
     // CMPS BYTE instruction
     let code = vec![0xA6]; // CMPSB
     emu.mem_write(0x1000, &code).unwrap();
 
-    emu.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0, None)
+    emu.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
         .unwrap();
 
     // Check that ZF is clear (not equal) and CF is set (B < C)
-    let flags = emu.reg_read(Register::RFLAGS).unwrap();
+    let flags = emu.reg_read(Register::RFLAGS);
     assert!((flags & (1 << 6)) == 0); // ZF is bit 6
     assert!((flags & (1 << 0)) != 0); // CF is bit 0
 
     // Check RSI and RDI were incremented
-    assert_eq!(emu.reg_read(Register::RSI).unwrap(), 0x1502);
-    assert_eq!(emu.reg_read(Register::RDI).unwrap(), 0x1602);
+    assert_eq!(emu.reg_read(Register::RSI), 0x1502);
+    assert_eq!(emu.reg_read(Register::RDI), 0x1602);
 }
 
 #[test]
@@ -259,23 +259,23 @@ fn test_repz_cmps() {
     emu.mem_write(0x1600, b"HeLLo").unwrap(); // Different at position 2
 
     // Set up registers
-    emu.reg_write(Register::RSI, 0x1500).unwrap();
-    emu.reg_write(Register::RDI, 0x1600).unwrap();
-    emu.reg_write(Register::RCX, 5).unwrap();
+    emu.reg_write(Register::RSI, 0x1500);
+    emu.reg_write(Register::RDI, 0x1600);
+    emu.reg_write(Register::RCX, 5);
 
     // REPZ CMPS BYTE instruction - compare while equal
     let code = vec![0xF3, 0xA6]; // REPZ CMPSB
     emu.mem_write(0x1000, &code).unwrap();
 
-    emu.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0, None)
+    emu.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
         .unwrap();
 
     // Check that comparison stopped at the difference
-    assert_eq!(emu.reg_read(Register::RSI).unwrap(), 0x1503); // Position 3
-    assert_eq!(emu.reg_read(Register::RDI).unwrap(), 0x1603);
-    assert_eq!(emu.reg_read(Register::RCX).unwrap(), 2); // 2 bytes remaining
+    assert_eq!(emu.reg_read(Register::RSI), 0x1503); // Position 3
+    assert_eq!(emu.reg_read(Register::RDI), 0x1603);
+    assert_eq!(emu.reg_read(Register::RCX), 2); // 2 bytes remaining
 
     // ZF should be clear (not equal)
-    let flags = emu.reg_read(Register::RFLAGS).unwrap();
+    let flags = emu.reg_read(Register::RFLAGS);
     assert!((flags & (1 << 6)) == 0); // ZF is bit 6
 }

@@ -14,9 +14,9 @@ fn main() {
 
     engine.mem_write(0x1000, &code).unwrap();
 
-    match engine.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0, None) {
+    match engine.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0) {
         Ok(()) => {
-            let result = engine.reg_read(Register::RAX).unwrap() & 0xFF;
+            let result = engine.reg_read(Register::RAX) & 0xFF;
             println!("ADC AL, imm8 test:");
             println!("Result: AL = {:#x}", result);
             println!("Expected: AL = 0x8 (5 + 3, no carry)");

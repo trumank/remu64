@@ -17,11 +17,11 @@ fn main() {
 
     println!("Starting emulation...");
     engine
-        .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0, None)
+        .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
         .unwrap();
 
-    let rax = engine.reg_read(Register::RAX).unwrap();
-    let rbx = engine.reg_read(Register::RBX).unwrap();
+    let rax = engine.reg_read(Register::RAX);
+    let rbx = engine.reg_read(Register::RBX);
 
     println!("Emulation complete!");
     println!("RAX = {:#x}", rax);

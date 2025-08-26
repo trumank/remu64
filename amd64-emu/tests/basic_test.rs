@@ -1,4 +1,4 @@
-use amd64_emu::{Engine, EngineMode, HookManager, HookType, Permission, Register};
+use amd64_emu::{Engine, EngineMode, Permission, Register};
 
 #[test]
 fn test_mov_instruction() {
@@ -13,11 +13,11 @@ fn test_mov_instruction() {
     engine.mem_write(0x1000, &code).unwrap();
 
     engine
-        .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0, None)
+        .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
         .unwrap();
 
-    assert_eq!(engine.reg_read(Register::RAX).unwrap(), 0x1337);
-    assert_eq!(engine.reg_read(Register::RBX).unwrap(), 0x1337);
+    assert_eq!(engine.reg_read(Register::RAX), 0x1337);
+    assert_eq!(engine.reg_read(Register::RBX), 0x1337);
 }
 
 #[test]
@@ -34,11 +34,11 @@ fn test_arithmetic_operations() {
     engine.mem_write(0x1000, &code).unwrap();
 
     engine
-        .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0, None)
+        .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
         .unwrap();
 
-    assert_eq!(engine.reg_read(Register::RAX).unwrap(), 10);
-    assert_eq!(engine.reg_read(Register::RBX).unwrap(), 0);
+    assert_eq!(engine.reg_read(Register::RAX), 10);
+    assert_eq!(engine.reg_read(Register::RBX), 0);
 }
 
 #[test]
@@ -60,10 +60,10 @@ fn test_memory_operations() {
     engine.mem_write(0x1000, &code).unwrap();
 
     engine
-        .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0, None)
+        .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
         .unwrap();
 
-    assert_eq!(engine.reg_read(Register::RBX).unwrap(), 0x42);
+    assert_eq!(engine.reg_read(Register::RBX), 0x42);
 
     let mut buf = [0u8; 8];
     engine.mem_read(0x2000, &mut buf).unwrap();
@@ -79,20 +79,20 @@ fn test_stack_operations() {
         .mem_map(0x7000, 0x1000, Permission::READ | Permission::WRITE)
         .unwrap();
 
-    engine.reg_write(Register::RSP, 0x7800).unwrap();
+    engine.reg_write(Register::RSP, 0x7800);
 
     let code = vec![0x48, 0xC7, 0xC0, 0xEF, 0xBE, 0xAD, 0xDE, 0x50, 0x5B];
 
     engine.mem_write(0x1000, &code).unwrap();
 
     engine
-        .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0, None)
+        .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
         .unwrap();
 
     // The correct behavior is for 0xC7 with REX.W to sign-extend imm32
     // So 0xDEADBEEF becomes 0xFFFFFFFFDEADBEEF
-    assert_eq!(engine.reg_read(Register::RBX).unwrap(), 0xFFFFFFFFDEADBEEF);
-    assert_eq!(engine.reg_read(Register::RSP).unwrap(), 0x7800);
+    assert_eq!(engine.reg_read(Register::RBX), 0xFFFFFFFFDEADBEEF);
+    assert_eq!(engine.reg_read(Register::RSP), 0x7800);
 }
 
 #[test]
@@ -109,19 +109,42 @@ fn test_conditional_jumps() {
     engine.mem_write(0x1000, &code).unwrap();
 
     engine
-        .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0, None)
+        .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
         .unwrap();
 
-    assert_eq!(engine.reg_read(Register::RAX).unwrap(), 0);
-    assert_eq!(engine.reg_read(Register::RBX).unwrap(), 1);
+    assert_eq!(engine.reg_read(Register::RAX), 0);
+    assert_eq!(engine.reg_read(Register::RBX), 1);
 }
 
 #[test]
 fn test_hook_code() {
-    use std::sync::{Arc, Mutex};
+    use amd64_emu::hooks::HookManager;
+
+    // Custom hook manager for counting code executions
+    struct CodeCounter {
+        count: usize,
+    }
+
+    impl CodeCounter {
+        fn new() -> Self {
+            Self { count: 0 }
+        }
+    }
+
+    impl HookManager for CodeCounter {
+        fn on_code(
+            &mut self,
+            _engine: &mut amd64_emu::Engine,
+            _address: u64,
+            _size: usize,
+        ) -> amd64_emu::Result<()> {
+            self.count += 1;
+            Ok(())
+        }
+    }
 
     let mut engine = Engine::new(EngineMode::Mode64);
-    let mut hooks = HookManager::new();
+    let mut hooks = CodeCounter::new();
 
     engine.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
 
@@ -129,19 +152,10 @@ fn test_hook_code() {
 
     engine.mem_write(0x1000, &code).unwrap();
 
-    let counter = Arc::new(Mutex::new(0));
-    let counter_clone = counter.clone();
-
-    hooks.add_hook(HookType::Code, 0x1000, 0x2000, move |_cpu, _addr, _size| {
-        let mut count = counter_clone.lock().unwrap();
-        *count += 1;
-        Ok(())
-    });
-
     engine
-        .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0, Some(&mut hooks))
+        .emu_start_with_hooks(0x1000, 0x1000 + code.len() as u64, 0, 0, &mut hooks)
         .unwrap();
 
-    assert_eq!(engine.reg_read(Register::RAX).unwrap(), 3);
-    assert_eq!(*counter.lock().unwrap(), 3);
+    assert_eq!(engine.reg_read(Register::RAX), 3);
+    assert_eq!(hooks.count, 3);
 }

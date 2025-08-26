@@ -48,3 +48,11 @@ pub trait HookManager {
         Ok(())
     }
 }
+
+/// Default no-op hook manager that does nothing for all hook events
+#[derive(Debug, Default, Clone, Copy)]
+pub struct NoHooks;
+
+impl HookManager for NoHooks {
+    // All methods use the default implementations which do nothing
+}

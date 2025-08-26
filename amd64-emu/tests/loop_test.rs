@@ -30,12 +30,12 @@ fn test_loop_basic() {
 
     engine.mem_write(0x1000, &code).unwrap();
     engine
-        .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0, None)
+        .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
         .unwrap();
 
     // After 5 iterations, RAX should be 5 and RCX should be 0
-    assert_eq!(engine.reg_read(Register::RAX).unwrap(), 5);
-    assert_eq!(engine.reg_read(Register::RCX).unwrap(), 0);
+    assert_eq!(engine.reg_read(Register::RAX), 5);
+    assert_eq!(engine.reg_read(Register::RCX), 0);
 }
 
 #[test]
@@ -72,12 +72,12 @@ fn test_loope_condition_met() {
 
     engine.mem_write(0x1000, &code).unwrap();
     engine
-        .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0, None)
+        .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
         .unwrap();
 
     // After the loop, check the results
-    let rax = engine.reg_read(Register::RAX).unwrap();
-    let rcx = engine.reg_read(Register::RCX).unwrap();
+    let rax = engine.reg_read(Register::RAX);
+    let rcx = engine.reg_read(Register::RCX);
 
     // Loop execution:
     // 1. RAX=0, RCX=3, ZF=1 (from XOR)
@@ -121,12 +121,12 @@ fn test_loopne_condition_met() {
 
     engine.mem_write(0x1000, &code).unwrap();
     engine
-        .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0, None)
+        .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
         .unwrap();
 
     // Should stop when RAX == 3 (ZF=1), so RAX should be 3
-    assert_eq!(engine.reg_read(Register::RAX).unwrap(), 3);
-    assert_eq!(engine.reg_read(Register::RCX).unwrap(), 2); // 5 - 3 = 2 iterations left
+    assert_eq!(engine.reg_read(Register::RAX), 3);
+    assert_eq!(engine.reg_read(Register::RCX), 2); // 5 - 3 = 2 iterations left
 }
 
 #[test]
@@ -159,12 +159,12 @@ fn test_loop_zero_count() {
 
     engine.mem_write(0x1000, &code).unwrap();
     engine
-        .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0, None)
+        .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
         .unwrap();
 
     // RAX should be 11 (incremented once) and RCX should be 0
-    assert_eq!(engine.reg_read(Register::RAX).unwrap(), 11);
-    assert_eq!(engine.reg_read(Register::RCX).unwrap(), 0);
+    assert_eq!(engine.reg_read(Register::RAX), 11);
+    assert_eq!(engine.reg_read(Register::RCX), 0);
 }
 
 #[test]
@@ -199,10 +199,10 @@ fn test_loope_early_exit() {
 
     engine.mem_write(0x1000, &code).unwrap();
     engine
-        .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0, None)
+        .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
         .unwrap();
 
     // Should have done 2 iterations
-    assert_eq!(engine.reg_read(Register::RAX).unwrap(), 2);
-    assert_eq!(engine.reg_read(Register::RCX).unwrap(), 0);
+    assert_eq!(engine.reg_read(Register::RAX), 2);
+    assert_eq!(engine.reg_read(Register::RCX), 0);
 }

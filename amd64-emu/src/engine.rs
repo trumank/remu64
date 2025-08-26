@@ -1,6 +1,6 @@
 use crate::cpu::{CpuState, Flags, Register};
 use crate::error::{EmulatorError, Result};
-use crate::hooks::HookManager;
+use crate::hooks::{HookManager, NoHooks};
 use crate::memory::{Memory, Permission};
 use iced_x86::{
     Code, Decoder, DecoderOptions, Instruction, Mnemonic, OpKind, Register as IcedRegister,
@@ -16,7 +16,7 @@ pub enum EngineMode {
 pub struct Engine {
     pub cpu: CpuState,
     pub memory: Memory,
-    _mode: EngineMode,
+    mode: EngineMode,
     instruction_count: u64,
 }
 
@@ -25,7 +25,7 @@ impl Engine {
         Self {
             cpu: CpuState::new(),
             memory: Memory::new(),
-            _mode: mode,
+            mode,
             instruction_count: 0,
         }
     }
@@ -55,26 +55,20 @@ impl Engine {
         &mut self,
         address: u64,
         buf: &mut [u8],
-        mut hooks: Option<&mut H>,
+        hooks: &mut H,
     ) -> Result<()> {
-        if let Some(hooks) = hooks.as_deref_mut() {
-            hooks.on_mem_read(self, address, buf.len())?;
-        }
+        hooks.on_mem_read(self, address, buf.len())?;
 
         // Try to read memory, handle faults with hooks
         match self.memory.read(address, buf) {
             Ok(()) => Ok(()),
             Err(EmulatorError::UnmappedMemory(_)) => {
                 // Try to handle the fault with memory fault hooks
-                if let Some(hooks) = hooks {
-                    if hooks.on_mem_fault(self, address, buf.len())? {
-                        // Hook handled the fault, try reading again
-                        self.memory.read(address, buf)
-                    } else {
-                        // No hook handled the fault, return original error
-                        Err(EmulatorError::UnmappedMemory(address))
-                    }
+                if hooks.on_mem_fault(self, address, buf.len())? {
+                    // Hook handled the fault, try reading again
+                    self.memory.read(address, buf)
                 } else {
+                    // No hook handled the fault, return original error
                     Err(EmulatorError::UnmappedMemory(address))
                 }
             }
@@ -90,6 +84,22 @@ impl Engine {
         self.cpu.write_reg(reg, value)
     }
 
+    pub fn xmm_read(&self, reg: Register) -> u128 {
+        self.cpu.read_xmm(reg)
+    }
+
+    pub fn xmm_write(&mut self, reg: Register, value: u128) {
+        self.cpu.write_xmm(reg, value);
+    }
+
+    pub fn context_save(&self) -> CpuState {
+        self.cpu.clone()
+    }
+
+    pub fn context_restore(&mut self, state: &CpuState) {
+        self.cpu = state.clone();
+    }
+
     pub fn flags_read(&self) -> Flags {
         self.cpu.rflags
     }
@@ -98,13 +108,20 @@ impl Engine {
         self.cpu.segments.gs.base = base;
     }
 
-    pub fn emu_start<H: HookManager>(
+    /// Start emulation with default no-op hooks
+    pub fn emu_start(&mut self, begin: u64, until: u64, timeout: u64, count: usize) -> Result<()> {
+        let mut no_hooks = NoHooks;
+        self.emu_start_with_hooks(begin, until, timeout, count, &mut no_hooks)
+    }
+
+    /// Start emulation with custom hooks
+    pub fn emu_start_with_hooks<H: HookManager>(
         &mut self,
         begin: u64,
         until: u64,
         timeout: u64,
         count: usize,
-        mut hooks: Option<&mut H>,
+        hooks: &mut H,
     ) -> Result<()> {
         self.cpu.rip = begin;
         self.instruction_count = 0;
@@ -131,13 +148,13 @@ impl Engine {
                 }
             }
 
-            self.step(hooks.as_deref_mut())?;
+            self.step(hooks)?;
         }
 
         Ok(())
     }
 
-    fn step<H: HookManager>(&mut self, mut hooks: Option<&mut H>) -> Result<()> {
+    fn step<H: HookManager>(&mut self, hooks: &mut H) -> Result<()> {
         let rip = self.cpu.rip;
 
         // Check if we can execute at this address, but allow memory fault hooks to handle unmapped memory
@@ -145,28 +162,23 @@ impl Engine {
             Ok(()) => {} // Memory is mapped and executable, continue
             Err(EmulatorError::UnmappedMemory(_)) => {
                 // Memory is unmapped, try to handle with memory fault hooks
-                if let Some(hooks) = hooks.as_deref_mut() {
-                    // Try to let the memory fault hook handle this
-                    // TODO refactor the decoder to do memory reads instead of operate on a slice of data
-                    if !hooks.on_mem_fault(self, rip, 1)? {
-                        // Hook couldn't handle it, return the original error
-                        return Err(EmulatorError::UnmappedMemory(rip));
-                    }
-                    // Hook handled it, try check_exec again
-                    self.memory.check_exec(rip)?;
-                } else {
-                    // No hooks available, return the error
+                // Try to let the memory fault hook handle this
+                // TODO refactor the decoder to do memory reads instead of operate on a slice of data
+                if !hooks.on_mem_fault(self, rip, 1)? {
+                    // Hook couldn't handle it, return the original error
                     return Err(EmulatorError::UnmappedMemory(rip));
                 }
+                // Hook handled it, try check_exec again
+                self.memory.check_exec(rip)?;
             }
             Err(e) => return Err(e), // Other errors (like permission denied) are fatal
         }
 
         let mut inst_bytes = vec![0u8; 15];
-        self.mem_read_with_hooks(rip, &mut inst_bytes, hooks.as_deref_mut())?;
+        self.mem_read_with_hooks(rip, &mut inst_bytes, hooks)?;
 
         // Create iced_x86 decoder for this instruction
-        let bitness = match self._mode {
+        let bitness = match self.mode {
             EngineMode::Mode16 => 16,
             EngineMode::Mode32 => 32,
             EngineMode::Mode64 => 64,
@@ -175,9 +187,7 @@ impl Engine {
 
         let inst = decoder.decode();
 
-        if let Some(hooks) = hooks.as_deref_mut() {
-            hooks.on_code(self, rip, inst.len())?;
-        }
+        hooks.on_code(self, rip, inst.len())?;
 
         self.cpu.rip = rip + inst.len() as u64;
 
@@ -195,29 +205,23 @@ impl Engine {
 
 struct ExecutionContext<'a, H: HookManager> {
     engine: &'a mut Engine,
-    hooks: Option<&'a mut H>,
+    hooks: &'a mut H,
 }
 
 impl<H: HookManager> ExecutionContext<'_, H> {
     fn mem_read_with_hooks(&mut self, address: u64, buf: &mut [u8]) -> Result<()> {
-        if let Some(hooks) = self.hooks.as_deref_mut() {
-            hooks.on_mem_read(self.engine, address, buf.len())?;
-        }
+        self.hooks.on_mem_read(self.engine, address, buf.len())?;
 
         // Try to read memory, handle faults with hooks
         match self.engine.memory.read(address, buf) {
             Ok(()) => Ok(()),
             Err(EmulatorError::UnmappedMemory(_)) => {
                 // Try to handle the fault with memory fault hooks
-                if let Some(hooks) = self.hooks.as_deref_mut() {
-                    if hooks.on_mem_fault(self.engine, address, buf.len())? {
-                        // Hook handled the fault, try reading again
-                        self.engine.memory.read(address, buf)
-                    } else {
-                        // No hook handled the fault, return original error
-                        Err(EmulatorError::UnmappedMemory(address))
-                    }
+                if self.hooks.on_mem_fault(self.engine, address, buf.len())? {
+                    // Hook handled the fault, try reading again
+                    self.engine.memory.read(address, buf)
                 } else {
+                    // No hook handled the fault, return original error
                     Err(EmulatorError::UnmappedMemory(address))
                 }
             }
@@ -226,24 +230,18 @@ impl<H: HookManager> ExecutionContext<'_, H> {
     }
 
     fn mem_write_with_hooks(&mut self, address: u64, buf: &[u8]) -> Result<()> {
-        if let Some(hooks) = self.hooks.as_deref_mut() {
-            hooks.on_mem_write(self.engine, address, buf.len())?;
-        }
+        self.hooks.on_mem_write(self.engine, address, buf.len())?;
 
         // Try to write memory, handle faults with hooks
         match self.engine.memory.write(address, buf) {
             Ok(()) => Ok(()),
             Err(EmulatorError::UnmappedMemory(_)) => {
                 // Try to handle the fault with memory fault hooks
-                if let Some(hooks) = self.hooks.as_deref_mut() {
-                    if hooks.on_mem_fault(self.engine, address, buf.len())? {
-                        // Hook handled the fault, try writing again
-                        self.engine.memory.write(address, buf)
-                    } else {
-                        // No hook handled the fault, return original error
-                        Err(EmulatorError::UnmappedMemory(address))
-                    }
+                if self.hooks.on_mem_fault(self.engine, address, buf.len())? {
+                    // Hook handled the fault, try writing again
+                    self.engine.memory.write(address, buf)
                 } else {
+                    // No hook handled the fault, return original error
                     Err(EmulatorError::UnmappedMemory(address))
                 }
             }
@@ -333,6 +331,9 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             Mnemonic::Movd => self.execute_movd(inst),
             Mnemonic::Vzeroupper => self.execute_vzeroupper(inst),
             Mnemonic::Imul => self.execute_imul(inst),
+            Mnemonic::Mul => self.execute_mul(inst),
+            Mnemonic::Div => self.execute_div(inst),
+            Mnemonic::Idiv => self.execute_idiv(inst),
             Mnemonic::Nop => self.execute_nop(inst),
             Mnemonic::Neg => self.execute_neg(inst),
             Mnemonic::Sbb => self.execute_sbb(inst),
@@ -341,6 +342,29 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             Mnemonic::Punpcklwd => self.execute_punpcklwd(inst),
             Mnemonic::Pshufd => self.execute_pshufd(inst),
             Mnemonic::Xorps => self.execute_xorps(inst),
+            Mnemonic::Cmpps => self.execute_cmpps(inst),
+            Mnemonic::Cmpss => self.execute_cmpss(inst),
+            Mnemonic::Comiss => self.execute_comiss(inst),
+            Mnemonic::Ucomiss => self.execute_ucomiss(inst),
+            Mnemonic::Movaps => self.execute_movaps(inst),
+            Mnemonic::Addps => self.execute_addps(inst),
+            Mnemonic::Subps => self.execute_subps(inst),
+            Mnemonic::Mulps => self.execute_mulps(inst),
+            Mnemonic::Divps => self.execute_divps(inst),
+            Mnemonic::Andps => self.execute_andps(inst),
+            Mnemonic::Orps => self.execute_orps(inst),
+            Mnemonic::Movsb => self.execute_movsb(inst),
+            Mnemonic::Stosb => self.execute_stosb(inst),
+            Mnemonic::Lodsb => self.execute_lodsb(inst),
+            Mnemonic::Scasb => self.execute_scasb(inst),
+            Mnemonic::Cmpsb => self.execute_cmpsb(inst),
+            Mnemonic::Adc => self.execute_adc(inst),
+            Mnemonic::Not => self.execute_not(inst),
+            Mnemonic::Ror => self.execute_ror(inst),
+            Mnemonic::Xchg => self.execute_xchg(inst),
+            Mnemonic::Loop => self.execute_loop(inst),
+            Mnemonic::Loope => self.execute_loope(inst),
+            Mnemonic::Loopne => self.execute_loopne(inst),
             _ => {
                 println!(
                     "Unsupported instruction: {} ({:?}) at {:#x}",
@@ -1204,6 +1228,83 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         Ok(())
     }
 
+    fn execute_mul(&mut self, inst: &Instruction) -> Result<()> {
+        // MUL: Unsigned multiply
+        // 1-operand form: RAX = RAX * operand, result in RDX:RAX
+        let multiplicand = self.engine.cpu.read_reg(Register::RAX);
+        let multiplier = self.read_operand(inst, 0)?;
+
+        let result = (multiplicand as u128) * (multiplier as u128);
+
+        // Store low 64 bits in RAX, high 64 bits in RDX
+        self.engine.cpu.write_reg(Register::RAX, result as u64);
+        self.engine
+            .cpu
+            .write_reg(Register::RDX, (result >> 64) as u64);
+
+        // Update flags: CF and OF are set if result requires more than 64 bits
+        let overflow = (result >> 64) != 0;
+        self.engine.cpu.rflags.set(Flags::CF, overflow);
+        self.engine.cpu.rflags.set(Flags::OF, overflow);
+
+        Ok(())
+    }
+
+    fn execute_div(&mut self, inst: &Instruction) -> Result<()> {
+        // DIV: Unsigned divide
+        // RDX:RAX / operand -> quotient in RAX, remainder in RDX
+        let dividend_high = self.engine.cpu.read_reg(Register::RDX);
+        let dividend_low = self.engine.cpu.read_reg(Register::RAX);
+        let divisor = self.read_operand(inst, 0)?;
+
+        if divisor == 0 {
+            return Err(EmulatorError::DivisionByZero);
+        }
+
+        let dividend = ((dividend_high as u128) << 64) | (dividend_low as u128);
+        let quotient = dividend / (divisor as u128);
+        let remainder = dividend % (divisor as u128);
+
+        // Check for overflow (quotient too large for RAX)
+        if quotient > u64::MAX as u128 {
+            return Err(EmulatorError::DivisionByZero); // x86 throws #DE for overflow too
+        }
+
+        self.engine.cpu.write_reg(Register::RAX, quotient as u64);
+        self.engine.cpu.write_reg(Register::RDX, remainder as u64);
+
+        Ok(())
+    }
+
+    fn execute_idiv(&mut self, inst: &Instruction) -> Result<()> {
+        // IDIV: Signed divide
+        // RDX:RAX / operand -> quotient in RAX, remainder in RDX
+        let dividend_high = self.engine.cpu.read_reg(Register::RDX);
+        let dividend_low = self.engine.cpu.read_reg(Register::RAX);
+        let divisor = self.read_operand(inst, 0)? as i64;
+
+        if divisor == 0 {
+            return Err(EmulatorError::DivisionByZero);
+        }
+
+        // Combine high and low parts into signed 128-bit dividend
+        let dividend = ((dividend_high as u128) << 64) | (dividend_low as u128);
+        let dividend_signed = dividend as i128;
+
+        let quotient = dividend_signed / (divisor as i128);
+        let remainder = dividend_signed % (divisor as i128);
+
+        // Check for overflow (quotient outside i64 range)
+        if quotient < i64::MIN as i128 || quotient > i64::MAX as i128 {
+            return Err(EmulatorError::DivisionByZero); // x86 throws #DE for overflow too
+        }
+
+        self.engine.cpu.write_reg(Register::RAX, quotient as u64);
+        self.engine.cpu.write_reg(Register::RDX, remainder as u64);
+
+        Ok(())
+    }
+
     fn execute_nop(&mut self, _inst: &Instruction) -> Result<()> {
         // NOP: No Operation - do nothing
         Ok(())
@@ -1599,6 +1700,942 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         }
     }
 
+    fn execute_cmpps(&mut self, inst: &Instruction) -> Result<()> {
+        // CMPPS: Compare Packed Single-Precision Floating-Point Values
+        // Compares four 32-bit floats simultaneously
+        let dst_reg = self.convert_register(inst.op_register(0))?;
+        let src_value = match inst.op_kind(1) {
+            OpKind::Register => {
+                let src_reg = self.convert_register(inst.op_register(1))?;
+                self.engine.cpu.read_xmm(src_reg)
+            }
+            OpKind::Memory => {
+                let addr = self.calculate_memory_address(inst, 1)?;
+                self.read_memory_128(addr)?
+            }
+            _ => {
+                return Err(EmulatorError::UnsupportedInstruction(
+                    "Invalid CMPPS source".to_string(),
+                ))
+            }
+        };
+
+        let dst_value = self.engine.cpu.read_xmm(dst_reg);
+        let imm = inst.immediate(2) as u8;
+
+        // Extract four 32-bit floats from each operand
+        let dst_floats = [
+            f32::from_bits(dst_value as u32),
+            f32::from_bits((dst_value >> 32) as u32),
+            f32::from_bits((dst_value >> 64) as u32),
+            f32::from_bits((dst_value >> 96) as u32),
+        ];
+        let src_floats = [
+            f32::from_bits(src_value as u32),
+            f32::from_bits((src_value >> 32) as u32),
+            f32::from_bits((src_value >> 64) as u32),
+            f32::from_bits((src_value >> 96) as u32),
+        ];
+
+        let mut result = 0u128;
+        for i in 0..4 {
+            let cmp_result = self.compare_floats(dst_floats[i], src_floats[i], imm);
+            if cmp_result {
+                result |= 0xFFFFFFFFu128 << (i * 32);
+            }
+        }
+
+        self.engine.cpu.write_xmm(dst_reg, result);
+        Ok(())
+    }
+
+    fn execute_cmpss(&mut self, inst: &Instruction) -> Result<()> {
+        // CMPSS: Compare Scalar Single-Precision Floating-Point Values
+        // Compares only the lowest 32-bit float, preserves upper bits
+        let dst_reg = self.convert_register(inst.op_register(0))?;
+        let src_value = match inst.op_kind(1) {
+            OpKind::Register => {
+                let src_reg = self.convert_register(inst.op_register(1))?;
+                self.engine.cpu.read_xmm(src_reg) as u32
+            }
+            OpKind::Memory => {
+                let addr = self.calculate_memory_address(inst, 1)?;
+                self.read_memory_sized(addr, 4)? as u32
+            }
+            _ => {
+                return Err(EmulatorError::UnsupportedInstruction(
+                    "Invalid CMPSS source".to_string(),
+                ))
+            }
+        };
+
+        let dst_value = self.engine.cpu.read_xmm(dst_reg);
+        let imm = inst.immediate(2) as u8;
+
+        let dst_float = f32::from_bits(dst_value as u32);
+        let src_float = f32::from_bits(src_value);
+
+        let cmp_result = self.compare_floats(dst_float, src_float, imm);
+        let result_low = if cmp_result { 0xFFFFFFFFu32 } else { 0 };
+
+        // Preserve upper 96 bits, replace lower 32 bits
+        let result = (dst_value & !0xFFFFFFFF) | result_low as u128;
+
+        self.engine.cpu.write_xmm(dst_reg, result);
+        Ok(())
+    }
+
+    fn execute_comiss(&mut self, inst: &Instruction) -> Result<()> {
+        // COMISS: Compare Ordered Scalar Single-Precision Floating-Point Values and Set EFLAGS
+        let src1_reg = self.convert_register(inst.op_register(0))?;
+        let src1_float = f32::from_bits(self.engine.cpu.read_xmm(src1_reg) as u32);
+
+        let src2_float = match inst.op_kind(1) {
+            OpKind::Register => {
+                let src2_reg = self.convert_register(inst.op_register(1))?;
+                f32::from_bits(self.engine.cpu.read_xmm(src2_reg) as u32)
+            }
+            OpKind::Memory => {
+                let addr = self.calculate_memory_address(inst, 1)?;
+                f32::from_bits(self.read_memory_sized(addr, 4)? as u32)
+            }
+            _ => {
+                return Err(EmulatorError::UnsupportedInstruction(
+                    "Invalid COMISS source".to_string(),
+                ))
+            }
+        };
+
+        self.set_comparison_flags(src1_float, src2_float, false);
+        Ok(())
+    }
+
+    fn execute_ucomiss(&mut self, inst: &Instruction) -> Result<()> {
+        // UCOMISS: Compare Unordered Scalar Single-Precision Floating-Point Values and Set EFLAGS
+        let src1_reg = self.convert_register(inst.op_register(0))?;
+        let src1_float = f32::from_bits(self.engine.cpu.read_xmm(src1_reg) as u32);
+
+        let src2_float = match inst.op_kind(1) {
+            OpKind::Register => {
+                let src2_reg = self.convert_register(inst.op_register(1))?;
+                f32::from_bits(self.engine.cpu.read_xmm(src2_reg) as u32)
+            }
+            OpKind::Memory => {
+                let addr = self.calculate_memory_address(inst, 1)?;
+                f32::from_bits(self.read_memory_sized(addr, 4)? as u32)
+            }
+            _ => {
+                return Err(EmulatorError::UnsupportedInstruction(
+                    "Invalid UCOMISS source".to_string(),
+                ))
+            }
+        };
+
+        self.set_comparison_flags(src1_float, src2_float, true);
+        Ok(())
+    }
+
+    fn compare_floats(&self, a: f32, b: f32, imm: u8) -> bool {
+        match imm {
+            0 => a == b,                      // Equal
+            1 => a < b,                       // Less than
+            2 => a <= b,                      // Less than or equal
+            3 => a.is_nan() || b.is_nan(),    // Unordered (NaN)
+            4 => a != b,                      // Not equal
+            5 => !(a < b),                    // Not less than
+            6 => !(a <= b),                   // Not less than or equal
+            7 => !(a.is_nan() || b.is_nan()), // Ordered (not NaN)
+            _ => false,
+        }
+    }
+
+    fn set_comparison_flags(&mut self, a: f32, b: f32, unordered_on_nan: bool) {
+        self.engine.cpu.rflags.remove(Flags::ZF);
+        self.engine.cpu.rflags.remove(Flags::CF);
+        self.engine.cpu.rflags.remove(Flags::PF);
+
+        if a.is_nan() || b.is_nan() {
+            if unordered_on_nan {
+                // Unordered result for UCOMISS
+                self.engine.cpu.rflags.insert(Flags::ZF);
+                self.engine.cpu.rflags.insert(Flags::CF);
+                self.engine.cpu.rflags.insert(Flags::PF);
+            } else {
+                // Ordered comparison with NaN - set all flags for invalid operation
+                self.engine.cpu.rflags.insert(Flags::ZF);
+                self.engine.cpu.rflags.insert(Flags::CF);
+                self.engine.cpu.rflags.insert(Flags::PF);
+            }
+        } else if a == b {
+            self.engine.cpu.rflags.insert(Flags::ZF);
+        } else if a < b {
+            self.engine.cpu.rflags.insert(Flags::CF);
+        }
+        // Greater than: no flags set (all clear)
+    }
+
+    fn execute_movaps(&mut self, inst: &Instruction) -> Result<()> {
+        // MOVAPS: Move Aligned Packed Single-Precision Floating-Point Values
+        // Same as MOVDQA/MOVDQU but with float semantics (we ignore alignment requirements)
+        match (inst.op_kind(0), inst.op_kind(1)) {
+            (OpKind::Register, OpKind::Register) => {
+                let dst_reg = self.convert_register(inst.op_register(0))?;
+                let src_reg = self.convert_register(inst.op_register(1))?;
+                let src_value = self.engine.cpu.read_xmm(src_reg);
+                self.engine.cpu.write_xmm(dst_reg, src_value);
+                Ok(())
+            }
+            (OpKind::Register, OpKind::Memory) => {
+                let dst_reg = self.convert_register(inst.op_register(0))?;
+                let addr = self.calculate_memory_address(inst, 1)?;
+                let src_value = self.read_memory_128(addr)?;
+                self.engine.cpu.write_xmm(dst_reg, src_value);
+                Ok(())
+            }
+            (OpKind::Memory, OpKind::Register) => {
+                let src_reg = self.convert_register(inst.op_register(1))?;
+                let addr = self.calculate_memory_address(inst, 0)?;
+                let src_value = self.engine.cpu.read_xmm(src_reg);
+                self.write_memory_128(addr, src_value)?;
+                Ok(())
+            }
+            _ => Err(EmulatorError::UnsupportedInstruction(format!(
+                "Unsupported MOVAPS operand types: {:?}, {:?}",
+                inst.op_kind(0),
+                inst.op_kind(1)
+            ))),
+        }
+    }
+
+    fn execute_addps(&mut self, inst: &Instruction) -> Result<()> {
+        // ADDPS: Add Packed Single-Precision Floating-Point Values
+        let dst_reg = self.convert_register(inst.op_register(0))?;
+        let src_value = match inst.op_kind(1) {
+            OpKind::Register => {
+                let src_reg = self.convert_register(inst.op_register(1))?;
+                self.engine.cpu.read_xmm(src_reg)
+            }
+            OpKind::Memory => {
+                let addr = self.calculate_memory_address(inst, 1)?;
+                self.read_memory_128(addr)?
+            }
+            _ => {
+                return Err(EmulatorError::UnsupportedInstruction(
+                    "Invalid ADDPS source".to_string(),
+                ))
+            }
+        };
+
+        let dst_value = self.engine.cpu.read_xmm(dst_reg);
+        let result = self.packed_float_operation(dst_value, src_value, |a, b| a + b);
+        self.engine.cpu.write_xmm(dst_reg, result);
+        Ok(())
+    }
+
+    fn execute_subps(&mut self, inst: &Instruction) -> Result<()> {
+        // SUBPS: Subtract Packed Single-Precision Floating-Point Values
+        let dst_reg = self.convert_register(inst.op_register(0))?;
+        let src_value = match inst.op_kind(1) {
+            OpKind::Register => {
+                let src_reg = self.convert_register(inst.op_register(1))?;
+                self.engine.cpu.read_xmm(src_reg)
+            }
+            OpKind::Memory => {
+                let addr = self.calculate_memory_address(inst, 1)?;
+                self.read_memory_128(addr)?
+            }
+            _ => {
+                return Err(EmulatorError::UnsupportedInstruction(
+                    "Invalid SUBPS source".to_string(),
+                ))
+            }
+        };
+
+        let dst_value = self.engine.cpu.read_xmm(dst_reg);
+        let result = self.packed_float_operation(dst_value, src_value, |a, b| a - b);
+        self.engine.cpu.write_xmm(dst_reg, result);
+        Ok(())
+    }
+
+    fn execute_mulps(&mut self, inst: &Instruction) -> Result<()> {
+        // MULPS: Multiply Packed Single-Precision Floating-Point Values
+        let dst_reg = self.convert_register(inst.op_register(0))?;
+        let src_value = match inst.op_kind(1) {
+            OpKind::Register => {
+                let src_reg = self.convert_register(inst.op_register(1))?;
+                self.engine.cpu.read_xmm(src_reg)
+            }
+            OpKind::Memory => {
+                let addr = self.calculate_memory_address(inst, 1)?;
+                self.read_memory_128(addr)?
+            }
+            _ => {
+                return Err(EmulatorError::UnsupportedInstruction(
+                    "Invalid MULPS source".to_string(),
+                ))
+            }
+        };
+
+        let dst_value = self.engine.cpu.read_xmm(dst_reg);
+        let result = self.packed_float_operation(dst_value, src_value, |a, b| a * b);
+        self.engine.cpu.write_xmm(dst_reg, result);
+        Ok(())
+    }
+
+    fn execute_divps(&mut self, inst: &Instruction) -> Result<()> {
+        // DIVPS: Divide Packed Single-Precision Floating-Point Values
+        let dst_reg = self.convert_register(inst.op_register(0))?;
+        let src_value = match inst.op_kind(1) {
+            OpKind::Register => {
+                let src_reg = self.convert_register(inst.op_register(1))?;
+                self.engine.cpu.read_xmm(src_reg)
+            }
+            OpKind::Memory => {
+                let addr = self.calculate_memory_address(inst, 1)?;
+                self.read_memory_128(addr)?
+            }
+            _ => {
+                return Err(EmulatorError::UnsupportedInstruction(
+                    "Invalid DIVPS source".to_string(),
+                ))
+            }
+        };
+
+        let dst_value = self.engine.cpu.read_xmm(dst_reg);
+        let result = self.packed_float_operation(dst_value, src_value, |a, b| a / b);
+        self.engine.cpu.write_xmm(dst_reg, result);
+        Ok(())
+    }
+
+    fn execute_andps(&mut self, inst: &Instruction) -> Result<()> {
+        // ANDPS: Bitwise AND Packed Single-Precision Floating-Point Values
+        let dst_reg = self.convert_register(inst.op_register(0))?;
+        let src_value = match inst.op_kind(1) {
+            OpKind::Register => {
+                let src_reg = self.convert_register(inst.op_register(1))?;
+                self.engine.cpu.read_xmm(src_reg)
+            }
+            OpKind::Memory => {
+                let addr = self.calculate_memory_address(inst, 1)?;
+                self.read_memory_128(addr)?
+            }
+            _ => {
+                return Err(EmulatorError::UnsupportedInstruction(
+                    "Invalid ANDPS source".to_string(),
+                ))
+            }
+        };
+
+        let dst_value = self.engine.cpu.read_xmm(dst_reg);
+        let result = dst_value & src_value;
+        self.engine.cpu.write_xmm(dst_reg, result);
+        Ok(())
+    }
+
+    fn execute_orps(&mut self, inst: &Instruction) -> Result<()> {
+        // ORPS: Bitwise OR Packed Single-Precision Floating-Point Values
+        let dst_reg = self.convert_register(inst.op_register(0))?;
+        let src_value = match inst.op_kind(1) {
+            OpKind::Register => {
+                let src_reg = self.convert_register(inst.op_register(1))?;
+                self.engine.cpu.read_xmm(src_reg)
+            }
+            OpKind::Memory => {
+                let addr = self.calculate_memory_address(inst, 1)?;
+                self.read_memory_128(addr)?
+            }
+            _ => {
+                return Err(EmulatorError::UnsupportedInstruction(
+                    "Invalid ORPS source".to_string(),
+                ))
+            }
+        };
+
+        let dst_value = self.engine.cpu.read_xmm(dst_reg);
+        let result = dst_value | src_value;
+        self.engine.cpu.write_xmm(dst_reg, result);
+        Ok(())
+    }
+
+    fn packed_float_operation<F>(&self, dst: u128, src: u128, op: F) -> u128
+    where
+        F: Fn(f32, f32) -> f32,
+    {
+        // Extract four 32-bit floats from each operand
+        let dst_floats = [
+            f32::from_bits(dst as u32),
+            f32::from_bits((dst >> 32) as u32),
+            f32::from_bits((dst >> 64) as u32),
+            f32::from_bits((dst >> 96) as u32),
+        ];
+        let src_floats = [
+            f32::from_bits(src as u32),
+            f32::from_bits((src >> 32) as u32),
+            f32::from_bits((src >> 64) as u32),
+            f32::from_bits((src >> 96) as u32),
+        ];
+
+        // Apply operation to each pair
+        let results = [
+            op(dst_floats[0], src_floats[0]),
+            op(dst_floats[1], src_floats[1]),
+            op(dst_floats[2], src_floats[2]),
+            op(dst_floats[3], src_floats[3]),
+        ];
+
+        // Pack results back into u128
+        (results[0].to_bits() as u128)
+            | ((results[1].to_bits() as u128) << 32)
+            | ((results[2].to_bits() as u128) << 64)
+            | ((results[3].to_bits() as u128) << 96)
+    }
+
+    fn execute_movsb(&mut self, inst: &Instruction) -> Result<()> {
+        // MOVSB: Move Byte from [RSI] to [RDI]
+        let count = if inst.has_rep_prefix() || inst.has_repne_prefix() {
+            self.engine.cpu.read_reg(Register::RCX)
+        } else {
+            1
+        };
+
+        let mut remaining = count;
+        while remaining > 0 {
+            let rsi = self.engine.cpu.read_reg(Register::RSI);
+            let rdi = self.engine.cpu.read_reg(Register::RDI);
+
+            // Move byte from [RSI] to [RDI]
+            let byte = self.read_memory_sized(rsi, 1)? as u8;
+            self.write_memory_sized(rdi, byte as u64, 1)?;
+
+            // Update RSI and RDI based on direction flag
+            let df = self.engine.cpu.rflags.contains(Flags::DF);
+            let increment = if df { -1i64 as u64 } else { 1 };
+
+            self.engine
+                .cpu
+                .write_reg(Register::RSI, rsi.wrapping_add(increment));
+            self.engine
+                .cpu
+                .write_reg(Register::RDI, rdi.wrapping_add(increment));
+
+            remaining -= 1;
+        }
+
+        if inst.has_rep_prefix() || inst.has_repne_prefix() {
+            self.engine.cpu.write_reg(Register::RCX, 0);
+        }
+
+        Ok(())
+    }
+
+    fn execute_stosb(&mut self, inst: &Instruction) -> Result<()> {
+        // STOSB: Store AL to [RDI]
+        let count = if inst.has_rep_prefix() || inst.has_repne_prefix() {
+            self.engine.cpu.read_reg(Register::RCX)
+        } else {
+            1
+        };
+
+        let al_value = (self.engine.cpu.read_reg(Register::RAX) & 0xFF) as u8;
+        let mut remaining = count;
+
+        while remaining > 0 {
+            let rdi = self.engine.cpu.read_reg(Register::RDI);
+
+            // Store AL to [RDI]
+            self.write_memory_sized(rdi, al_value as u64, 1)?;
+
+            // Update RDI based on direction flag
+            let df = self.engine.cpu.rflags.contains(Flags::DF);
+            let increment = if df { -1i64 as u64 } else { 1 };
+
+            self.engine
+                .cpu
+                .write_reg(Register::RDI, rdi.wrapping_add(increment));
+
+            remaining -= 1;
+        }
+
+        if inst.has_rep_prefix() || inst.has_repne_prefix() {
+            self.engine.cpu.write_reg(Register::RCX, 0);
+        }
+
+        Ok(())
+    }
+
+    fn execute_lodsb(&mut self, inst: &Instruction) -> Result<()> {
+        // LODSB: Load byte from [RSI] into AL
+        let count = if inst.has_rep_prefix() || inst.has_repne_prefix() {
+            self.engine.cpu.read_reg(Register::RCX)
+        } else {
+            1
+        };
+
+        let mut remaining = count;
+
+        while remaining > 0 {
+            let rsi = self.engine.cpu.read_reg(Register::RSI);
+
+            // Load byte from [RSI] into AL
+            let byte = self.read_memory_sized(rsi, 1)? as u8;
+            let rax = self.engine.cpu.read_reg(Register::RAX);
+            self.engine
+                .cpu
+                .write_reg(Register::RAX, (rax & !0xFF) | (byte as u64));
+
+            // Update RSI based on direction flag
+            let df = self.engine.cpu.rflags.contains(Flags::DF);
+            let increment = if df { -1i64 as u64 } else { 1 };
+
+            self.engine
+                .cpu
+                .write_reg(Register::RSI, rsi.wrapping_add(increment));
+
+            remaining -= 1;
+        }
+
+        if inst.has_rep_prefix() || inst.has_repne_prefix() {
+            self.engine.cpu.write_reg(Register::RCX, 0);
+        }
+
+        Ok(())
+    }
+
+    fn execute_scasb(&mut self, inst: &Instruction) -> Result<()> {
+        // SCASB: Compare AL with [RDI]
+        let al_value = (self.engine.cpu.read_reg(Register::RAX) & 0xFF) as u8;
+
+        if inst.has_repne_prefix() {
+            // REPNE SCASB: Repeat while not equal and RCX > 0
+            while self.engine.cpu.read_reg(Register::RCX) > 0 {
+                let rdi = self.engine.cpu.read_reg(Register::RDI);
+                let byte = self.read_memory_sized(rdi, 1)? as u8;
+
+                // Compare AL with [RDI]
+                self.update_flags_arithmetic_iced(
+                    al_value as u64,
+                    byte as u64,
+                    (al_value as i16 - byte as i16) as u64,
+                    true,
+                    inst,
+                )?;
+
+                // Update RDI and RCX
+                let df = self.engine.cpu.rflags.contains(Flags::DF);
+                let increment = if df { -1i64 as u64 } else { 1 };
+                self.engine
+                    .cpu
+                    .write_reg(Register::RDI, rdi.wrapping_add(increment));
+                self.engine
+                    .cpu
+                    .write_reg(Register::RCX, self.engine.cpu.read_reg(Register::RCX) - 1);
+
+                // Stop if equal (ZF set)
+                if self.engine.cpu.rflags.contains(Flags::ZF) {
+                    break;
+                }
+            }
+        } else if inst.has_rep_prefix() {
+            // REPE SCASB: Repeat while equal and RCX > 0
+            while self.engine.cpu.read_reg(Register::RCX) > 0 {
+                let rdi = self.engine.cpu.read_reg(Register::RDI);
+                let byte = self.read_memory_sized(rdi, 1)? as u8;
+
+                // Compare AL with [RDI]
+                self.update_flags_arithmetic_iced(
+                    al_value as u64,
+                    byte as u64,
+                    (al_value as i16 - byte as i16) as u64,
+                    true,
+                    inst,
+                )?;
+
+                // Update RDI and RCX
+                let df = self.engine.cpu.rflags.contains(Flags::DF);
+                let increment = if df { -1i64 as u64 } else { 1 };
+                self.engine
+                    .cpu
+                    .write_reg(Register::RDI, rdi.wrapping_add(increment));
+                self.engine
+                    .cpu
+                    .write_reg(Register::RCX, self.engine.cpu.read_reg(Register::RCX) - 1);
+
+                // Stop if not equal (ZF clear)
+                if !self.engine.cpu.rflags.contains(Flags::ZF) {
+                    break;
+                }
+            }
+        } else {
+            // Single SCASB
+            let rdi = self.engine.cpu.read_reg(Register::RDI);
+            let byte = self.read_memory_sized(rdi, 1)? as u8;
+
+            // Compare AL with [RDI]
+            self.update_flags_arithmetic_iced(
+                al_value as u64,
+                byte as u64,
+                (al_value as i16 - byte as i16) as u64,
+                true,
+                inst,
+            )?;
+
+            // Update RDI
+            let df = self.engine.cpu.rflags.contains(Flags::DF);
+            let increment = if df { -1i64 as u64 } else { 1 };
+            self.engine
+                .cpu
+                .write_reg(Register::RDI, rdi.wrapping_add(increment));
+        }
+
+        Ok(())
+    }
+
+    fn execute_cmpsb(&mut self, inst: &Instruction) -> Result<()> {
+        // CMPSB: Compare bytes at [RSI] and [RDI]
+        if inst.has_repne_prefix() {
+            // REPNE CMPSB: Repeat while not equal and RCX > 0
+            while self.engine.cpu.read_reg(Register::RCX) > 0 {
+                let rsi = self.engine.cpu.read_reg(Register::RSI);
+                let rdi = self.engine.cpu.read_reg(Register::RDI);
+                let byte1 = self.read_memory_sized(rsi, 1)? as u8;
+                let byte2 = self.read_memory_sized(rdi, 1)? as u8;
+
+                // Compare bytes
+                self.update_flags_arithmetic_iced(
+                    byte1 as u64,
+                    byte2 as u64,
+                    (byte1 as i16 - byte2 as i16) as u64,
+                    true,
+                    inst,
+                )?;
+
+                // Update RSI, RDI and RCX
+                let df = self.engine.cpu.rflags.contains(Flags::DF);
+                let increment = if df { -1i64 as u64 } else { 1 };
+                self.engine
+                    .cpu
+                    .write_reg(Register::RSI, rsi.wrapping_add(increment));
+                self.engine
+                    .cpu
+                    .write_reg(Register::RDI, rdi.wrapping_add(increment));
+                self.engine
+                    .cpu
+                    .write_reg(Register::RCX, self.engine.cpu.read_reg(Register::RCX) - 1);
+
+                // Stop if equal (ZF set)
+                if self.engine.cpu.rflags.contains(Flags::ZF) {
+                    break;
+                }
+            }
+        } else if inst.has_rep_prefix() {
+            // REPE CMPSB: Repeat while equal and RCX > 0
+            while self.engine.cpu.read_reg(Register::RCX) > 0 {
+                let rsi = self.engine.cpu.read_reg(Register::RSI);
+                let rdi = self.engine.cpu.read_reg(Register::RDI);
+                let byte1 = self.read_memory_sized(rsi, 1)? as u8;
+                let byte2 = self.read_memory_sized(rdi, 1)? as u8;
+
+                // Compare bytes
+                self.update_flags_arithmetic_iced(
+                    byte1 as u64,
+                    byte2 as u64,
+                    (byte1 as i16 - byte2 as i16) as u64,
+                    true,
+                    inst,
+                )?;
+
+                // Update RSI, RDI and RCX
+                let df = self.engine.cpu.rflags.contains(Flags::DF);
+                let increment = if df { -1i64 as u64 } else { 1 };
+                self.engine
+                    .cpu
+                    .write_reg(Register::RSI, rsi.wrapping_add(increment));
+                self.engine
+                    .cpu
+                    .write_reg(Register::RDI, rdi.wrapping_add(increment));
+                self.engine
+                    .cpu
+                    .write_reg(Register::RCX, self.engine.cpu.read_reg(Register::RCX) - 1);
+
+                // Stop if not equal (ZF clear)
+                if !self.engine.cpu.rflags.contains(Flags::ZF) {
+                    break;
+                }
+            }
+        } else {
+            // Single CMPSB
+            let rsi = self.engine.cpu.read_reg(Register::RSI);
+            let rdi = self.engine.cpu.read_reg(Register::RDI);
+            let byte1 = self.read_memory_sized(rsi, 1)? as u8;
+            let byte2 = self.read_memory_sized(rdi, 1)? as u8;
+
+            // Compare bytes
+            self.update_flags_arithmetic_iced(
+                byte1 as u64,
+                byte2 as u64,
+                (byte1 as i16 - byte2 as i16) as u64,
+                true,
+                inst,
+            )?;
+
+            // Update RSI and RDI
+            let df = self.engine.cpu.rflags.contains(Flags::DF);
+            let increment = if df { -1i64 as u64 } else { 1 };
+            self.engine
+                .cpu
+                .write_reg(Register::RSI, rsi.wrapping_add(increment));
+            self.engine
+                .cpu
+                .write_reg(Register::RDI, rdi.wrapping_add(increment));
+        }
+
+        Ok(())
+    }
+
+    fn execute_adc(&mut self, inst: &Instruction) -> Result<()> {
+        // ADC: Add with Carry
+        // Adds the source operand and the carry flag to the destination operand
+        let dst_value = self.read_operand(inst, 0)?;
+        let src_value = self.read_operand(inst, 1)?;
+        let carry = if self.engine.cpu.rflags.contains(Flags::CF) {
+            1
+        } else {
+            0
+        };
+
+        let result = dst_value.wrapping_add(src_value).wrapping_add(carry);
+
+        // Update flags - for ADC, we need to consider the total operation
+        // The flags should be calculated as if we did: dst + (src + carry)
+        let effective_src = src_value.wrapping_add(carry);
+        self.update_flags_arithmetic_iced(dst_value, effective_src, result, false, inst)?;
+
+        // Write result back to destination
+        self.write_operand(inst, 0, result)?;
+        Ok(())
+    }
+
+    fn execute_not(&mut self, inst: &Instruction) -> Result<()> {
+        // NOT: Bitwise NOT (one's complement)
+        let dst_value = self.read_operand(inst, 0)?;
+        let result = !dst_value;
+
+        // NOT doesn't affect flags
+        self.write_operand(inst, 0, result)?;
+        Ok(())
+    }
+
+    fn execute_ror(&mut self, inst: &Instruction) -> Result<()> {
+        // ROR: Rotate Right
+        let dst_value = self.read_operand(inst, 0)?;
+        let shift_count = self.read_operand(inst, 1)? & 0xFF; // Only use low 8 bits
+
+        if shift_count == 0 {
+            return Ok(()); // No operation if shift count is 0
+        }
+
+        let size = self.get_operand_size_from_instruction(inst, 0)?;
+        let mask = match size {
+            1 => 0xFF,
+            2 => 0xFFFF,
+            4 => 0xFFFFFFFF,
+            8 => 0xFFFFFFFFFFFFFFFF,
+            _ => {
+                return Err(EmulatorError::UnsupportedInstruction(
+                    "Invalid operand size".to_string(),
+                ))
+            }
+        };
+
+        let masked_value = dst_value & mask;
+        let effective_count = shift_count % (size * 8) as u64;
+
+        if effective_count == 0 {
+            return Ok(()); // No actual rotation needed
+        }
+
+        let bit_count = (size * 8) as u64;
+        let result = ((masked_value >> effective_count)
+            | (masked_value << (bit_count - effective_count)))
+            & mask;
+
+        // Update flags
+        if effective_count == 1 {
+            // CF = LSB of original operand
+            if (dst_value & 1) != 0 {
+                self.engine.cpu.rflags.insert(Flags::CF);
+            } else {
+                self.engine.cpu.rflags.remove(Flags::CF);
+            }
+
+            // OF = MSB of result XOR CF
+            let msb = (result >> (bit_count - 1)) & 1;
+            let cf = if self.engine.cpu.rflags.contains(Flags::CF) {
+                1
+            } else {
+                0
+            };
+            if (msb ^ cf) != 0 {
+                self.engine.cpu.rflags.insert(Flags::OF);
+            } else {
+                self.engine.cpu.rflags.remove(Flags::OF);
+            }
+        }
+
+        self.write_operand(inst, 0, result)?;
+        Ok(())
+    }
+
+    fn execute_xchg(&mut self, inst: &Instruction) -> Result<()> {
+        // XCHG: Exchange values between two operands
+        let operand1_value = self.read_operand(inst, 0)?;
+        let operand2_value = self.read_operand(inst, 1)?;
+
+        // Write values in swapped positions
+        self.write_operand(inst, 0, operand2_value)?;
+        self.write_operand(inst, 1, operand1_value)?;
+
+        // XCHG doesn't affect flags
+        Ok(())
+    }
+
+    fn execute_loop(&mut self, inst: &Instruction) -> Result<()> {
+        // LOOP: Decrement RCX/ECX and jump if not zero
+        // Get address mode to determine if using RCX or ECX
+        let address_size = match self.engine.mode {
+            EngineMode::Mode64 => 8, // Use RCX in 64-bit mode
+            EngineMode::Mode32 => 4, // Use ECX in 32-bit mode
+            EngineMode::Mode16 => 2, // Use CX in 16-bit mode
+        };
+
+        let counter_reg = Register::RCX;
+        let counter_value = self.engine.cpu.read_reg(counter_reg);
+
+        // Decrement counter based on address size
+        let new_counter = match address_size {
+            8 => counter_value.wrapping_sub(1),
+            4 => {
+                (counter_value & 0xFFFFFFFF00000000)
+                    | ((counter_value as u32).wrapping_sub(1) as u64)
+            }
+            2 => {
+                (counter_value & 0xFFFFFFFFFFFF0000)
+                    | ((counter_value as u16).wrapping_sub(1) as u64)
+            }
+            _ => unreachable!(),
+        };
+
+        self.engine.cpu.write_reg(counter_reg, new_counter);
+
+        // Check if counter is zero (based on address size)
+        let counter_zero = match address_size {
+            8 => new_counter == 0,
+            4 => (new_counter as u32) == 0,
+            2 => (new_counter as u16) == 0,
+            _ => unreachable!(),
+        };
+
+        // Jump if counter is not zero
+        if !counter_zero {
+            let target_address = inst.near_branch_target();
+            self.engine.cpu.rip = target_address;
+        }
+
+        Ok(())
+    }
+
+    fn execute_loope(&mut self, inst: &Instruction) -> Result<()> {
+        // LOOPE: Decrement RCX/ECX and jump if not zero AND ZF=1
+        let address_size = match self.engine.mode {
+            EngineMode::Mode64 => 8,
+            EngineMode::Mode32 => 4,
+            EngineMode::Mode16 => 2,
+        };
+
+        let counter_reg = Register::RCX;
+        let counter_value = self.engine.cpu.read_reg(counter_reg);
+
+        // Decrement counter
+        let new_counter = match address_size {
+            8 => counter_value.wrapping_sub(1),
+            4 => {
+                (counter_value & 0xFFFFFFFF00000000)
+                    | ((counter_value as u32).wrapping_sub(1) as u64)
+            }
+            2 => {
+                (counter_value & 0xFFFFFFFFFFFF0000)
+                    | ((counter_value as u16).wrapping_sub(1) as u64)
+            }
+            _ => unreachable!(),
+        };
+
+        self.engine.cpu.write_reg(counter_reg, new_counter);
+
+        // Check conditions
+        let counter_zero = match address_size {
+            8 => new_counter == 0,
+            4 => (new_counter as u32) == 0,
+            2 => (new_counter as u16) == 0,
+            _ => unreachable!(),
+        };
+
+        let zero_flag_set = self.engine.cpu.rflags.contains(Flags::ZF);
+
+        // Jump if counter is not zero AND zero flag is set
+        if !counter_zero && zero_flag_set {
+            let target_address = inst.near_branch_target();
+            self.engine.cpu.rip = target_address;
+        }
+
+        Ok(())
+    }
+
+    fn execute_loopne(&mut self, inst: &Instruction) -> Result<()> {
+        // LOOPNE: Decrement RCX/ECX and jump if not zero AND ZF=0
+        let address_size = match self.engine.mode {
+            EngineMode::Mode64 => 8,
+            EngineMode::Mode32 => 4,
+            EngineMode::Mode16 => 2,
+        };
+
+        let counter_reg = Register::RCX;
+        let counter_value = self.engine.cpu.read_reg(counter_reg);
+
+        // Decrement counter
+        let new_counter = match address_size {
+            8 => counter_value.wrapping_sub(1),
+            4 => {
+                (counter_value & 0xFFFFFFFF00000000)
+                    | ((counter_value as u32).wrapping_sub(1) as u64)
+            }
+            2 => {
+                (counter_value & 0xFFFFFFFFFFFF0000)
+                    | ((counter_value as u16).wrapping_sub(1) as u64)
+            }
+            _ => unreachable!(),
+        };
+
+        self.engine.cpu.write_reg(counter_reg, new_counter);
+
+        // Check conditions
+        let counter_zero = match address_size {
+            8 => new_counter == 0,
+            4 => (new_counter as u32) == 0,
+            2 => (new_counter as u16) == 0,
+            _ => unreachable!(),
+        };
+
+        let zero_flag_clear = !self.engine.cpu.rflags.contains(Flags::ZF);
+
+        // Jump if counter is not zero AND zero flag is clear
+        if !counter_zero && zero_flag_clear {
+            let target_address = inst.near_branch_target();
+            self.engine.cpu.rip = target_address;
+        }
+
+        Ok(())
+    }
+
     fn read_ymm_memory(&mut self, inst: &Instruction, operand_idx: u32) -> Result<[u128; 2]> {
         let addr = self.calculate_memory_address(inst, operand_idx)?;
 
@@ -1733,8 +2770,9 @@ impl<H: HookManager> ExecutionContext<'_, H> {
                 self.engine.cpu.rflags.remove(Flags::CF);
             }
         } else {
-            // For addition, check if result overflowed
-            if result > mask {
+            // For addition, check if result overflowed by detecting wraparound
+            // Carry occurs when the result is smaller than either operand due to overflow
+            if masked_result < masked_dst || masked_result < masked_src {
                 self.engine.cpu.rflags.insert(Flags::CF);
             } else {
                 self.engine.cpu.rflags.remove(Flags::CF);

@@ -1,13 +1,68 @@
-use amd64_emu::{Engine, EngineMode, HookManager, HookType, Permission, Register};
-use std::sync::{Arc, Mutex};
+use amd64_emu::hooks::HookManager;
+use amd64_emu::{Engine, EngineMode, Permission, Register};
+
+// Custom hook manager implementation
+struct CustomHooks {
+    code_hook_count: usize,
+    mem_write_count: Vec<(u64, usize)>,
+    mem_read_count: Vec<(u64, usize)>,
+}
+
+impl CustomHooks {
+    fn new() -> Self {
+        Self {
+            code_hook_count: 0,
+            mem_write_count: Vec::new(),
+            mem_read_count: Vec::new(),
+        }
+    }
+}
+
+impl HookManager for CustomHooks {
+    fn on_code(&mut self, engine: &mut Engine, address: u64, size: usize) -> amd64_emu::Result<()> {
+        self.code_hook_count += 1;
+        println!(
+            "[CODE] Executing instruction at {:#x} (size: {} bytes)",
+            address, size
+        );
+        println!("  RAX = {:#x}", engine.reg_read(Register::RAX));
+        Ok(())
+    }
+
+    fn on_mem_read(
+        &mut self,
+        _engine: &mut Engine,
+        address: u64,
+        size: usize,
+    ) -> amd64_emu::Result<()> {
+        // Only log reads in the 0x2000 range
+        if address >= 0x2000 && address < 0x3000 {
+            self.mem_read_count.push((address, size));
+            println!("[MEM READ] Reading {} bytes from {:#x}", size, address);
+        }
+        Ok(())
+    }
+
+    fn on_mem_write(
+        &mut self,
+        _engine: &mut Engine,
+        address: u64,
+        size: usize,
+    ) -> amd64_emu::Result<()> {
+        // Only log writes in the 0x2000 range
+        if address >= 0x2000 && address < 0x3000 {
+            self.mem_write_count.push((address, size));
+            println!("[MEM WRITE] Writing {} bytes to {:#x}", size, address);
+        }
+        Ok(())
+    }
+}
 
 fn main() {
     env_logger::init();
 
     let mut engine = Engine::new(EngineMode::Mode64);
-    let mut hooks = HookManager::new();
-
-    engine.set_trace(true);
+    let mut hooks = CustomHooks::new();
 
     engine.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
     engine
@@ -23,62 +78,17 @@ fn main() {
 
     engine.mem_write(0x1000, &code).unwrap();
 
-    let code_hook_count = Arc::new(Mutex::new(0));
-    let code_hook_clone = code_hook_count.clone();
-
-    hooks.add_hook(HookType::Code, 0x1000, 0x2000, move |cpu, addr, size| {
-        let mut count = code_hook_clone.lock().unwrap();
-        *count += 1;
-        println!(
-            "[CODE] Executing instruction at {:#x} (size: {} bytes)",
-            addr, size
-        );
-        println!("  RAX = {:#x}", cpu.read_reg(Register::RAX));
-        Ok(())
-    });
-
-    let mem_write_count = Arc::new(Mutex::new(Vec::new()));
-    let mem_write_clone = mem_write_count.clone();
-
-    hooks.add_hook(
-        HookType::MemWrite,
-        0x2000,
-        0x3000,
-        move |_cpu, addr, size| {
-            mem_write_clone.lock().unwrap().push((addr, size));
-            println!("[MEM WRITE] Writing {} bytes to {:#x}", size, addr);
-            Ok(())
-        },
-    );
-
-    let mem_read_count = Arc::new(Mutex::new(Vec::new()));
-    let mem_read_clone = mem_read_count.clone();
-
-    hooks.add_hook(
-        HookType::MemRead,
-        0x2000,
-        0x3000,
-        move |_cpu, addr, size| {
-            mem_read_clone.lock().unwrap().push((addr, size));
-            println!("[MEM READ] Reading {} bytes from {:#x}", size, addr);
-            Ok(())
-        },
-    );
-
     println!("\nStarting emulation with hooks...\n");
     engine
-        .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0, Some(&mut hooks))
+        .emu_start_with_hooks(0x1000, 0x1000 + code.len() as u64, 0, 0, &mut hooks)
         .unwrap();
 
-    let rax = engine.reg_read(Register::RAX).unwrap();
+    let rax = engine.reg_read(Register::RAX);
     println!("\n=== Emulation Results ===");
     println!("Final RAX value: {:#x}", rax);
-    println!(
-        "Code hook executed {} times",
-        *code_hook_count.lock().unwrap()
-    );
-    println!("Memory writes: {:?}", *mem_write_count.lock().unwrap());
-    println!("Memory reads: {:?}", *mem_read_count.lock().unwrap());
+    println!("Code hook executed {} times", hooks.code_hook_count);
+    println!("Memory writes: {:?}", hooks.mem_write_count);
+    println!("Memory reads: {:?}", hooks.mem_read_count);
 
     assert_eq!(rax, 3);
     println!("\nResult verified: 1 + 2 = {}", rax);

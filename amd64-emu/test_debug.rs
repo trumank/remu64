@@ -18,8 +18,8 @@ fn main() {
     println!("Before execution:");
     println!("RIP: {:#x}", engine.reg_read(Register::RIP).unwrap());
     
-    engine.reg_write(Register::RIP, base).unwrap();
-    let result = engine.emu_start(base, base + code.len() as u64, 0, 0, None);
+    engine.reg_write(Register::RIP, base);
+    let result = engine.emu_start(base, base + code.len() as u64, 0, 0);
     
     println!("Execute result: {:?}", result);
     println!("After execution:");

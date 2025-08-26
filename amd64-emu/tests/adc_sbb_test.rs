@@ -16,11 +16,11 @@ fn test_adc_basic() {
 
     engine.mem_write(0x1000, &code).unwrap();
     engine
-        .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0, None)
+        .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
         .unwrap();
 
     // Without carry: 5 + 3 = 8
-    assert_eq!(engine.reg_read(Register::RAX).unwrap(), 8);
+    assert_eq!(engine.reg_read(Register::RAX), 8);
 }
 
 #[test]
@@ -42,11 +42,11 @@ fn test_adc_with_carry() {
 
     engine.mem_write(0x1000, &code).unwrap();
     engine
-        .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0, None)
+        .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
         .unwrap();
 
     // With carry: 5 + 3 + 1 = 9
-    assert_eq!(engine.reg_read(Register::RAX).unwrap(), 9);
+    assert_eq!(engine.reg_read(Register::RAX), 9);
 }
 
 #[test]
@@ -65,11 +65,11 @@ fn test_sbb_basic() {
 
     engine.mem_write(0x1000, &code).unwrap();
     engine
-        .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0, None)
+        .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
         .unwrap();
 
     // Without borrow: 10 - 3 = 7
-    assert_eq!(engine.reg_read(Register::RAX).unwrap(), 7);
+    assert_eq!(engine.reg_read(Register::RAX), 7);
 }
 
 #[test]
@@ -91,11 +91,11 @@ fn test_sbb_with_borrow() {
 
     engine.mem_write(0x1000, &code).unwrap();
     engine
-        .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0, None)
+        .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
         .unwrap();
 
     // With borrow: 10 - 3 - 1 = 6
-    assert_eq!(engine.reg_read(Register::RAX).unwrap(), 6);
+    assert_eq!(engine.reg_read(Register::RAX), 6);
 }
 
 #[test]
@@ -121,13 +121,13 @@ fn test_adc_chain() {
 
     engine.mem_write(0x1000, &code).unwrap();
     engine
-        .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0, None)
+        .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
         .unwrap();
 
     // Low part: 0xFFFFFFFFFFFFFFFF + 1 = 0 (wraps to 0, sets carry)
-    assert_eq!(engine.reg_read(Register::RAX).unwrap(), 0);
+    assert_eq!(engine.reg_read(Register::RAX), 0);
     // High part: 1 + 0 + carry = 2
-    assert_eq!(engine.reg_read(Register::RCX).unwrap(), 2);
+    assert_eq!(engine.reg_read(Register::RCX), 2);
 }
 
 #[test]
@@ -152,13 +152,13 @@ fn test_sbb_chain() {
 
     engine.mem_write(0x1000, &code).unwrap();
     engine
-        .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0, None)
+        .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
         .unwrap();
 
     // Low part: 0 - 1 = -1 (wraps to 0xFFFFFFFFFFFFFFFF, sets borrow)
-    assert_eq!(engine.reg_read(Register::RAX).unwrap(), 0xFFFFFFFFFFFFFFFF);
+    assert_eq!(engine.reg_read(Register::RAX), 0xFFFFFFFFFFFFFFFF);
     // High part: 2 - 0 - borrow = 1
-    assert_eq!(engine.reg_read(Register::RCX).unwrap(), 1);
+    assert_eq!(engine.reg_read(Register::RCX), 1);
 }
 
 #[test]
@@ -178,11 +178,11 @@ fn test_adc_immediate() {
 
     engine.mem_write(0x1000, &code).unwrap();
     engine
-        .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0, None)
+        .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
         .unwrap();
 
     // AL = 5 + 3 + 1 (carry) = 9
-    assert_eq!(engine.reg_read(Register::RAX).unwrap() & 0xFF, 9);
+    assert_eq!(engine.reg_read(Register::RAX) & 0xFF, 9);
 }
 
 #[test]
@@ -202,9 +202,41 @@ fn test_sbb_immediate() {
 
     engine.mem_write(0x1000, &code).unwrap();
     engine
-        .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0, None)
+        .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
         .unwrap();
 
     // AL = 10 - 3 - 1 (borrow) = 6
-    assert_eq!(engine.reg_read(Register::RAX).unwrap() & 0xFF, 6);
+    assert_eq!(engine.reg_read(Register::RAX) & 0xFF, 6);
+}
+
+#[test]
+fn test_add_carry_flag() {
+    let mut engine = Engine::new(EngineMode::Mode64);
+    engine.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
+
+    // Test if ADD sets carry flag correctly
+    let code = vec![
+        0x48, 0xC7, 0xC0, 0xFF, 0xFF, 0xFF,
+        0xFF, // mov rax, 0xFFFFFFFF (should sign extend to 0xFFFFFFFFFFFFFFFF)
+        0x48, 0xC7, 0xC3, 0x01, 0x00, 0x00, 0x00, // mov rbx, 1
+        0x48, 0x01, 0xD8, // add rax, rbx (should set carry: 0xFFFFFFFFFFFFFFFF + 1 overflows)
+    ];
+
+    engine.mem_write(0x1000, &code).unwrap();
+    engine
+        .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
+        .unwrap();
+
+    let rax = engine.reg_read(Register::RAX);
+    let flags = engine.flags_read();
+
+    println!(
+        "ADD result: RAX={:#x}, carry={}",
+        rax,
+        flags.contains(amd64_emu::Flags::CF)
+    );
+
+    // RAX should be 0, carry should be set
+    assert_eq!(rax, 0);
+    assert!(flags.contains(amd64_emu::Flags::CF));
 }

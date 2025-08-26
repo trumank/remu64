@@ -14,10 +14,10 @@ fn main() {
 
     engine.mem_write(0x1000, &code).unwrap();
 
-    match engine.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0, None) {
+    match engine.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0) {
         Ok(()) => {
-            let al = engine.reg_read(Register::RAX).unwrap() & 0xFF;
-            let flags = engine.reg_read(Register::RFLAGS).unwrap();
+            let al = engine.reg_read(Register::RAX) & 0xFF;
+            let flags = engine.reg_read(Register::RFLAGS);
             let carry = (flags & 1) != 0; // CF is bit 0
 
             println!("After ADD AL(0xFF), 1:");

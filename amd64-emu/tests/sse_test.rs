@@ -16,15 +16,15 @@ fn test_movaps() {
 
     // Set XMM1 to a test value
     let test_value = 0x0123456789ABCDEF0123456789ABCDEFu128;
-    engine.xmm_write(Register::XMM1, test_value).unwrap();
+    engine.xmm_write(Register::XMM1, test_value);
 
-    engine.reg_write(Register::RIP, base).unwrap();
+    engine.reg_write(Register::RIP, base);
     engine
-        .emu_start(base, base + code.len() as u64, 0, 0, None)
+        .emu_start(base, base + code.len() as u64, 0, 0)
         .unwrap();
 
     // Check that XMM0 now contains the value from XMM1
-    assert_eq!(engine.xmm_read(Register::XMM0).unwrap(), test_value);
+    assert_eq!(engine.xmm_read(Register::XMM0), test_value);
 }
 
 #[test]
@@ -42,17 +42,15 @@ fn test_xorps() {
     engine.mem_write(base, &code).unwrap();
 
     // Set XMM0 to a non-zero value
-    engine
-        .xmm_write(Register::XMM0, 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFu128)
-        .unwrap();
+    engine.xmm_write(Register::XMM0, 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFu128);
 
-    engine.reg_write(Register::RIP, base).unwrap();
+    engine.reg_write(Register::RIP, base);
     engine
-        .emu_start(base, base + code.len() as u64, 0, 0, None)
+        .emu_start(base, base + code.len() as u64, 0, 0)
         .unwrap();
 
     // Check that XMM0 is now zero
-    assert_eq!(engine.xmm_read(Register::XMM0).unwrap(), 0);
+    assert_eq!(engine.xmm_read(Register::XMM0), 0);
 }
 
 #[test]
@@ -79,24 +77,26 @@ fn test_addps() {
     xmm0_val |= (2.0f32.to_bits() as u128) << 32;
     xmm0_val |= (3.0f32.to_bits() as u128) << 64;
     xmm0_val |= (4.0f32.to_bits() as u128) << 96;
-    state.xmm_regs[0] = xmm0_val;
+    state.ymm_regs[0][0] = xmm0_val;
+    state.ymm_regs[0][1] = 0;
 
     let mut xmm1_val = 0u128;
     xmm1_val |= (5.0f32.to_bits() as u128) << 0;
     xmm1_val |= (6.0f32.to_bits() as u128) << 32;
     xmm1_val |= (7.0f32.to_bits() as u128) << 64;
     xmm1_val |= (8.0f32.to_bits() as u128) << 96;
-    state.xmm_regs[1] = xmm1_val;
+    state.ymm_regs[1][0] = xmm1_val;
+    state.ymm_regs[1][1] = 0;
 
     engine.context_restore(&state);
 
-    engine.reg_write(Register::RIP, base).unwrap();
+    engine.reg_write(Register::RIP, base);
     engine
-        .emu_start(base, base + code.len() as u64, 0, 0, None)
+        .emu_start(base, base + code.len() as u64, 0, 0)
         .unwrap();
 
     // Check results: XMM0 should now contain [6.0, 8.0, 10.0, 12.0]
-    let result = engine.xmm_read(Register::XMM0).unwrap();
+    let result = engine.xmm_read(Register::XMM0);
     assert_eq!(f32::from_bits((result & 0xFFFFFFFF) as u32), 6.0);
     assert_eq!(f32::from_bits(((result >> 32) & 0xFFFFFFFF) as u32), 8.0);
     assert_eq!(f32::from_bits(((result >> 64) & 0xFFFFFFFF) as u32), 10.0);
@@ -127,24 +127,26 @@ fn test_subps() {
     xmm0_val |= (20.0f32.to_bits() as u128) << 32;
     xmm0_val |= (30.0f32.to_bits() as u128) << 64;
     xmm0_val |= (40.0f32.to_bits() as u128) << 96;
-    state.xmm_regs[0] = xmm0_val;
+    state.ymm_regs[0][0] = xmm0_val;
+    state.ymm_regs[0][1] = 0;
 
     let mut xmm1_val = 0u128;
     xmm1_val |= (5.0f32.to_bits() as u128) << 0;
     xmm1_val |= (10.0f32.to_bits() as u128) << 32;
     xmm1_val |= (15.0f32.to_bits() as u128) << 64;
     xmm1_val |= (20.0f32.to_bits() as u128) << 96;
-    state.xmm_regs[1] = xmm1_val;
+    state.ymm_regs[1][0] = xmm1_val;
+    state.ymm_regs[1][1] = 0;
 
     engine.context_restore(&state);
 
-    engine.reg_write(Register::RIP, base).unwrap();
+    engine.reg_write(Register::RIP, base);
     engine
-        .emu_start(base, base + code.len() as u64, 0, 0, None)
+        .emu_start(base, base + code.len() as u64, 0, 0)
         .unwrap();
 
     // Check results: XMM0 should now contain [5.0, 10.0, 15.0, 20.0]
-    let result = engine.xmm_read(Register::XMM0).unwrap();
+    let result = engine.xmm_read(Register::XMM0);
     assert_eq!(f32::from_bits((result & 0xFFFFFFFF) as u32), 5.0);
     assert_eq!(f32::from_bits(((result >> 32) & 0xFFFFFFFF) as u32), 10.0);
     assert_eq!(f32::from_bits(((result >> 64) & 0xFFFFFFFF) as u32), 15.0);
@@ -175,24 +177,26 @@ fn test_mulps() {
     xmm0_val |= (3.0f32.to_bits() as u128) << 32;
     xmm0_val |= (4.0f32.to_bits() as u128) << 64;
     xmm0_val |= (5.0f32.to_bits() as u128) << 96;
-    state.xmm_regs[0] = xmm0_val;
+    state.ymm_regs[0][0] = xmm0_val;
+    state.ymm_regs[0][1] = 0;
 
     let mut xmm1_val = 0u128;
     xmm1_val |= (3.0f32.to_bits() as u128) << 0;
     xmm1_val |= (4.0f32.to_bits() as u128) << 32;
     xmm1_val |= (5.0f32.to_bits() as u128) << 64;
     xmm1_val |= (6.0f32.to_bits() as u128) << 96;
-    state.xmm_regs[1] = xmm1_val;
+    state.ymm_regs[1][0] = xmm1_val;
+    state.ymm_regs[1][1] = 0;
 
     engine.context_restore(&state);
 
-    engine.reg_write(Register::RIP, base).unwrap();
+    engine.reg_write(Register::RIP, base);
     engine
-        .emu_start(base, base + code.len() as u64, 0, 0, None)
+        .emu_start(base, base + code.len() as u64, 0, 0)
         .unwrap();
 
     // Check results: XMM0 should now contain [6.0, 12.0, 20.0, 30.0]
-    let result = engine.xmm_read(Register::XMM0).unwrap();
+    let result = engine.xmm_read(Register::XMM0);
     assert_eq!(f32::from_bits((result & 0xFFFFFFFF) as u32), 6.0);
     assert_eq!(f32::from_bits(((result >> 32) & 0xFFFFFFFF) as u32), 12.0);
     assert_eq!(f32::from_bits(((result >> 64) & 0xFFFFFFFF) as u32), 20.0);
@@ -223,24 +227,26 @@ fn test_divps() {
     xmm0_val |= (20.0f32.to_bits() as u128) << 32;
     xmm0_val |= (30.0f32.to_bits() as u128) << 64;
     xmm0_val |= (40.0f32.to_bits() as u128) << 96;
-    state.xmm_regs[0] = xmm0_val;
+    state.ymm_regs[0][0] = xmm0_val;
+    state.ymm_regs[0][1] = 0;
 
     let mut xmm1_val = 0u128;
     xmm1_val |= (2.0f32.to_bits() as u128) << 0;
     xmm1_val |= (4.0f32.to_bits() as u128) << 32;
     xmm1_val |= (5.0f32.to_bits() as u128) << 64;
     xmm1_val |= (8.0f32.to_bits() as u128) << 96;
-    state.xmm_regs[1] = xmm1_val;
+    state.ymm_regs[1][0] = xmm1_val;
+    state.ymm_regs[1][1] = 0;
 
     engine.context_restore(&state);
 
-    engine.reg_write(Register::RIP, base).unwrap();
+    engine.reg_write(Register::RIP, base);
     engine
-        .emu_start(base, base + code.len() as u64, 0, 0, None)
+        .emu_start(base, base + code.len() as u64, 0, 0)
         .unwrap();
 
     // Check results: XMM0 should now contain [5.0, 5.0, 6.0, 5.0]
-    let result = engine.xmm_read(Register::XMM0).unwrap();
+    let result = engine.xmm_read(Register::XMM0);
     assert_eq!(f32::from_bits((result & 0xFFFFFFFF) as u32), 5.0);
     assert_eq!(f32::from_bits(((result >> 32) & 0xFFFFFFFF) as u32), 5.0);
     assert_eq!(f32::from_bits(((result >> 64) & 0xFFFFFFFF) as u32), 6.0);
@@ -262,20 +268,16 @@ fn test_andps() {
     engine.mem_write(base, &code).unwrap();
 
     // Set up test values for bitwise operations
-    engine
-        .xmm_write(Register::XMM0, 0xFFFFFFFF00000000FFFFFFFF00000000u128)
-        .unwrap();
-    engine
-        .xmm_write(Register::XMM1, 0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAu128)
-        .unwrap();
+    engine.xmm_write(Register::XMM0, 0xFFFFFFFF00000000FFFFFFFF00000000u128);
+    engine.xmm_write(Register::XMM1, 0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAu128);
 
-    engine.reg_write(Register::RIP, base).unwrap();
+    engine.reg_write(Register::RIP, base);
     engine
-        .emu_start(base, base + code.len() as u64, 0, 0, None)
+        .emu_start(base, base + code.len() as u64, 0, 0)
         .unwrap();
 
     // Check result
-    let result = engine.xmm_read(Register::XMM0).unwrap();
+    let result = engine.xmm_read(Register::XMM0);
     assert_eq!(result, 0xAAAAAAAA00000000AAAAAAAA00000000u128);
 }
 
@@ -294,19 +296,15 @@ fn test_orps() {
     engine.mem_write(base, &code).unwrap();
 
     // Set up test values for bitwise operations
-    engine
-        .xmm_write(Register::XMM0, 0xFF00FF00FF00FF00FF00FF00FF00FF00u128)
-        .unwrap();
-    engine
-        .xmm_write(Register::XMM1, 0x00FF00FF00FF00FF00FF00FF00FF00FFu128)
-        .unwrap();
+    engine.xmm_write(Register::XMM0, 0xFF00FF00FF00FF00FF00FF00FF00FF00u128);
+    engine.xmm_write(Register::XMM1, 0x00FF00FF00FF00FF00FF00FF00FF00FFu128);
 
-    engine.reg_write(Register::RIP, base).unwrap();
+    engine.reg_write(Register::RIP, base);
     engine
-        .emu_start(base, base + code.len() as u64, 0, 0, None)
+        .emu_start(base, base + code.len() as u64, 0, 0)
         .unwrap();
 
     // Check result
-    let result = engine.xmm_read(Register::XMM0).unwrap();
+    let result = engine.xmm_read(Register::XMM0);
     assert_eq!(result, 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFu128);
 }

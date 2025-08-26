@@ -220,7 +220,7 @@ impl FunctionExecutor {
         // Execute the function
         match self
             .engine
-            .emu_start(function_address, return_address, 0, 0, Some(&mut hooks))
+            .emu_start_with_hooks(function_address, return_address, 0, 0, &mut hooks)
         {
             Ok(()) => {
                 // Normal completion - function reached end address
