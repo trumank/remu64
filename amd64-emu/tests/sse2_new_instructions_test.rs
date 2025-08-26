@@ -11,7 +11,6 @@ fn test_pshuflw() {
     // PSHUFLW XMM1, XMM0, 0xE4 (11 10 01 00) - reverse order of low words
     let code = vec![
         0xF2, 0x0F, 0x70, 0xC8, 0xE4,  // pshuflw xmm1, xmm0, 0xE4
-        0xF4,  // hlt
     ];
     
     emu.mem_write(code_addr, &code).unwrap();
@@ -43,7 +42,6 @@ fn test_pshufhw() {
     // PSHUFHW XMM1, XMM0, 0xE4 (11 10 01 00) - reverse order of high words
     let code = vec![
         0xF3, 0x0F, 0x70, 0xC8, 0xE4,  // pshufhw xmm1, xmm0, 0xE4
-        0xF4,  // hlt
     ];
     
     emu.mem_write(code_addr, &code).unwrap();
@@ -73,7 +71,6 @@ fn test_pextrw() {
     // PEXTRW EAX, XMM0, 3 - extract word at index 3
     let code = vec![
         0x66, 0x0F, 0xC5, 0xC0, 0x03,  // pextrw eax, xmm0, 3
-        0xF4,  // hlt
     ];
     
     emu.mem_write(code_addr, &code).unwrap();
@@ -102,7 +99,6 @@ fn test_pinsrw() {
     // PINSRW XMM0, EAX, 2 - insert word at index 2
     let code = vec![
         0x66, 0x0F, 0xC4, 0xC0, 0x02,  // pinsrw xmm0, eax, 2
-        0xF4,  // hlt
     ];
     
     emu.mem_write(code_addr, &code).unwrap();
@@ -132,7 +128,6 @@ fn test_pmovmskb() {
     // PMOVMSKB EAX, XMM0
     let code = vec![
         0x66, 0x0F, 0xD7, 0xC0,  // pmovmskb eax, xmm0
-        0xF4,  // hlt
     ];
     
     emu.mem_write(code_addr, &code).unwrap();
@@ -162,7 +157,6 @@ fn test_pavgb() {
     // PAVGB XMM0, XMM1
     let code = vec![
         0x66, 0x0F, 0xE0, 0xC1,  // pavgb xmm0, xmm1
-        0xF4,  // hlt
     ];
     
     emu.mem_write(code_addr, &code).unwrap();
@@ -195,7 +189,6 @@ fn test_pmaxub() {
     // PMAXUB XMM0, XMM1
     let code = vec![
         0x66, 0x0F, 0xDE, 0xC1,  // pmaxub xmm0, xmm1
-        0xF4,  // hlt
     ];
     
     emu.mem_write(code_addr, &code).unwrap();
@@ -225,7 +218,6 @@ fn test_psadbw() {
     // PSADBW XMM0, XMM1
     let code = vec![
         0x66, 0x0F, 0xF6, 0xC1,  // psadbw xmm0, xmm1
-        0xF4,  // hlt
     ];
     
     emu.mem_write(code_addr, &code).unwrap();
