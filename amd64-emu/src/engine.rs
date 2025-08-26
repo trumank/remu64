@@ -345,6 +345,12 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             Mnemonic::Btc => self.execute_btc(inst),
             Mnemonic::Bsf => self.execute_bsf(inst),
             Mnemonic::Bsr => self.execute_bsr(inst),
+            Mnemonic::Enter => self.execute_enter(inst),
+            Mnemonic::Leave => self.execute_leave(inst),
+            Mnemonic::Popcnt => self.execute_popcnt(inst),
+            Mnemonic::Cdq => self.execute_cdq(inst),
+            Mnemonic::Cqo => self.execute_cqo(inst),
+            Mnemonic::Xadd => self.execute_xadd(inst),
             Mnemonic::Punpcklwd => self.execute_punpcklwd(inst),
             Mnemonic::Pshufd => self.execute_pshufd(inst),
             Mnemonic::Xorps => self.execute_xorps(inst),
@@ -2781,6 +2787,141 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             // Write result to destination
             self.write_operand(inst, 0, bit_pos)?;
         }
+        
+        Ok(())
+    }
+
+    fn execute_enter(&mut self, inst: &Instruction) -> Result<()> {
+        // ENTER: Create stack frame for procedure
+        // Enter imm16, imm8
+        // imm16 = size of stack frame, imm8 = nesting level (we'll only implement level 0)
+        
+        // Get operands - for ENTER, operands are immediates
+        let frame_size = inst.immediate(0) as u64;
+        let nesting_level = inst.immediate(1) as u8;
+        
+        if nesting_level != 0 {
+            return Err(EmulatorError::UnsupportedInstruction(
+                format!("ENTER with nesting level {} not supported", nesting_level)
+            ));
+        }
+        
+        // Push RBP
+        let rbp_value = self.engine.cpu.read_reg(Register::RBP);
+        let rsp_value = self.engine.cpu.read_reg(Register::RSP);
+        
+        // Decrement RSP and store RBP
+        let new_rsp = rsp_value.wrapping_sub(8);
+        self.write_memory_64(new_rsp, rbp_value)?;
+        self.engine.cpu.write_reg(Register::RSP, new_rsp);
+        
+        // Set RBP to current RSP
+        self.engine.cpu.write_reg(Register::RBP, new_rsp);
+        
+        // Allocate space for local variables (subtract frame_size from RSP)
+        let final_rsp = new_rsp.wrapping_sub(frame_size);
+        self.engine.cpu.write_reg(Register::RSP, final_rsp);
+        
+        Ok(())
+    }
+
+    fn execute_leave(&mut self, inst: &Instruction) -> Result<()> {
+        // LEAVE: Destroy stack frame before returning
+        // Equivalent to: MOV RSP, RBP; POP RBP
+        
+        // Set RSP to RBP
+        let rbp_value = self.engine.cpu.read_reg(Register::RBP);
+        self.engine.cpu.write_reg(Register::RSP, rbp_value);
+        
+        // Pop RBP
+        let old_rbp = self.read_memory_64(rbp_value)?;
+        self.engine.cpu.write_reg(Register::RBP, old_rbp);
+        
+        // Increment RSP
+        let new_rsp = rbp_value.wrapping_add(8);
+        self.engine.cpu.write_reg(Register::RSP, new_rsp);
+        
+        Ok(())
+    }
+
+    fn execute_popcnt(&mut self, inst: &Instruction) -> Result<()> {
+        // POPCNT: Count the number of set bits
+        let source = self.read_operand(inst, 1)?;
+        
+        // Count the number of 1 bits
+        let count = source.count_ones() as u64;
+        
+        // Write result to destination
+        self.write_operand(inst, 0, count)?;
+        
+        // Update flags
+        // POPCNT clears all flags except CF and ZF
+        self.engine.cpu.rflags.remove(Flags::SF | Flags::OF | Flags::AF | Flags::PF);
+        self.engine.cpu.rflags.remove(Flags::CF); // CF is always cleared
+        
+        if count == 0 {
+            self.engine.cpu.rflags.insert(Flags::ZF);
+        } else {
+            self.engine.cpu.rflags.remove(Flags::ZF);
+        }
+        
+        Ok(())
+    }
+
+    fn execute_cdq(&mut self, inst: &Instruction) -> Result<()> {
+        // CDQ: Convert Doubleword to Quadword
+        // Sign-extend EAX to EDX:EAX
+        let eax_value = self.engine.cpu.read_reg(Register::RAX) as u32;
+        
+        // Sign extend EAX to EDX
+        let sign_extended = if eax_value & 0x80000000 != 0 {
+            0xFFFFFFFF  // Negative, fill EDX with 1s
+        } else {
+            0x00000000  // Positive, fill EDX with 0s
+        };
+        
+        // Write to EDX (preserve upper 32 bits of RDX)
+        let rdx_value = self.engine.cpu.read_reg(Register::RDX);
+        let new_rdx = (rdx_value & 0xFFFFFFFF00000000) | sign_extended as u64;
+        self.engine.cpu.write_reg(Register::RDX, new_rdx);
+        
+        Ok(())
+    }
+
+    fn execute_cqo(&mut self, inst: &Instruction) -> Result<()> {
+        // CQO: Convert Quadword to Octoword
+        // Sign-extend RAX to RDX:RAX
+        let rax_value = self.engine.cpu.read_reg(Register::RAX);
+        
+        // Sign extend RAX to RDX
+        let sign_extended = if rax_value & 0x8000000000000000 != 0 {
+            0xFFFFFFFFFFFFFFFF  // Negative, fill RDX with 1s
+        } else {
+            0x0000000000000000  // Positive, fill RDX with 0s
+        };
+        
+        self.engine.cpu.write_reg(Register::RDX, sign_extended);
+        
+        Ok(())
+    }
+
+    fn execute_xadd(&mut self, inst: &Instruction) -> Result<()> {
+        // XADD: Exchange and Add
+        // Exchanges the first operand (destination) with the second operand (source),
+        // then adds the original destination value to the source and stores in destination
+        
+        let dest_value = self.read_operand(inst, 0)?;
+        let src_value = self.read_operand(inst, 1)?;
+        
+        // Add dest + src and store in destination
+        let sum = dest_value.wrapping_add(src_value);
+        self.write_operand(inst, 0, sum)?;
+        
+        // Store original destination value in source
+        self.write_operand(inst, 1, dest_value)?;
+        
+        // Update flags based on the addition
+        self.update_flags_add(dest_value, src_value, sum, inst)?;
         
         Ok(())
     }
