@@ -350,6 +350,9 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             Mnemonic::Popcnt => self.execute_popcnt(inst),
             Mnemonic::Cqo => self.execute_cqo(inst),
             Mnemonic::Xadd => self.execute_xadd(inst),
+            Mnemonic::Cpuid => self.execute_cpuid(inst),
+            Mnemonic::Rdtsc => self.execute_rdtsc(inst),
+            Mnemonic::Rdtscp => self.execute_rdtscp(inst),
             Mnemonic::Punpcklwd => self.execute_punpcklwd(inst),
             Mnemonic::Pshufd => self.execute_pshufd(inst),
             Mnemonic::Xorps => self.execute_xorps(inst),
@@ -2908,6 +2911,147 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         // Update flags based on the addition
         // Update flags for addition
         self.update_flags_arithmetic_iced(dest_value, src_value, sum, true, inst)?;
+        
+        Ok(())
+    }
+
+    fn execute_cpuid(&mut self, _inst: &Instruction) -> Result<()> {
+        // CPUID: CPU Identification
+        // Input: EAX = function number, ECX = sub-function (for some functions)
+        // Output: EAX, EBX, ECX, EDX with CPU information
+        
+        let function = self.engine.cpu.read_reg(Register::RAX) as u32;
+        let sub_function = self.engine.cpu.read_reg(Register::RCX) as u32;
+        
+        let (eax, ebx, ecx, edx) = match function {
+            // Basic CPUID Information
+            0x00 => {
+                // Maximum input value for basic CPUID information
+                // Vendor ID string: "GenuineIntel" or "AuthenticAMD"
+                // For emulation, we'll use a custom vendor "AMDEmu64Rust"
+                (
+                    0x16,  // Maximum supported standard level
+                    0x444d4165,  // "eAMD"
+                    0x52343665,  // "e64R"
+                    0x74737565,  // "eust"
+                )
+            }
+            // Processor Info and Feature Bits
+            0x01 => {
+                // EAX: Version Information (Family, Model, Stepping)
+                // EBX: Brand Index, CLFLUSH line size, Max IDs, Initial APIC ID
+                // ECX: Feature flags
+                // EDX: Feature flags
+                (
+                    0x000906EA,  // Version info
+                    0x00040800,  // Brand/Cache info
+                    0x7FFAFBBF,  // Feature flags ECX
+                    0xBFEBFBFFu32,  // Feature flags EDX
+                )
+            }
+            // Cache and TLB Information
+            0x02 => {
+                // Return zeros for simplicity
+                (0, 0, 0, 0)
+            }
+            // Extended Features
+            0x07 if sub_function == 0 => {
+                // EAX: Maximum sub-leaves
+                // EBX, ECX, EDX: Extended feature flags
+                (
+                    0,           // Max sub-leaves
+                    0x029C6FBB,  // Extended features EBX
+                    0x00000000,  // Extended features ECX  
+                    0x00000000,  // Extended features EDX
+                )
+            }
+            // Extended CPUID Information
+            0x80000000 => {
+                // Maximum extended function supported
+                (0x80000008u32, 0, 0, 0)
+            }
+            // Extended Processor Info and Feature Bits
+            0x80000001 => {
+                // Extended feature flags
+                (
+                    0,           // Reserved
+                    0,           // Reserved
+                    0x00000121,  // Extended feature flags ECX
+                    0x2C100800,  // Extended feature flags EDX
+                )
+            }
+            // Processor Brand String (Part 1)
+            0x80000002 => {
+                // "AMD64 Emulator  "
+                (0x34444d41, 0x6d452036, 0x74616c75, 0x2020726f)
+            }
+            // Processor Brand String (Part 2)
+            0x80000003 => {
+                // "in Pure Rust    "
+                (0x50206e69, 0x20657275, 0x74737552, 0x20202020)
+            }
+            // Processor Brand String (Part 3)
+            0x80000004 => {
+                // "                "
+                (0x20202020, 0x20202020, 0x20202020, 0x20202020)
+            }
+            _ => {
+                // Unknown function, return zeros
+                (0, 0, 0, 0)
+            }
+        };
+        
+        // Write results to registers (preserving upper 32 bits)
+        let rax = (self.engine.cpu.read_reg(Register::RAX) & 0xFFFFFFFF00000000) | eax as u64;
+        let rbx = (self.engine.cpu.read_reg(Register::RBX) & 0xFFFFFFFF00000000) | ebx as u64;
+        let rcx = (self.engine.cpu.read_reg(Register::RCX) & 0xFFFFFFFF00000000) | ecx as u64;
+        let rdx = (self.engine.cpu.read_reg(Register::RDX) & 0xFFFFFFFF00000000) | edx as u64;
+        
+        self.engine.cpu.write_reg(Register::RAX, rax);
+        self.engine.cpu.write_reg(Register::RBX, rbx);
+        self.engine.cpu.write_reg(Register::RCX, rcx);
+        self.engine.cpu.write_reg(Register::RDX, rdx);
+        
+        Ok(())
+    }
+
+    fn execute_rdtsc(&mut self, _inst: &Instruction) -> Result<()> {
+        // RDTSC: Read Time-Stamp Counter
+        // Returns the current value of the processor's time-stamp counter in EDX:EAX
+        
+        // For emulation purposes, we'll use a simple counter or system time
+        // In a real implementation, this would read the actual TSC
+        use std::time::{SystemTime, UNIX_EPOCH};
+        
+        let tsc = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos() as u64;
+        
+        // Split into EDX:EAX (high:low 32-bit parts)
+        let eax = tsc as u32 as u64;
+        let edx = (tsc >> 32) as u32 as u64;
+        
+        // Write to registers (preserving upper 32 bits)
+        let rax = (self.engine.cpu.read_reg(Register::RAX) & 0xFFFFFFFF00000000) | eax;
+        let rdx = (self.engine.cpu.read_reg(Register::RDX) & 0xFFFFFFFF00000000) | edx;
+        
+        self.engine.cpu.write_reg(Register::RAX, rax);
+        self.engine.cpu.write_reg(Register::RDX, rdx);
+        
+        Ok(())
+    }
+
+    fn execute_rdtscp(&mut self, _inst: &Instruction) -> Result<()> {
+        // RDTSCP: Read Time-Stamp Counter and Processor ID
+        // Like RDTSC but also returns processor ID in ECX
+        
+        // First do the same as RDTSC
+        self.execute_rdtsc(_inst)?;
+        
+        // Additionally, set ECX to processor ID (we'll use 0 for simplicity)
+        let rcx = self.engine.cpu.read_reg(Register::RCX) & 0xFFFFFFFF00000000;
+        self.engine.cpu.write_reg(Register::RCX, rcx);
         
         Ok(())
     }
