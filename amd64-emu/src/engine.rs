@@ -395,6 +395,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             Mnemonic::Shufps => self.execute_shufps(inst),
             Mnemonic::Unpcklps => self.execute_unpcklps(inst),
             Mnemonic::Unpckhps => self.execute_unpckhps(inst),
+            Mnemonic::Shufpd => self.execute_shufpd(inst),
             _ => {
                 println!(
                     "Unsupported instruction: {} ({:?}) at {:#x}",
@@ -2710,6 +2711,49 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             | ((src_float2 as u128) << 32)
             | ((dst_float3 as u128) << 64)
             | ((src_float3 as u128) << 96);
+            
+        self.engine.cpu.write_xmm(dst_reg, result);
+        Ok(())
+    }
+
+    fn execute_shufpd(&mut self, inst: &Instruction) -> Result<()> {
+        // SHUFPD: Shuffle Packed Double-Precision Floating-Point Values
+        // Shuffles doubles from dst and src according to imm8 control byte
+        let dst_reg = self.convert_register(inst.op_register(0))?;
+        let src_value = match inst.op_kind(1) {
+            OpKind::Register => {
+                let src_reg = self.convert_register(inst.op_register(1))?;
+                self.engine.cpu.read_xmm(src_reg)
+            }
+            OpKind::Memory => {
+                let addr = self.calculate_memory_address(inst, 1)?;
+                self.read_memory_128(addr)?
+            }
+            _ => return Err(EmulatorError::UnsupportedOperandType),
+        };
+        
+        // Get the immediate control byte
+        let imm8 = inst.immediate8();
+        let dst_value = self.engine.cpu.read_xmm(dst_reg);
+        
+        // Extract two 64-bit doubles from each operand
+        let dst_doubles = [
+            (dst_value as u64),
+            ((dst_value >> 64) as u64),
+        ];
+        let src_doubles = [
+            (src_value as u64),
+            ((src_value >> 64) as u64),
+        ];
+        
+        // Shuffle according to immediate bits
+        // Bit 0 selects from dst for result[0]
+        // Bit 1 selects from src for result[1]
+        let result0 = dst_doubles[(imm8 & 0x01) as usize];
+        let result1 = src_doubles[((imm8 >> 1) & 0x01) as usize];
+        
+        // Pack results into u128
+        let result = (result0 as u128) | ((result1 as u128) << 64);
             
         self.engine.cpu.write_xmm(dst_reg, result);
         Ok(())
