@@ -5,8 +5,6 @@ use crate::memory::{Memory, Permission};
 use iced_x86::{
     Code, Decoder, DecoderOptions, Instruction, Mnemonic, OpKind, Register as IcedRegister,
 };
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
 
 #[derive(Debug, Clone, Copy)]
 pub enum EngineMode {
@@ -19,7 +17,6 @@ pub struct Engine {
     pub cpu: CpuState,
     pub memory: Memory,
     _mode: EngineMode,
-    stop_requested: Arc<AtomicBool>,
     instruction_count: u64,
 }
 
@@ -29,7 +26,6 @@ impl Engine {
             cpu: CpuState::new(),
             memory: Memory::new(),
             _mode: mode,
-            stop_requested: Arc::new(AtomicBool::new(false)),
             instruction_count: 0,
         }
     }
@@ -111,7 +107,6 @@ impl Engine {
         mut hooks: Option<&mut H>,
     ) -> Result<()> {
         self.cpu.rip = begin;
-        self.stop_requested.store(false, Ordering::SeqCst);
         self.instruction_count = 0;
 
         let start_time = std::time::Instant::now();
@@ -122,10 +117,6 @@ impl Engine {
         };
 
         loop {
-            if self.stop_requested.load(Ordering::SeqCst) {
-                break;
-            }
-
             if self.cpu.rip == until && until != 0 {
                 break;
             }
@@ -143,11 +134,6 @@ impl Engine {
             self.step(hooks.as_deref_mut())?;
         }
 
-        Ok(())
-    }
-
-    pub fn emu_stop(&mut self) -> Result<()> {
-        self.stop_requested.store(true, Ordering::SeqCst);
         Ok(())
     }
 
@@ -263,50 +249,6 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             }
             Err(e) => Err(e),
         }
-    }
-
-    fn mem_read_u8(&mut self, address: u64) -> Result<u8> {
-        let mut buf = [0u8; 1];
-        self.mem_read_with_hooks(address, &mut buf)?;
-        Ok(buf[0])
-    }
-
-    fn mem_read_u16(&mut self, address: u64) -> Result<u16> {
-        let mut buf = [0u8; 2];
-        self.mem_read_with_hooks(address, &mut buf)?;
-        Ok(u16::from_le_bytes(buf))
-    }
-
-    fn mem_read_u32(&mut self, address: u64) -> Result<u32> {
-        let mut buf = [0u8; 4];
-        self.mem_read_with_hooks(address, &mut buf)?;
-        Ok(u32::from_le_bytes(buf))
-    }
-
-    fn mem_read_u64(&mut self, address: u64) -> Result<u64> {
-        let mut buf = [0u8; 8];
-        self.mem_read_with_hooks(address, &mut buf)?;
-        Ok(u64::from_le_bytes(buf))
-    }
-
-    fn mem_write_u8(&mut self, address: u64, value: u8) -> Result<()> {
-        let buf = [value];
-        self.mem_write_with_hooks(address, &buf)
-    }
-
-    fn mem_write_u16(&mut self, address: u64, value: u16) -> Result<()> {
-        let buf = value.to_le_bytes();
-        self.mem_write_with_hooks(address, &buf)
-    }
-
-    fn mem_write_u32(&mut self, address: u64, value: u32) -> Result<()> {
-        let buf = value.to_le_bytes();
-        self.mem_write_with_hooks(address, &buf)
-    }
-
-    fn mem_write_u64(&mut self, address: u64, value: u64) -> Result<()> {
-        let buf = value.to_le_bytes();
-        self.mem_write_with_hooks(address, &buf)
     }
 
     fn execute_instruction(&mut self, inst: &Instruction) -> Result<()> {
@@ -970,7 +912,9 @@ impl<H: HookManager> ExecutionContext<'_, H> {
 
     fn calculate_memory_address(&mut self, inst: &Instruction, operand_idx: u32) -> Result<u64> {
         if inst.op_kind(operand_idx) != OpKind::Memory {
-            return Err(EmulatorError::UnsupportedInstruction("Expected memory operand for LEA".to_string()));
+            return Err(EmulatorError::UnsupportedInstruction(
+                "Expected memory operand for LEA".to_string(),
+            ));
         }
 
         // For LEA, we need to use the same address calculation logic as read_operand

@@ -228,30 +228,6 @@ impl FunctionExecutor {
         Ok(())
     }
 
-    fn read_instruction_bytes_for_tracing(&mut self, address: u64) -> Result<Vec<u8>> {
-        // Ensure instruction memory is mapped for tracing
-        let page_base = address & !0xfff;
-        if let Ok(page_data) = self.memory_manager.read_memory(page_base, 4096) {
-            if self
-                .engine
-                .mem_map(page_base, 4096, Permission::ALL)
-                .is_ok()
-            {
-                let _ = self.engine.mem_write(page_base, &page_data);
-            }
-        }
-
-        // Read instruction bytes (up to 15 bytes max for x86-64)
-        let mut inst_bytes = vec![0u8; 15];
-        match self.engine.mem_read(address, &mut inst_bytes) {
-            Ok(()) => Ok(inst_bytes),
-            Err(_) => {
-                // If we can't read, return a minimal instruction (single byte)
-                Ok(vec![0x90]) // NOP instruction as placeholder
-            }
-        }
-    }
-
     fn read_instruction_at(&mut self, address: u64) -> Result<Vec<u8>> {
         // Ensure memory is mapped
         self.ensure_memory_mapped(address)?;
