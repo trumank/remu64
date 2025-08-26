@@ -1,11 +1,11 @@
-use amd64_emu::{Engine, EngineMode, Permission, Register};
+use amd64_emu::{memory::MemoryTrait as _, Engine, EngineMode, Permission, Register};
 
 #[test]
 fn test_adc_basic() {
     let mut engine = Engine::new(EngineMode::Mode64);
 
     // Map memory for code
-    engine.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
+    engine.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
 
     // Test ADC without carry flag
     let code = vec![
@@ -14,7 +14,7 @@ fn test_adc_basic() {
         0x48, 0x11, 0xD8, // adc rax, rbx
     ];
 
-    engine.mem_write(0x1000, &code).unwrap();
+    engine.memory.write(0x1000, &code).unwrap();
     engine
         .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
         .unwrap();
@@ -28,7 +28,7 @@ fn test_adc_with_carry() {
     let mut engine = Engine::new(EngineMode::Mode64);
 
     // Map memory for code
-    engine.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
+    engine.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
 
     // Test ADC with carry flag set
     let code = vec![
@@ -40,7 +40,7 @@ fn test_adc_with_carry() {
         0x48, 0x11, 0xD8, // adc rax, rbx
     ];
 
-    engine.mem_write(0x1000, &code).unwrap();
+    engine.memory.write(0x1000, &code).unwrap();
     engine
         .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
         .unwrap();
@@ -54,7 +54,7 @@ fn test_sbb_basic() {
     let mut engine = Engine::new(EngineMode::Mode64);
 
     // Map memory for code
-    engine.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
+    engine.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
 
     // Test SBB without borrow flag
     let code = vec![
@@ -63,7 +63,7 @@ fn test_sbb_basic() {
         0x48, 0x19, 0xD8, // sbb rax, rbx
     ];
 
-    engine.mem_write(0x1000, &code).unwrap();
+    engine.memory.write(0x1000, &code).unwrap();
     engine
         .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
         .unwrap();
@@ -77,7 +77,7 @@ fn test_sbb_with_borrow() {
     let mut engine = Engine::new(EngineMode::Mode64);
 
     // Map memory for code
-    engine.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
+    engine.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
 
     // Test SBB with borrow flag set
     let code = vec![
@@ -89,7 +89,7 @@ fn test_sbb_with_borrow() {
         0x48, 0x19, 0xD8, // sbb rax, rbx
     ];
 
-    engine.mem_write(0x1000, &code).unwrap();
+    engine.memory.write(0x1000, &code).unwrap();
     engine
         .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
         .unwrap();
@@ -103,7 +103,7 @@ fn test_adc_chain() {
     let mut engine = Engine::new(EngineMode::Mode64);
 
     // Map memory for code
-    engine.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
+    engine.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
 
     // Test multi-precision addition using ADC
     // Add two 128-bit numbers: (0xFFFFFFFFFFFFFFFF, 0x1) + (0x1, 0x0)
@@ -119,7 +119,7 @@ fn test_adc_chain() {
         0x48, 0x11, 0xD1, // adc rcx, rdx (add with carry)
     ];
 
-    engine.mem_write(0x1000, &code).unwrap();
+    engine.memory.write(0x1000, &code).unwrap();
     engine
         .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
         .unwrap();
@@ -135,7 +135,7 @@ fn test_sbb_chain() {
     let mut engine = Engine::new(EngineMode::Mode64);
 
     // Map memory for code
-    engine.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
+    engine.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
 
     // Test multi-precision subtraction using SBB
     // Subtract (0x1, 0x0) from (0x0, 0x2)
@@ -150,7 +150,7 @@ fn test_sbb_chain() {
         0x48, 0x19, 0xD1, // sbb rcx, rdx (subtract with borrow)
     ];
 
-    engine.mem_write(0x1000, &code).unwrap();
+    engine.memory.write(0x1000, &code).unwrap();
     engine
         .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
         .unwrap();
@@ -166,7 +166,7 @@ fn test_adc_immediate() {
     let mut engine = Engine::new(EngineMode::Mode64);
 
     // Map memory for code
-    engine.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
+    engine.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
 
     // Test ADC with immediate values
     let code = vec![
@@ -176,7 +176,7 @@ fn test_adc_immediate() {
         0x14, 0x03, // adc al, 3
     ];
 
-    engine.mem_write(0x1000, &code).unwrap();
+    engine.memory.write(0x1000, &code).unwrap();
     engine
         .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
         .unwrap();
@@ -190,7 +190,7 @@ fn test_sbb_immediate() {
     let mut engine = Engine::new(EngineMode::Mode64);
 
     // Map memory for code
-    engine.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
+    engine.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
 
     // Test SBB with immediate values
     let code = vec![
@@ -200,7 +200,7 @@ fn test_sbb_immediate() {
         0x1C, 0x03, // sbb al, 3
     ];
 
-    engine.mem_write(0x1000, &code).unwrap();
+    engine.memory.write(0x1000, &code).unwrap();
     engine
         .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
         .unwrap();
@@ -212,7 +212,7 @@ fn test_sbb_immediate() {
 #[test]
 fn test_add_carry_flag() {
     let mut engine = Engine::new(EngineMode::Mode64);
-    engine.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
+    engine.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
 
     // Test if ADD sets carry flag correctly
     let code = vec![
@@ -222,7 +222,7 @@ fn test_add_carry_flag() {
         0x48, 0x01, 0xD8, // add rax, rbx (should set carry: 0xFFFFFFFFFFFFFFFF + 1 overflows)
     ];
 
-    engine.mem_write(0x1000, &code).unwrap();
+    engine.memory.write(0x1000, &code).unwrap();
     engine
         .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
         .unwrap();

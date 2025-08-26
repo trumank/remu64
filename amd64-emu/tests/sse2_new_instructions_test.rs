@@ -1,4 +1,4 @@
-use amd64_emu::{Engine, EngineMode, Permission, Register};
+use amd64_emu::{memory::MemoryTrait as _, Engine, EngineMode, Permission, Register};
 
 #[test]
 fn test_pshuflw() {
@@ -6,19 +6,20 @@ fn test_pshuflw() {
 
     // Allocate memory for code
     let code_addr = 0x1000;
-    emu.mem_map(
-        code_addr,
-        0x1000,
-        Permission::READ | Permission::WRITE | Permission::EXEC,
-    )
-    .unwrap();
+    emu.memory
+        .map(
+            code_addr,
+            0x1000,
+            Permission::READ | Permission::WRITE | Permission::EXEC,
+        )
+        .unwrap();
 
     // PSHUFLW XMM1, XMM0, 0x1B (00 01 10 11) - reverse order of low words
     let code = vec![
         0xF2, 0x0F, 0x70, 0xC8, 0x1B, // pshuflw xmm1, xmm0, 0x1B
     ];
 
-    emu.mem_write(code_addr, &code).unwrap();
+    emu.memory.write(code_addr, &code).unwrap();
 
     // Set up test data in XMM0
     // Low 64 bits: 0x0004_0003_0002_0001 (4 words)
@@ -45,19 +46,20 @@ fn test_pshufhw() {
 
     // Allocate memory for code
     let code_addr = 0x1000;
-    emu.mem_map(
-        code_addr,
-        0x1000,
-        Permission::READ | Permission::WRITE | Permission::EXEC,
-    )
-    .unwrap();
+    emu.memory
+        .map(
+            code_addr,
+            0x1000,
+            Permission::READ | Permission::WRITE | Permission::EXEC,
+        )
+        .unwrap();
 
     // PSHUFHW XMM1, XMM0, 0x1B (00 01 10 11) - reverse order of high words
     let code = vec![
         0xF3, 0x0F, 0x70, 0xC8, 0x1B, // pshufhw xmm1, xmm0, 0x1B
     ];
 
-    emu.mem_write(code_addr, &code).unwrap();
+    emu.memory.write(code_addr, &code).unwrap();
 
     // Set up test data in XMM0
     emu.xmm_write(Register::XMM0, 0x0008_0007_0006_0005_0004_0003_0002_0001);
@@ -82,19 +84,20 @@ fn test_pextrw() {
 
     // Allocate memory for code
     let code_addr = 0x1000;
-    emu.mem_map(
-        code_addr,
-        0x1000,
-        Permission::READ | Permission::WRITE | Permission::EXEC,
-    )
-    .unwrap();
+    emu.memory
+        .map(
+            code_addr,
+            0x1000,
+            Permission::READ | Permission::WRITE | Permission::EXEC,
+        )
+        .unwrap();
 
     // PEXTRW EAX, XMM0, 3 - extract word at index 3
     let code = vec![
         0x66, 0x0F, 0xC5, 0xC0, 0x03, // pextrw eax, xmm0, 3
     ];
 
-    emu.mem_write(code_addr, &code).unwrap();
+    emu.memory.write(code_addr, &code).unwrap();
 
     // Set up test data in XMM0: words are [0x1111, 0x2222, 0x3333, 0x4444, 0x5555, 0x6666, 0x7777, 0x8888]
     emu.xmm_write(Register::XMM0, 0x8888_7777_6666_5555_4444_3333_2222_1111);
@@ -120,19 +123,20 @@ fn test_pinsrw() {
 
     // Allocate memory for code
     let code_addr = 0x1000;
-    emu.mem_map(
-        code_addr,
-        0x1000,
-        Permission::READ | Permission::WRITE | Permission::EXEC,
-    )
-    .unwrap();
+    emu.memory
+        .map(
+            code_addr,
+            0x1000,
+            Permission::READ | Permission::WRITE | Permission::EXEC,
+        )
+        .unwrap();
 
     // PINSRW XMM0, EAX, 2 - insert word at index 2
     let code = vec![
         0x66, 0x0F, 0xC4, 0xC0, 0x02, // pinsrw xmm0, eax, 2
     ];
 
-    emu.mem_write(code_addr, &code).unwrap();
+    emu.memory.write(code_addr, &code).unwrap();
 
     // Set up test data
     emu.xmm_write(Register::XMM0, 0x8888_7777_6666_5555_4444_3333_2222_1111);
@@ -157,19 +161,20 @@ fn test_pmovmskb() {
 
     // Allocate memory for code
     let code_addr = 0x1000;
-    emu.mem_map(
-        code_addr,
-        0x1000,
-        Permission::READ | Permission::WRITE | Permission::EXEC,
-    )
-    .unwrap();
+    emu.memory
+        .map(
+            code_addr,
+            0x1000,
+            Permission::READ | Permission::WRITE | Permission::EXEC,
+        )
+        .unwrap();
 
     // PMOVMSKB EAX, XMM0
     let code = vec![
         0x66, 0x0F, 0xD7, 0xC0, // pmovmskb eax, xmm0
     ];
 
-    emu.mem_write(code_addr, &code).unwrap();
+    emu.memory.write(code_addr, &code).unwrap();
 
     // Set up test data in XMM0
     // Bytes with MSB set: 0x80, 0x00, 0xFF, 0x7F, 0x81, 0x01, 0x80, 0x00, ...
@@ -196,19 +201,20 @@ fn test_pavgb() {
 
     // Allocate memory for code
     let code_addr = 0x1000;
-    emu.mem_map(
-        code_addr,
-        0x1000,
-        Permission::READ | Permission::WRITE | Permission::EXEC,
-    )
-    .unwrap();
+    emu.memory
+        .map(
+            code_addr,
+            0x1000,
+            Permission::READ | Permission::WRITE | Permission::EXEC,
+        )
+        .unwrap();
 
     // PAVGB XMM0, XMM1
     let code = vec![
         0x66, 0x0F, 0xE0, 0xC1, // pavgb xmm0, xmm1
     ];
 
-    emu.mem_write(code_addr, &code).unwrap();
+    emu.memory.write(code_addr, &code).unwrap();
 
     // Set up test data
     // XMM0: bytes = [0x10, 0x20, 0x30, 0x40, ...]
@@ -236,19 +242,20 @@ fn test_pmaxub() {
 
     // Allocate memory for code
     let code_addr = 0x1000;
-    emu.mem_map(
-        code_addr,
-        0x1000,
-        Permission::READ | Permission::WRITE | Permission::EXEC,
-    )
-    .unwrap();
+    emu.memory
+        .map(
+            code_addr,
+            0x1000,
+            Permission::READ | Permission::WRITE | Permission::EXEC,
+        )
+        .unwrap();
 
     // PMAXUB XMM0, XMM1
     let code = vec![
         0x66, 0x0F, 0xDE, 0xC1, // pmaxub xmm0, xmm1
     ];
 
-    emu.mem_write(code_addr, &code).unwrap();
+    emu.memory.write(code_addr, &code).unwrap();
 
     // Set up test data
     emu.xmm_write(Register::XMM0, 0x10203040_50607080_90A0B0C0_D0E0F000);
@@ -273,19 +280,20 @@ fn test_psadbw() {
 
     // Allocate memory for code
     let code_addr = 0x1000;
-    emu.mem_map(
-        code_addr,
-        0x1000,
-        Permission::READ | Permission::WRITE | Permission::EXEC,
-    )
-    .unwrap();
+    emu.memory
+        .map(
+            code_addr,
+            0x1000,
+            Permission::READ | Permission::WRITE | Permission::EXEC,
+        )
+        .unwrap();
 
     // PSADBW XMM0, XMM1
     let code = vec![
         0x66, 0x0F, 0xF6, 0xC1, // psadbw xmm0, xmm1
     ];
 
-    emu.mem_write(code_addr, &code).unwrap();
+    emu.memory.write(code_addr, &code).unwrap();
 
     // Set up test data
     // XMM0: bytes = [0x10, 0x20, 0x30, 0x40, 0x50, 0x60, 0x70, 0x80, ...]

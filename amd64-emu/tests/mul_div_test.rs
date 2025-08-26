@@ -1,11 +1,11 @@
-use amd64_emu::{Engine, EngineMode, Permission, Register};
+use amd64_emu::{memory::MemoryTrait as _, Engine, EngineMode, Permission, Register};
 
 #[test]
 fn test_mul_instruction() {
     let mut engine = Engine::new(EngineMode::Mode64);
 
     // Map memory for code
-    engine.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
+    engine.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
 
     // Test basic multiplication
     engine.reg_write(Register::RAX, 0x10);
@@ -14,7 +14,7 @@ fn test_mul_instruction() {
 
     // MUL RBX (48 F7 E3)
     let code = vec![0x48, 0xF7, 0xE3];
-    engine.mem_write(0x1000, &code).unwrap();
+    engine.memory.write(0x1000, &code).unwrap();
     engine
         .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
         .unwrap();
@@ -41,7 +41,7 @@ fn test_div_instruction() {
     let mut engine = Engine::new(EngineMode::Mode64);
 
     // Map memory for code
-    engine.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
+    engine.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
 
     // Test basic division
     engine.reg_write(Register::RAX, 0x200);
@@ -50,7 +50,7 @@ fn test_div_instruction() {
 
     // DIV RBX (48 F7 F3)
     let code = vec![0x48, 0xF7, 0xF3];
-    engine.mem_write(0x1000, &code).unwrap();
+    engine.memory.write(0x1000, &code).unwrap();
     engine
         .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
         .unwrap();
@@ -78,7 +78,7 @@ fn test_imul_instruction() {
     let mut engine = Engine::new(EngineMode::Mode64);
 
     // Map memory for code
-    engine.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
+    engine.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
 
     // Test signed multiplication with negative numbers
     engine.reg_write(Register::RAX, (-10i64) as u64);
@@ -87,7 +87,7 @@ fn test_imul_instruction() {
 
     // IMUL RBX (48 F7 EB)
     let code = vec![0x48, 0xF7, 0xEB];
-    engine.mem_write(0x1000, &code).unwrap();
+    engine.memory.write(0x1000, &code).unwrap();
     engine
         .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
         .unwrap();
@@ -103,7 +103,7 @@ fn test_idiv_instruction() {
     let mut engine = Engine::new(EngineMode::Mode64);
 
     // Map memory for code
-    engine.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
+    engine.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
 
     // Test signed division with negative dividend
     engine.reg_write(Register::RAX, (-50i64) as u64);
@@ -112,7 +112,7 @@ fn test_idiv_instruction() {
 
     // IDIV RBX (48 F7 FB)
     let code = vec![0x48, 0xF7, 0xFB];
-    engine.mem_write(0x1000, &code).unwrap();
+    engine.memory.write(0x1000, &code).unwrap();
     engine
         .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
         .unwrap();
@@ -129,7 +129,7 @@ fn test_div_by_zero() {
     let mut engine = Engine::new(EngineMode::Mode64);
 
     // Map memory for code
-    engine.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
+    engine.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
 
     engine.reg_write(Register::RAX, 0x100);
     engine.reg_write(Register::RDX, 0);
@@ -137,7 +137,7 @@ fn test_div_by_zero() {
 
     // DIV RBX - should cause division by zero
     let code = vec![0x48, 0xF7, 0xF3];
-    engine.mem_write(0x1000, &code).unwrap();
+    engine.memory.write(0x1000, &code).unwrap();
     engine
         .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
         .unwrap();

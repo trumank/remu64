@@ -1,11 +1,11 @@
-use amd64_emu::{Engine, EngineMode, Permission, Register};
+use amd64_emu::{memory::MemoryTrait as _, Engine, EngineMode, Permission, Register};
 
 #[test]
 fn test_pmullw() {
     let mut engine = Engine::new(EngineMode::Mode64);
 
     // Map memory
-    engine.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
+    engine.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
 
     // Test PMULLW - Multiply packed signed words and store low result
     let code = vec![
@@ -28,7 +28,7 @@ fn test_pmullw() {
         0x00,
     ];
 
-    engine.mem_write(0x1000, &code).unwrap();
+    engine.memory.write(0x1000, &code).unwrap();
     engine.reg_write(Register::RIP, 0x1000);
 
     // Execute instructions
@@ -39,7 +39,7 @@ fn test_pmullw() {
 
     // Check result
     let mut result = vec![0u8; 16];
-    engine.mem_read(0x103C, &mut result).unwrap();
+    engine.memory.read(0x103C, &mut result).unwrap();
 
     // Expected: low 16 bits of each multiplication
     assert_eq!(u16::from_le_bytes([result[0], result[1]]), 6); // 2 * 3 = 6
@@ -57,7 +57,7 @@ fn test_pmulhw() {
     let mut engine = Engine::new(EngineMode::Mode64);
 
     // Map memory
-    engine.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
+    engine.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
 
     // Test PMULHW - Multiply packed signed words and store high result
     let code = vec![
@@ -80,7 +80,7 @@ fn test_pmulhw() {
         0x00,
     ];
 
-    engine.mem_write(0x1000, &code).unwrap();
+    engine.memory.write(0x1000, &code).unwrap();
     engine.reg_write(Register::RIP, 0x1000);
 
     // Execute instructions
@@ -91,7 +91,7 @@ fn test_pmulhw() {
 
     // Check result
     let mut result = vec![0u8; 16];
-    engine.mem_read(0x103C, &mut result).unwrap();
+    engine.memory.read(0x103C, &mut result).unwrap();
 
     // Expected: high 16 bits of each multiplication
     assert_eq!(u16::from_le_bytes([result[0], result[1]]), 0x0100); // (0x1000 * 0x1000) >> 16
@@ -109,7 +109,7 @@ fn test_pmulhuw() {
     let mut engine = Engine::new(EngineMode::Mode64);
 
     // Map memory
-    engine.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
+    engine.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
 
     // Test PMULHUW - Multiply packed unsigned words and store high result
     let code = vec![
@@ -132,7 +132,7 @@ fn test_pmulhuw() {
         0x00,
     ];
 
-    engine.mem_write(0x1000, &code).unwrap();
+    engine.memory.write(0x1000, &code).unwrap();
     engine.reg_write(Register::RIP, 0x1000);
 
     // Execute instructions
@@ -143,7 +143,7 @@ fn test_pmulhuw() {
 
     // Check result
     let mut result = vec![0u8; 16];
-    engine.mem_read(0x103C, &mut result).unwrap();
+    engine.memory.read(0x103C, &mut result).unwrap();
 
     // Expected: high 16 bits of unsigned multiplication
     assert_eq!(u16::from_le_bytes([result[0], result[1]]), 0x0100); // (0x1000 * 0x1000) >> 16
@@ -161,7 +161,7 @@ fn test_pmuludq() {
     let mut engine = Engine::new(EngineMode::Mode64);
 
     // Map memory
-    engine.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
+    engine.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
 
     // Test PMULUDQ - Multiply packed unsigned doubleword integers
     let code = vec![
@@ -188,7 +188,7 @@ fn test_pmuludq() {
         0x00,
     ];
 
-    engine.mem_write(0x1000, &code).unwrap();
+    engine.memory.write(0x1000, &code).unwrap();
     engine.reg_write(Register::RIP, 0x1000);
 
     // Execute instructions
@@ -199,7 +199,7 @@ fn test_pmuludq() {
 
     // Check result
     let mut result = vec![0u8; 16];
-    engine.mem_read(0x103C, &mut result).unwrap();
+    engine.memory.read(0x103C, &mut result).unwrap();
 
     // Expected: 64-bit products of low dwords
     assert_eq!(
@@ -222,7 +222,7 @@ fn test_pmullw_memory_operand() {
     let mut engine = Engine::new(EngineMode::Mode64);
 
     // Map memory
-    engine.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
+    engine.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
 
     // Test PMULLW with memory operand
     let code = vec![
@@ -243,7 +243,7 @@ fn test_pmullw_memory_operand() {
         0x00,
     ];
 
-    engine.mem_write(0x1000, &code).unwrap();
+    engine.memory.write(0x1000, &code).unwrap();
     engine.reg_write(Register::RIP, 0x1000);
 
     // Execute instructions (3 instructions * 8 bytes = 0x18)
@@ -257,7 +257,7 @@ fn test_pmullw_memory_operand() {
     // When executed at 0x1010, the next RIP is 0x1018
     // So it stores to 0x1018 + 0x20 = 0x1038
     let mut result = vec![0u8; 16];
-    engine.mem_read(0x1038, &mut result).unwrap();
+    engine.memory.read(0x1038, &mut result).unwrap();
 
     // Expected results
     assert_eq!(u16::from_le_bytes([result[0], result[1]]), 20); // 10 * 2 = 20

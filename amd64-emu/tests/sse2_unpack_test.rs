@@ -1,4 +1,4 @@
-use amd64_emu::{Engine, EngineMode, Permission, Register};
+use amd64_emu::{memory::MemoryTrait as _, Engine, EngineMode, Permission, Register};
 
 #[test]
 fn test_punpcklbw() {
@@ -6,13 +6,14 @@ fn test_punpcklbw() {
 
     // Map memory for code
     engine
-        .mem_map(0x1000, 0x1000, Permission::READ | Permission::EXEC)
+        .memory
+        .map(0x1000, 0x1000, Permission::READ | Permission::EXEC)
         .unwrap();
 
     // PUNPCKLBW XMM0, XMM1
     // Interleaves low 8 bytes from XMM0 and XMM1
     let code = vec![0x66, 0x0F, 0x60, 0xC1];
-    engine.mem_write(0x1000, &code).unwrap();
+    engine.memory.write_code(0x1000, &code).unwrap();
 
     // Set up test values
     // XMM0: 0x0F0E0D0C0B0A09080706050403020100
@@ -39,13 +40,14 @@ fn test_punpckhbw() {
 
     // Map memory for code
     engine
-        .mem_map(0x1000, 0x1000, Permission::READ | Permission::EXEC)
+        .memory
+        .map(0x1000, 0x1000, Permission::READ | Permission::EXEC)
         .unwrap();
 
     // PUNPCKHBW XMM0, XMM1
     // Interleaves high 8 bytes from XMM0 and XMM1
     let code = vec![0x66, 0x0F, 0x68, 0xC1];
-    engine.mem_write(0x1000, &code).unwrap();
+    engine.memory.write_code(0x1000, &code).unwrap();
 
     // Set up test values
     engine.xmm_write(Register::XMM0, 0x0F0E0D0C0B0A09080706050403020100);
@@ -70,13 +72,14 @@ fn test_punpckldq() {
 
     // Map memory for code
     engine
-        .mem_map(0x1000, 0x1000, Permission::READ | Permission::EXEC)
+        .memory
+        .map(0x1000, 0x1000, Permission::READ | Permission::EXEC)
         .unwrap();
 
     // PUNPCKLDQ XMM0, XMM1
     // Interleaves low 2 doublewords from XMM0 and XMM1
     let code = vec![0x66, 0x0F, 0x62, 0xC1];
-    engine.mem_write(0x1000, &code).unwrap();
+    engine.memory.write_code(0x1000, &code).unwrap();
 
     // Set up test values
     engine.xmm_write(Register::XMM0, 0xDDDDDDDDCCCCCCCCBBBBBBBBAAAAAAAA);
@@ -100,13 +103,14 @@ fn test_punpckhdq() {
 
     // Map memory for code
     engine
-        .mem_map(0x1000, 0x1000, Permission::READ | Permission::EXEC)
+        .memory
+        .map(0x1000, 0x1000, Permission::READ | Permission::EXEC)
         .unwrap();
 
     // PUNPCKHDQ XMM0, XMM1
     // Interleaves high 2 doublewords from XMM0 and XMM1
     let code = vec![0x66, 0x0F, 0x6A, 0xC1];
-    engine.mem_write(0x1000, &code).unwrap();
+    engine.memory.write_code(0x1000, &code).unwrap();
 
     // Set up test values
     engine.xmm_write(Register::XMM0, 0xDDDDDDDDCCCCCCCCBBBBBBBBAAAAAAAA);
@@ -130,13 +134,14 @@ fn test_punpcklqdq() {
 
     // Map memory for code
     engine
-        .mem_map(0x1000, 0x1000, Permission::READ | Permission::EXEC)
+        .memory
+        .map(0x1000, 0x1000, Permission::READ | Permission::EXEC)
         .unwrap();
 
     // PUNPCKLQDQ XMM0, XMM1
     // Places low quadword from XMM0 and low quadword from XMM1
     let code = vec![0x66, 0x0F, 0x6C, 0xC1];
-    engine.mem_write(0x1000, &code).unwrap();
+    engine.memory.write_code(0x1000, &code).unwrap();
 
     // Set up test values
     engine.xmm_write(Register::XMM0, 0xFEDCBA9876543210_0123456789ABCDEF);
@@ -160,13 +165,14 @@ fn test_punpckhqdq() {
 
     // Map memory for code
     engine
-        .mem_map(0x1000, 0x1000, Permission::READ | Permission::EXEC)
+        .memory
+        .map(0x1000, 0x1000, Permission::READ | Permission::EXEC)
         .unwrap();
 
     // PUNPCKHQDQ XMM0, XMM1
     // Places high quadword from XMM0 and high quadword from XMM1
     let code = vec![0x66, 0x0F, 0x6D, 0xC1];
-    engine.mem_write(0x1000, &code).unwrap();
+    engine.memory.write_code(0x1000, &code).unwrap();
 
     // Set up test values
     engine.xmm_write(Register::XMM0, 0xFEDCBA9876543210_0123456789ABCDEF);
@@ -190,7 +196,8 @@ fn test_punpcklbw_memory() {
 
     // Map memory for code and data
     engine
-        .mem_map(
+        .memory
+        .map(
             0x1000,
             0x2000,
             Permission::READ | Permission::WRITE | Permission::EXEC,
@@ -201,11 +208,11 @@ fn test_punpcklbw_memory() {
     let code = vec![
         0x66, 0x0F, 0x60, 0x04, 0x25, 0x00, 0x20, 0x00, 0x00, // punpcklbw xmm0, [0x2000]
     ];
-    engine.mem_write(0x1000, &code).unwrap();
+    engine.memory.write(0x1000, &code).unwrap();
 
     // Write test data to memory
     let data: u128 = 0x1F1E1D1C1B1A19181716151413121110;
-    engine.mem_write(0x2000, &data.to_le_bytes()).unwrap();
+    engine.memory.write(0x2000, &data.to_le_bytes()).unwrap();
 
     // Set up XMM0
     engine.xmm_write(Register::XMM0, 0x0F0E0D0C0B0A09080706050403020100);
@@ -227,7 +234,8 @@ fn test_punpckldq_memory() {
 
     // Map memory for code and data
     engine
-        .mem_map(
+        .memory
+        .map(
             0x1000,
             0x2000,
             Permission::READ | Permission::WRITE | Permission::EXEC,
@@ -238,11 +246,11 @@ fn test_punpckldq_memory() {
     let code = vec![
         0x66, 0x0F, 0x62, 0x04, 0x25, 0x00, 0x20, 0x00, 0x00, // punpckldq xmm0, [0x2000]
     ];
-    engine.mem_write(0x1000, &code).unwrap();
+    engine.memory.write(0x1000, &code).unwrap();
 
     // Write test data to memory
     let data: u128 = 0x44444444333333332222222211111111;
-    engine.mem_write(0x2000, &data.to_le_bytes()).unwrap();
+    engine.memory.write(0x2000, &data.to_le_bytes()).unwrap();
 
     // Set up XMM0
     engine.xmm_write(Register::XMM0, 0xDDDDDDDDCCCCCCCCBBBBBBBBAAAAAAAA);

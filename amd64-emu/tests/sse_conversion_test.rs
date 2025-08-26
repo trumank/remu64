@@ -1,13 +1,14 @@
-use amd64_emu::{Engine, EngineMode, Permission, Register};
+use amd64_emu::{memory::MemoryTrait as _, Engine, EngineMode, Permission, Register};
 
 #[test]
 fn test_cvtps2pd() {
     let mut engine = Engine::new(EngineMode::Mode64);
 
     // Map memory for code and stack
-    engine.mem_map(0x1000, 0x2000, Permission::ALL).unwrap();
+    engine.memory.map(0x1000, 0x2000, Permission::ALL).unwrap();
     engine
-        .mem_map(0x10000, 0x2000, Permission::READ | Permission::WRITE)
+        .memory
+        .map(0x10000, 0x2000, Permission::READ | Permission::WRITE)
         .unwrap();
 
     // Test CVTPS2PD - Convert packed single to packed double
@@ -21,7 +22,7 @@ fn test_cvtps2pd() {
 
     // CVTPS2PD xmm1, xmm0
     let code = vec![0x0F, 0x5A, 0xC8]; // cvtps2pd xmm1, xmm0
-    engine.mem_write(0x1000, &code).unwrap();
+    engine.memory.write(0x1000, &code).unwrap();
 
     engine
         .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
@@ -41,7 +42,7 @@ fn test_cvtpd2ps() {
     let mut engine = Engine::new(EngineMode::Mode64);
 
     // Map memory for code
-    engine.mem_map(0x1000, 0x2000, Permission::ALL).unwrap();
+    engine.memory.map(0x1000, 0x2000, Permission::ALL).unwrap();
 
     // Test CVTPD2PS - Convert packed double to packed single
     // Input: Two double-precision floats: 3.75 and 4.5
@@ -54,7 +55,7 @@ fn test_cvtpd2ps() {
 
     // CVTPD2PS xmm1, xmm0
     let code = vec![0x66, 0x0F, 0x5A, 0xC8]; // cvtpd2ps xmm1, xmm0
-    engine.mem_write(0x1000, &code).unwrap();
+    engine.memory.write(0x1000, &code).unwrap();
 
     engine
         .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
@@ -76,7 +77,7 @@ fn test_cvtss2sd() {
     let mut engine = Engine::new(EngineMode::Mode64);
 
     // Map memory for code
-    engine.mem_map(0x1000, 0x2000, Permission::ALL).unwrap();
+    engine.memory.map(0x1000, 0x2000, Permission::ALL).unwrap();
 
     // Test CVTSS2SD - Convert scalar single to scalar double
     let float_val: f32 = 6.25;
@@ -87,7 +88,7 @@ fn test_cvtss2sd() {
 
     // CVTSS2SD xmm1, xmm0
     let code = vec![0xF3, 0x0F, 0x5A, 0xC8]; // cvtss2sd xmm1, xmm0
-    engine.mem_write(0x1000, &code).unwrap();
+    engine.memory.write(0x1000, &code).unwrap();
 
     engine
         .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
@@ -105,7 +106,7 @@ fn test_cvtsd2ss() {
     let mut engine = Engine::new(EngineMode::Mode64);
 
     // Map memory for code
-    engine.mem_map(0x1000, 0x2000, Permission::ALL).unwrap();
+    engine.memory.map(0x1000, 0x2000, Permission::ALL).unwrap();
 
     // Test CVTSD2SS - Convert scalar double to scalar single
     let double_val: f64 = 7.125;
@@ -116,7 +117,7 @@ fn test_cvtsd2ss() {
 
     // CVTSD2SS xmm1, xmm0
     let code = vec![0xF2, 0x0F, 0x5A, 0xC8]; // cvtsd2ss xmm1, xmm0
-    engine.mem_write(0x1000, &code).unwrap();
+    engine.memory.write(0x1000, &code).unwrap();
 
     engine
         .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
@@ -134,7 +135,7 @@ fn test_cvtps2dq() {
     let mut engine = Engine::new(EngineMode::Mode64);
 
     // Map memory for code
-    engine.mem_map(0x1000, 0x2000, Permission::ALL).unwrap();
+    engine.memory.map(0x1000, 0x2000, Permission::ALL).unwrap();
 
     // Test CVTPS2DQ - Convert packed single to packed signed doubleword integers (with rounding)
     let floats = [1.7f32, -2.3f32, 3.5f32, -4.8f32];
@@ -148,7 +149,7 @@ fn test_cvtps2dq() {
 
     // CVTPS2DQ xmm1, xmm0
     let code = vec![0x66, 0x0F, 0x5B, 0xC8]; // cvtps2dq xmm1, xmm0
-    engine.mem_write(0x1000, &code).unwrap();
+    engine.memory.write(0x1000, &code).unwrap();
 
     engine
         .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
@@ -167,7 +168,7 @@ fn test_cvttps2dq() {
     let mut engine = Engine::new(EngineMode::Mode64);
 
     // Map memory for code
-    engine.mem_map(0x1000, 0x2000, Permission::ALL).unwrap();
+    engine.memory.map(0x1000, 0x2000, Permission::ALL).unwrap();
 
     // Test CVTTPS2DQ - Convert packed single to packed signed doubleword integers (with truncation)
     let floats = [1.7f32, -2.3f32, 3.5f32, -4.8f32];
@@ -181,7 +182,7 @@ fn test_cvttps2dq() {
 
     // CVTTPS2DQ xmm1, xmm0
     let code = vec![0xF3, 0x0F, 0x5B, 0xC8]; // cvttps2dq xmm1, xmm0
-    engine.mem_write(0x1000, &code).unwrap();
+    engine.memory.write(0x1000, &code).unwrap();
 
     engine
         .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
@@ -200,7 +201,7 @@ fn test_cvtdq2ps() {
     let mut engine = Engine::new(EngineMode::Mode64);
 
     // Map memory for code
-    engine.mem_map(0x1000, 0x2000, Permission::ALL).unwrap();
+    engine.memory.map(0x1000, 0x2000, Permission::ALL).unwrap();
 
     // Test CVTDQ2PS - Convert packed signed doubleword integers to packed single
     let ints = [5i32, -10i32, 15i32, -20i32];
@@ -214,7 +215,7 @@ fn test_cvtdq2ps() {
 
     // CVTDQ2PS xmm1, xmm0
     let code = vec![0x0F, 0x5B, 0xC8]; // cvtdq2ps xmm1, xmm0
-    engine.mem_write(0x1000, &code).unwrap();
+    engine.memory.write(0x1000, &code).unwrap();
 
     engine
         .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
@@ -233,14 +234,14 @@ fn test_cvtsi2ss() {
     let mut engine = Engine::new(EngineMode::Mode64);
 
     // Map memory for code
-    engine.mem_map(0x1000, 0x2000, Permission::ALL).unwrap();
+    engine.memory.map(0x1000, 0x2000, Permission::ALL).unwrap();
 
     // Test CVTSI2SS - Convert signed integer to scalar single
     engine.reg_write(Register::RAX, 42);
 
     // CVTSI2SS xmm0, rax
     let code = vec![0xF3, 0x48, 0x0F, 0x2A, 0xC0]; // cvtsi2ss xmm0, rax
-    engine.mem_write(0x1000, &code).unwrap();
+    engine.memory.write(0x1000, &code).unwrap();
 
     engine
         .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
@@ -257,7 +258,7 @@ fn test_cvtss2si() {
     let mut engine = Engine::new(EngineMode::Mode64);
 
     // Map memory for code
-    engine.mem_map(0x1000, 0x2000, Permission::ALL).unwrap();
+    engine.memory.map(0x1000, 0x2000, Permission::ALL).unwrap();
 
     // Test CVTSS2SI - Convert scalar single to signed integer (with rounding)
     let float_val: f32 = 42.7;
@@ -265,7 +266,7 @@ fn test_cvtss2si() {
 
     // CVTSS2SI rax, xmm0
     let code = vec![0xF3, 0x48, 0x0F, 0x2D, 0xC0]; // cvtss2si rax, xmm0
-    engine.mem_write(0x1000, &code).unwrap();
+    engine.memory.write(0x1000, &code).unwrap();
 
     engine
         .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
@@ -280,7 +281,7 @@ fn test_cvttss2si() {
     let mut engine = Engine::new(EngineMode::Mode64);
 
     // Map memory for code
-    engine.mem_map(0x1000, 0x2000, Permission::ALL).unwrap();
+    engine.memory.map(0x1000, 0x2000, Permission::ALL).unwrap();
 
     // Test CVTTSS2SI - Convert scalar single to signed integer (with truncation)
     let float_val: f32 = 42.7;
@@ -288,7 +289,7 @@ fn test_cvttss2si() {
 
     // CVTTSS2SI rax, xmm0
     let code = vec![0xF3, 0x48, 0x0F, 0x2C, 0xC0]; // cvttss2si rax, xmm0
-    engine.mem_write(0x1000, &code).unwrap();
+    engine.memory.write(0x1000, &code).unwrap();
 
     engine
         .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)

@@ -1,11 +1,11 @@
-use amd64_emu::{Engine, EngineMode, Permission, Register};
+use amd64_emu::{memory::MemoryTrait as _, Engine, EngineMode, Permission, Register};
 
 #[test]
 fn test_psllw() {
     let mut engine = Engine::new(EngineMode::Mode64);
 
     // Map memory
-    engine.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
+    engine.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
 
     // Test PSLLW - Packed shift left logical words
     let code = vec![
@@ -23,7 +23,7 @@ fn test_psllw() {
         0x00,
     ];
 
-    engine.mem_write(0x1000, &code).unwrap();
+    engine.memory.write(0x1000, &code).unwrap();
     engine.reg_write(Register::RIP, 0x1000);
 
     // Execute instructions
@@ -31,7 +31,7 @@ fn test_psllw() {
 
     // Check result
     let mut result = vec![0u8; 16];
-    engine.mem_read(0x1028, &mut result).unwrap();
+    engine.memory.read(0x1028, &mut result).unwrap();
 
     // Expected: each word shifted left by 4
     assert_eq!(u16::from_le_bytes([result[0], result[1]]), 0x1110); // 0x1111 << 4
@@ -49,7 +49,7 @@ fn test_pslld() {
     let mut engine = Engine::new(EngineMode::Mode64);
 
     // Map memory
-    engine.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
+    engine.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
 
     // Test PSLLD - Packed shift left logical doublewords
     let code = vec![
@@ -67,7 +67,7 @@ fn test_pslld() {
         0x00,
     ];
 
-    engine.mem_write(0x1000, &code).unwrap();
+    engine.memory.write(0x1000, &code).unwrap();
     engine.reg_write(Register::RIP, 0x1000);
 
     // Execute instructions
@@ -75,7 +75,7 @@ fn test_pslld() {
 
     // Check result
     let mut result = vec![0u8; 16];
-    engine.mem_read(0x1028, &mut result).unwrap();
+    engine.memory.read(0x1028, &mut result).unwrap();
 
     // Expected: each dword shifted left by 8
     assert_eq!(
@@ -101,7 +101,7 @@ fn test_psllq() {
     let mut engine = Engine::new(EngineMode::Mode64);
 
     // Map memory
-    engine.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
+    engine.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
 
     // Test PSLLQ - Packed shift left logical quadwords
     let code = vec![
@@ -119,7 +119,7 @@ fn test_psllq() {
         0x00,
     ];
 
-    engine.mem_write(0x1000, &code).unwrap();
+    engine.memory.write(0x1000, &code).unwrap();
     engine.reg_write(Register::RIP, 0x1000);
 
     // Execute instructions
@@ -127,7 +127,7 @@ fn test_psllq() {
 
     // Check result
     let mut result = vec![0u8; 16];
-    engine.mem_read(0x1028, &mut result).unwrap();
+    engine.memory.read(0x1028, &mut result).unwrap();
 
     // Expected: each qword shifted left by 16
     assert_eq!(
@@ -150,7 +150,7 @@ fn test_psrlw() {
     let mut engine = Engine::new(EngineMode::Mode64);
 
     // Map memory
-    engine.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
+    engine.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
 
     // Test PSRLW - Packed shift right logical words
     let code = vec![
@@ -168,7 +168,7 @@ fn test_psrlw() {
         0x00,
     ];
 
-    engine.mem_write(0x1000, &code).unwrap();
+    engine.memory.write(0x1000, &code).unwrap();
     engine.reg_write(Register::RIP, 0x1000);
 
     // Execute instructions
@@ -176,7 +176,7 @@ fn test_psrlw() {
 
     // Check result
     let mut result = vec![0u8; 16];
-    engine.mem_read(0x1028, &mut result).unwrap();
+    engine.memory.read(0x1028, &mut result).unwrap();
 
     // Expected: each word shifted right by 4
     assert_eq!(u16::from_le_bytes([result[0], result[1]]), 0x0111); // 0x1110 >> 4
@@ -194,7 +194,7 @@ fn test_psrld() {
     let mut engine = Engine::new(EngineMode::Mode64);
 
     // Map memory
-    engine.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
+    engine.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
 
     // Test PSRLD - Packed shift right logical doublewords
     let code = vec![
@@ -212,7 +212,7 @@ fn test_psrld() {
         0x00,
     ];
 
-    engine.mem_write(0x1000, &code).unwrap();
+    engine.memory.write(0x1000, &code).unwrap();
     engine.reg_write(Register::RIP, 0x1000);
 
     // Execute instructions
@@ -220,7 +220,7 @@ fn test_psrld() {
 
     // Check result
     let mut result = vec![0u8; 16];
-    engine.mem_read(0x1028, &mut result).unwrap();
+    engine.memory.read(0x1028, &mut result).unwrap();
 
     // Expected: each dword shifted right by 8
     assert_eq!(
@@ -246,7 +246,7 @@ fn test_psrlq() {
     let mut engine = Engine::new(EngineMode::Mode64);
 
     // Map memory
-    engine.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
+    engine.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
 
     // Test PSRLQ - Packed shift right logical quadwords
     let code = vec![
@@ -264,7 +264,7 @@ fn test_psrlq() {
         0x00,
     ];
 
-    engine.mem_write(0x1000, &code).unwrap();
+    engine.memory.write(0x1000, &code).unwrap();
     engine.reg_write(Register::RIP, 0x1000);
 
     // Execute instructions
@@ -272,7 +272,7 @@ fn test_psrlq() {
 
     // Check result
     let mut result = vec![0u8; 16];
-    engine.mem_read(0x1028, &mut result).unwrap();
+    engine.memory.read(0x1028, &mut result).unwrap();
 
     // Expected: each qword shifted right by 16
     assert_eq!(
@@ -295,7 +295,7 @@ fn test_psraw() {
     let mut engine = Engine::new(EngineMode::Mode64);
 
     // Map memory
-    engine.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
+    engine.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
 
     // Test PSRAW - Packed shift right arithmetic words
     let code = vec![
@@ -315,7 +315,7 @@ fn test_psraw() {
         0x00,
     ];
 
-    engine.mem_write(0x1000, &code).unwrap();
+    engine.memory.write(0x1000, &code).unwrap();
     engine.reg_write(Register::RIP, 0x1000);
 
     // Execute instructions
@@ -323,7 +323,7 @@ fn test_psraw() {
 
     // Check result
     let mut result = vec![0u8; 16];
-    engine.mem_read(0x1028, &mut result).unwrap();
+    engine.memory.read(0x1028, &mut result).unwrap();
 
     // Expected: each word arithmetic shifted right by 4
     assert_eq!(u16::from_le_bytes([result[0], result[1]]), 0x0111); // 0x1110 >> 4
@@ -341,7 +341,7 @@ fn test_psrad() {
     let mut engine = Engine::new(EngineMode::Mode64);
 
     // Map memory
-    engine.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
+    engine.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
 
     // Test PSRAD - Packed shift right arithmetic doublewords
     let code = vec![
@@ -361,7 +361,7 @@ fn test_psrad() {
         0x00,
     ];
 
-    engine.mem_write(0x1000, &code).unwrap();
+    engine.memory.write(0x1000, &code).unwrap();
     engine.reg_write(Register::RIP, 0x1000);
 
     // Execute instructions
@@ -369,7 +369,7 @@ fn test_psrad() {
 
     // Check result
     let mut result = vec![0u8; 16];
-    engine.mem_read(0x1028, &mut result).unwrap();
+    engine.memory.read(0x1028, &mut result).unwrap();
 
     // Expected: each dword arithmetic shifted right by 8
     assert_eq!(
@@ -395,7 +395,7 @@ fn test_shift_overflow() {
     let mut engine = Engine::new(EngineMode::Mode64);
 
     // Map memory
-    engine.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
+    engine.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
 
     // Test shift overflow - shift by amount >= element size
     let code = vec![
@@ -413,7 +413,7 @@ fn test_shift_overflow() {
         0x00,
     ];
 
-    engine.mem_write(0x1000, &code).unwrap();
+    engine.memory.write(0x1000, &code).unwrap();
     engine.reg_write(Register::RIP, 0x1000);
 
     // Execute instructions
@@ -421,7 +421,7 @@ fn test_shift_overflow() {
 
     // Check result
     let mut result = vec![0u8; 16];
-    engine.mem_read(0x1028, &mut result).unwrap();
+    engine.memory.read(0x1028, &mut result).unwrap();
 
     // Expected: all zeros (all bits shifted out)
     for i in 0..16 {

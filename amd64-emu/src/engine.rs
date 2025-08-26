@@ -2,6 +2,7 @@ use crate::cpu::{CpuState, Flags, Register};
 use crate::error::{EmulatorError, Result};
 use crate::hooks::{HookManager, NoHooks};
 use crate::memory::MemoryTrait;
+use crate::OwnedMemory;
 use iced_x86::{
     Code, Decoder, DecoderOptions, Instruction, Mnemonic, OpKind, Register as IcedRegister,
 };
@@ -19,8 +20,17 @@ pub struct Engine<M: MemoryTrait> {
     mode: EngineMode,
 }
 
+impl Engine<OwnedMemory> {
+    pub fn new(mode: EngineMode) -> Self {
+        Self {
+            cpu: CpuState::new(),
+            memory: OwnedMemory::new(),
+            mode,
+        }
+    }
+}
 impl<M: MemoryTrait> Engine<M> {
-    pub fn new(mode: EngineMode, memory: M) -> Self {
+    pub fn new_memory(mode: EngineMode, memory: M) -> Self {
         Self {
             cpu: CpuState::new(),
             memory,

@@ -92,7 +92,7 @@ pub trait MemoryTrait {
     }
 
     // Write bytes without permission checks - used for loading code
-    fn write_bytes(&mut self, addr: u64, data: &[u8]) -> Result<()> {
+    fn write_code(&mut self, addr: u64, data: &[u8]) -> Result<()> {
         let mut offset = 0;
         let mut current_addr = addr;
 
@@ -209,18 +209,18 @@ impl MemoryRegion {
     }
 }
 
-pub struct Memory {
+pub struct OwnedMemory {
     regions: BTreeMap<u64, MemoryRegion>,
     page_size: usize,
 }
 
-impl Default for Memory {
+impl Default for OwnedMemory {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl Memory {
+impl OwnedMemory {
     pub fn new() -> Self {
         Self {
             regions: BTreeMap::new(),
@@ -232,7 +232,7 @@ impl Memory {
     }
 }
 
-impl MemoryTrait for Memory {
+impl MemoryTrait for OwnedMemory {
     type MemoryRegion = MemoryRegion;
 
     fn find_region(&self, addr: u64) -> Option<&MemoryRegion> {
@@ -341,5 +341,535 @@ impl MemoryTrait for Memory {
 
     fn total_size(&self) -> usize {
         self.regions.values().map(|r| r.size()).sum()
+    }
+}
+
+pub struct CowMemory<T: MemoryTrait> {
+    base: T,
+    overlay: BTreeMap<u64, MemoryRegion>,
+    page_size: usize,
+}
+
+impl<T: MemoryTrait> CowMemory<T> {
+    pub fn new(base: T) -> Self {
+        Self {
+            base,
+            overlay: BTreeMap::new(),
+            page_size: 4096,
+        }
+    }
+
+    pub fn base(&self) -> &T {
+        &self.base
+    }
+
+    pub fn overlay_regions(&self) -> impl Iterator<Item = &MemoryRegion> {
+        self.overlay.values()
+    }
+
+    fn copy_page(&mut self, addr: u64) -> Result<()> {
+        let page_addr = addr & !(self.page_size as u64 - 1);
+
+        if self.overlay.contains_key(&page_addr) {
+            return Ok(());
+        }
+
+        let base_region = self
+            .base
+            .find_region(page_addr)
+            .ok_or(EmulatorError::UnmappedMemory(page_addr))?;
+
+        let page_offset = base_region.offset(page_addr).unwrap();
+        let copy_size = std::cmp::min(self.page_size, base_region.size() - page_offset);
+
+        let mut cow_region = MemoryRegion::new(page_addr, copy_size, base_region.perms());
+        cow_region
+            .data_mut()
+            .copy_from_slice(&base_region.data()[page_offset..page_offset + copy_size]);
+
+        self.overlay.insert(page_addr, cow_region);
+        Ok(())
+    }
+}
+
+impl<T: MemoryTrait<MemoryRegion = MemoryRegion>> MemoryTrait for CowMemory<T> {
+    type MemoryRegion = MemoryRegion;
+
+    fn find_region(&self, addr: u64) -> Option<&Self::MemoryRegion> {
+        if let Some(overlay_region) =
+            self.overlay
+                .range(..=addr)
+                .next_back()
+                .and_then(|(_, region)| {
+                    if region.contains(addr) {
+                        Some(region)
+                    } else {
+                        None
+                    }
+                })
+        {
+            Some(overlay_region)
+        } else {
+            self.base.find_region(addr)
+        }
+    }
+
+    fn find_region_mut(&mut self, addr: u64) -> Option<&mut Self::MemoryRegion> {
+        if let Some(overlay_region) =
+            self.overlay
+                .range_mut(..=addr)
+                .next_back()
+                .and_then(|(_, region)| {
+                    if region.contains(addr) {
+                        Some(region)
+                    } else {
+                        None
+                    }
+                })
+        {
+            Some(overlay_region)
+        } else {
+            None
+        }
+    }
+
+    fn write(&mut self, addr: u64, data: &[u8]) -> Result<()> {
+        let mut offset = 0;
+        let mut current_addr = addr;
+
+        while offset < data.len() {
+            let page_addr = current_addr & !(self.page_size as u64 - 1);
+
+            if !self.overlay.contains_key(&page_addr) {
+                self.copy_page(current_addr)?;
+            }
+
+            let region = self
+                .find_region_mut(current_addr)
+                .ok_or(EmulatorError::UnmappedMemory(current_addr))?;
+
+            if !region.perms().contains(Permission::WRITE) {
+                return Err(EmulatorError::PermissionDenied(current_addr));
+            }
+
+            let region_offset = region.offset(current_addr).unwrap();
+            let available = region.size() - region_offset;
+            let to_copy = std::cmp::min(available, data.len() - offset);
+
+            region.data_mut()[region_offset..region_offset + to_copy]
+                .copy_from_slice(&data[offset..offset + to_copy]);
+
+            offset += to_copy;
+            current_addr += to_copy as u64;
+        }
+
+        Ok(())
+    }
+
+    fn write_code(&mut self, addr: u64, data: &[u8]) -> Result<()> {
+        let mut offset = 0;
+        let mut current_addr = addr;
+
+        while offset < data.len() {
+            let page_addr = current_addr & !(self.page_size as u64 - 1);
+
+            if !self.overlay.contains_key(&page_addr) {
+                self.copy_page(current_addr)?;
+            }
+
+            let region = self
+                .find_region_mut(current_addr)
+                .ok_or(EmulatorError::UnmappedMemory(current_addr))?;
+
+            let region_offset = region.offset(current_addr).unwrap();
+            let available = region.size() - region_offset;
+            let to_copy = std::cmp::min(available, data.len() - offset);
+
+            region.data_mut()[region_offset..region_offset + to_copy]
+                .copy_from_slice(&data[offset..offset + to_copy]);
+
+            offset += to_copy;
+            current_addr += to_copy as u64;
+        }
+
+        Ok(())
+    }
+
+    fn map(&mut self, addr: u64, size: usize, perms: Permission) -> Result<()> {
+        if size == 0 {
+            return Err(EmulatorError::InvalidArgument("Size cannot be zero".into()));
+        }
+
+        let aligned_addr = addr & !(self.page_size as u64 - 1);
+        let aligned_size =
+            ((addr - aligned_addr) as usize + size + self.page_size - 1) & !(self.page_size - 1);
+
+        let end = aligned_addr + aligned_size as u64;
+
+        for region in self.overlay.values() {
+            if (aligned_addr >= region.start && aligned_addr < region.end)
+                || (end > region.start && end <= region.end)
+                || (aligned_addr <= region.start && end >= region.end)
+            {
+                return Err(EmulatorError::InvalidArgument(format!(
+                    "Memory overlap at {:#x}-{:#x}",
+                    aligned_addr, end
+                )));
+            }
+        }
+
+        if let Some(base_region) = self.base.find_region(aligned_addr) {
+            if (aligned_addr >= base_region.range().start && aligned_addr < base_region.range().end)
+                || (end > base_region.range().start && end <= base_region.range().end)
+                || (aligned_addr <= base_region.range().start && end >= base_region.range().end)
+            {
+                return Err(EmulatorError::InvalidArgument(format!(
+                    "Memory overlap with base at {:#x}-{:#x}",
+                    aligned_addr, end
+                )));
+            }
+        }
+
+        let region = MemoryRegion::new(aligned_addr, aligned_size, perms);
+        self.overlay.insert(aligned_addr, region);
+        Ok(())
+    }
+
+    fn unmap(&mut self, addr: u64, size: usize) -> Result<()> {
+        let aligned_addr = addr & !(self.page_size as u64 - 1);
+        let aligned_size =
+            ((addr - aligned_addr) as usize + size + self.page_size - 1) & !(self.page_size - 1);
+        let end = aligned_addr + aligned_size as u64;
+
+        let mut to_remove = Vec::new();
+        for (&start, region) in &self.overlay {
+            if start >= aligned_addr && region.end <= end {
+                to_remove.push(start);
+            }
+        }
+
+        if to_remove.is_empty() {
+            return Err(EmulatorError::UnmappedMemory(addr));
+        }
+
+        for start in to_remove {
+            self.overlay.remove(&start);
+        }
+
+        Ok(())
+    }
+
+    fn protect(&mut self, addr: u64, size: usize, perms: Permission) -> Result<()> {
+        let end = addr + size as u64;
+
+        let mut regions_to_update = Vec::new();
+        for (&start, region) in &self.overlay {
+            if (addr >= region.start && addr < region.end)
+                || (end > region.start && end <= region.end)
+                || (addr <= region.start && end >= region.end)
+            {
+                regions_to_update.push(start);
+            }
+        }
+
+        if regions_to_update.is_empty() {
+            return Err(EmulatorError::UnmappedMemory(addr));
+        }
+
+        for start in regions_to_update {
+            if let Some(region) = self.overlay.get_mut(&start) {
+                region.perms = perms;
+            }
+        }
+
+        Ok(())
+    }
+
+    fn total_size(&self) -> usize {
+        let base_size = self.base.total_size();
+        let overlay_size = self.overlay.values().map(|r| r.size()).sum::<usize>();
+        base_size + overlay_size
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn create_base_memory() -> OwnedMemory {
+        let mut memory = OwnedMemory::new();
+        // Map some base pages with test data
+        memory
+            .map(0x1000, 0x3000, Permission::READ | Permission::WRITE)
+            .unwrap();
+
+        // Fill base memory with predictable pattern
+        for i in 0..0x3000u64 {
+            memory.write_u8(0x1000 + i, (i % 256) as u8).unwrap();
+        }
+
+        memory
+    }
+
+    #[test]
+    fn test_cow_memory_basic_reads() {
+        let base = create_base_memory();
+        let cow = CowMemory::new(base);
+
+        // Verify we can read from base memory
+        assert_eq!(cow.read_u8(0x1000).unwrap(), 0);
+        assert_eq!(cow.read_u8(0x1001).unwrap(), 1);
+        assert_eq!(cow.read_u8(0x1100).unwrap(), 0); // 0x100 % 256 = 0
+        assert_eq!(cow.read_u8(0x3fff).unwrap(), 255); // (0x2fff) % 256 = 255
+
+        // Verify no overlay pages exist yet
+        assert_eq!(cow.overlay_regions().count(), 0);
+    }
+
+    #[test]
+    fn test_cow_memory_basic_writes() {
+        let base = create_base_memory();
+        let mut cow = CowMemory::new(base);
+
+        // Write to first page - should trigger CoW
+        cow.write_u8(0x1000, 42).unwrap();
+
+        // Verify write took effect
+        assert_eq!(cow.read_u8(0x1000).unwrap(), 42);
+
+        // Verify overlay page was created
+        assert_eq!(cow.overlay_regions().count(), 1);
+        let overlay_region = cow.overlay_regions().next().unwrap();
+        assert_eq!(overlay_region.start, 0x1000);
+        assert_eq!(overlay_region.end, 0x2000);
+
+        // Verify base memory is unchanged
+        assert_eq!(cow.base().read_u8(0x1000).unwrap(), 0);
+
+        // Verify other data in the same page was copied correctly
+        assert_eq!(cow.read_u8(0x1001).unwrap(), 1);
+        assert_eq!(cow.read_u8(0x1fff).unwrap(), 255); // (0xfff) % 256 = 255
+    }
+
+    #[test]
+    fn test_cow_memory_overlapping_pages() {
+        let base = create_base_memory();
+        let mut cow = CowMemory::new(base);
+
+        // Write to multiple overlapping locations in the same page
+        cow.write_u8(0x1000, 100).unwrap();
+        cow.write_u8(0x1500, 200).unwrap(); // Same page as 0x1000
+        cow.write_u8(0x1fff, 255).unwrap(); // Same page as 0x1000
+
+        // Should only have one overlay page
+        assert_eq!(cow.overlay_regions().count(), 1);
+
+        // Verify all writes are visible
+        assert_eq!(cow.read_u8(0x1000).unwrap(), 100);
+        assert_eq!(cow.read_u8(0x1500).unwrap(), 200);
+        assert_eq!(cow.read_u8(0x1fff).unwrap(), 255);
+
+        // Write to different page
+        cow.write_u8(0x2000, 50).unwrap();
+
+        // Should now have two overlay pages
+        assert_eq!(cow.overlay_regions().count(), 2);
+
+        // Verify reads from both pages
+        assert_eq!(cow.read_u8(0x1000).unwrap(), 100);
+        assert_eq!(cow.read_u8(0x2000).unwrap(), 50);
+    }
+
+    #[test]
+    fn test_cow_memory_page_copying_preserves_data() {
+        let base = create_base_memory();
+        let mut cow = CowMemory::new(base);
+
+        // Read original values from a page
+        let original_values: Vec<u8> = (0..4096).map(|i| ((0x1000 + i) % 256) as u8).collect();
+
+        // Write to one byte in the middle of the page
+        cow.write_u8(0x1800, 123).unwrap();
+
+        // Verify the rest of the page was preserved during CoW
+        for i in 0..4096u64 {
+            let addr = 0x1000 + i;
+            let expected = if addr == 0x1800 {
+                123
+            } else {
+                original_values[i as usize]
+            };
+            assert_eq!(
+                cow.read_u8(addr).unwrap(),
+                expected,
+                "Mismatch at address {:#x}",
+                addr
+            );
+        }
+    }
+
+    #[test]
+    fn test_cow_memory_cross_page_operations() {
+        let base = create_base_memory();
+        let mut cow = CowMemory::new(base);
+
+        // Write data that spans two pages
+        let test_data = vec![1, 2, 3, 4, 5, 6, 7, 8];
+        cow.write(0x1ffe, &test_data).unwrap(); // Spans pages 0x1000 and 0x2000
+
+        // Should have created two overlay pages
+        assert_eq!(cow.overlay_regions().count(), 2);
+
+        // Verify we can read the data back correctly
+        let mut read_data = vec![0u8; 8];
+        cow.read(0x1ffe, &mut read_data).unwrap();
+        assert_eq!(read_data, test_data);
+
+        // Verify the data is split correctly across pages
+        assert_eq!(cow.read_u8(0x1ffe).unwrap(), 1);
+        assert_eq!(cow.read_u8(0x1fff).unwrap(), 2);
+        assert_eq!(cow.read_u8(0x2000).unwrap(), 3);
+        assert_eq!(cow.read_u8(0x2005).unwrap(), 8);
+    }
+
+    #[test]
+    fn test_cow_memory_multiple_layers() {
+        // Test CoW on top of CoW
+        let base = create_base_memory();
+        let mut cow1 = CowMemory::new(base);
+
+        // Modify first layer
+        cow1.write_u8(0x1000, 42).unwrap();
+
+        // Create second layer on top
+        let mut cow2 = CowMemory::new(cow1);
+
+        // Verify we can read from the stack
+        assert_eq!(cow2.read_u8(0x1000).unwrap(), 42); // From cow1
+        assert_eq!(cow2.read_u8(0x1001).unwrap(), 1); // From original base
+
+        // Modify second layer
+        cow2.write_u8(0x1000, 99).unwrap();
+
+        // Verify layered changes
+        assert_eq!(cow2.read_u8(0x1000).unwrap(), 99); // From cow2 overlay
+        assert_eq!(cow2.base().read_u8(0x1000).unwrap(), 42); // cow1 still has 42
+        assert_eq!(cow2.base().base().read_u8(0x1000).unwrap(), 0); // original base unchanged
+    }
+
+    #[test]
+    fn test_cow_memory_permissions() {
+        let mut base = OwnedMemory::new();
+        base.map(0x1000, 0x1000, Permission::READ).unwrap(); // Read-only base
+
+        // Fill with data
+        base.write_code(0x1000, &vec![42u8; 0x1000]).unwrap(); // Use write_bytes to bypass permission check
+
+        let mut cow = CowMemory::new(base);
+
+        // Should be able to read
+        assert_eq!(cow.read_u8(0x1000).unwrap(), 42);
+
+        // Should fail to write due to permission
+        assert!(cow.write_u8(0x1000, 99).is_err());
+    }
+
+    #[test]
+    fn test_cow_memory_unmap_overlay_pages() {
+        let base = create_base_memory();
+        let mut cow = CowMemory::new(base);
+
+        // Create some overlay pages
+        cow.write_u8(0x1000, 1).unwrap();
+        cow.write_u8(0x2000, 2).unwrap();
+        cow.write_u8(0x3000, 3).unwrap();
+
+        assert_eq!(cow.overlay_regions().count(), 3);
+
+        // Unmap middle page
+        cow.unmap(0x2000, 0x1000).unwrap();
+
+        assert_eq!(cow.overlay_regions().count(), 2);
+
+        // Verify other pages still work
+        assert_eq!(cow.read_u8(0x1000).unwrap(), 1);
+        assert_eq!(cow.read_u8(0x3000).unwrap(), 3);
+
+        // Verify unmapped page falls back to base (if it exists there)
+        assert_eq!(cow.read_u8(0x2000).unwrap(), 0); // Original base value
+    }
+
+    #[test]
+    fn test_cow_memory_map_new_regions() {
+        let base = create_base_memory();
+        let mut cow = CowMemory::new(base);
+
+        // Map a new region that doesn't exist in base
+        cow.map(0x5000, 0x1000, Permission::READ | Permission::WRITE)
+            .unwrap();
+
+        // Should be able to write to it
+        cow.write_u8(0x5000, 123).unwrap();
+        assert_eq!(cow.read_u8(0x5000).unwrap(), 123);
+
+        // Should appear in overlay
+        assert_eq!(cow.overlay_regions().count(), 1);
+    }
+
+    #[test]
+    fn test_cow_memory_write_bytes_bypass_permissions() {
+        let mut base = OwnedMemory::new();
+        base.map(0x1000, 0x1000, Permission::READ).unwrap(); // Read-only
+
+        let mut cow = CowMemory::new(base);
+
+        // write_bytes should bypass permission checks
+        cow.write_code(0x1000, &[1, 2, 3, 4]).unwrap();
+
+        // Should be able to read back the data
+        assert_eq!(cow.read_u8(0x1000).unwrap(), 1);
+        assert_eq!(cow.read_u8(0x1003).unwrap(), 4);
+
+        // Should have created overlay page
+        assert_eq!(cow.overlay_regions().count(), 1);
+    }
+
+    #[test]
+    fn test_cow_memory_large_cross_page_write() {
+        let base = create_base_memory();
+        let mut cow = CowMemory::new(base);
+
+        // Write 8KB of data spanning 3 pages
+        let large_data: Vec<u8> = (0..8192).map(|i| (i % 256) as u8).collect();
+        cow.write(0x1800, &large_data).unwrap(); // Spans pages 0x1000, 0x2000, 0x3000
+
+        // Should create 3 overlay pages
+        assert_eq!(cow.overlay_regions().count(), 3);
+
+        // Verify we can read all data back
+        let mut read_back = vec![0u8; 8192];
+        cow.read(0x1800, &mut read_back).unwrap();
+        assert_eq!(read_back, large_data);
+    }
+
+    #[test]
+    fn test_cow_memory_total_size_calculation() {
+        let base = create_base_memory(); // 3 pages
+        let base_size = base.total_size();
+
+        let mut cow = CowMemory::new(base);
+
+        // Initially should match base size
+        assert_eq!(cow.total_size(), base_size);
+
+        // Add overlay pages
+        cow.write_u8(0x1000, 1).unwrap(); // Overlaps with base
+        cow.map(0x5000, 0x1000, Permission::READ | Permission::WRITE)
+            .unwrap(); // New region
+
+        // Total size should include overlay pages
+        // Note: overlapping pages are counted in both base and overlay
+        let expected_size = base_size + 4096 + 4096; // original + cow page + new region
+        assert_eq!(cow.total_size(), expected_size);
     }
 }

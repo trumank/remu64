@@ -1,4 +1,4 @@
-use amd64_emu::{Engine, EngineMode, Permission, Register};
+use amd64_emu::{memory::MemoryTrait as _, Engine, EngineMode, Permission, Register};
 
 #[test]
 fn test_pmovsxbw() {
@@ -11,9 +11,9 @@ fn test_pmovsxbw() {
         0x66, 0x0F, 0x38, 0x20, 0xC8,
     ];
 
-    emu.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
-    emu.mem_map(0x100000, 0x1000, Permission::ALL).unwrap();
-    emu.mem_write(0x1000, &code).unwrap();
+    emu.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
+    emu.memory.map(0x100000, 0x1000, Permission::ALL).unwrap();
+    emu.memory.write(0x1000, &code).unwrap();
     emu.reg_write(Register::RIP, 0x1000);
     emu.reg_write(Register::RSP, 0x100400);
 
@@ -29,7 +29,7 @@ fn test_pmovsxbw() {
         0xF0, // -16
     ];
 
-    emu.mem_write(0x100400, &test_data).unwrap();
+    emu.memory.write(0x100400, &test_data).unwrap();
 
     emu.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 10)
         .unwrap();
@@ -58,9 +58,9 @@ fn test_pmovsxbd() {
         0x66, 0x0F, 0x38, 0x21, 0xC8,
     ];
 
-    emu.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
-    emu.mem_map(0x100000, 0x1000, Permission::ALL).unwrap();
-    emu.mem_write(0x1000, &code).unwrap();
+    emu.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
+    emu.memory.map(0x100000, 0x1000, Permission::ALL).unwrap();
+    emu.memory.write(0x1000, &code).unwrap();
     emu.reg_write(Register::RIP, 0x1000);
     emu.reg_write(Register::RSP, 0x100400);
 
@@ -72,7 +72,7 @@ fn test_pmovsxbd() {
         0xFF, // -1
     ];
 
-    emu.mem_write(0x100400, &test_data).unwrap();
+    emu.memory.write(0x100400, &test_data).unwrap();
 
     emu.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 10)
         .unwrap();
@@ -97,9 +97,9 @@ fn test_pmovsxbq() {
         0x66, 0x0F, 0x38, 0x22, 0xC8,
     ];
 
-    emu.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
-    emu.mem_map(0x100000, 0x1000, Permission::ALL).unwrap();
-    emu.mem_write(0x1000, &code).unwrap();
+    emu.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
+    emu.memory.map(0x100000, 0x1000, Permission::ALL).unwrap();
+    emu.memory.write(0x1000, &code).unwrap();
     emu.reg_write(Register::RIP, 0x1000);
     emu.reg_write(Register::RSP, 0x100400);
 
@@ -109,7 +109,7 @@ fn test_pmovsxbq() {
         0x80, // -128
     ];
 
-    emu.mem_write(0x100400, &test_data).unwrap();
+    emu.memory.write(0x100400, &test_data).unwrap();
 
     emu.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 10)
         .unwrap();
@@ -132,9 +132,9 @@ fn test_pmovsxwd() {
         0x66, 0x0F, 0x38, 0x23, 0xC8,
     ];
 
-    emu.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
-    emu.mem_map(0x100000, 0x1000, Permission::ALL).unwrap();
-    emu.mem_write(0x1000, &code).unwrap();
+    emu.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
+    emu.memory.map(0x100000, 0x1000, Permission::ALL).unwrap();
+    emu.memory.write(0x1000, &code).unwrap();
     emu.reg_write(Register::RIP, 0x1000);
     emu.reg_write(Register::RSP, 0x100400);
 
@@ -146,7 +146,7 @@ fn test_pmovsxwd() {
         0xFF, 0xFF, // -1
     ];
 
-    emu.mem_write(0x100400, &test_data).unwrap();
+    emu.memory.write(0x100400, &test_data).unwrap();
 
     emu.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 10)
         .unwrap();
@@ -171,9 +171,9 @@ fn test_pmovsxwq() {
         0x66, 0x0F, 0x38, 0x24, 0xC8,
     ];
 
-    emu.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
-    emu.mem_map(0x100000, 0x1000, Permission::ALL).unwrap();
-    emu.mem_write(0x1000, &code).unwrap();
+    emu.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
+    emu.memory.map(0x100000, 0x1000, Permission::ALL).unwrap();
+    emu.memory.write(0x1000, &code).unwrap();
     emu.reg_write(Register::RIP, 0x1000);
     emu.reg_write(Register::RSP, 0x100400);
 
@@ -183,7 +183,7 @@ fn test_pmovsxwq() {
         0x00, 0x80, // -32768
     ];
 
-    emu.mem_write(0x100400, &test_data).unwrap();
+    emu.memory.write(0x100400, &test_data).unwrap();
 
     emu.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 10)
         .unwrap();
@@ -206,9 +206,9 @@ fn test_pmovsxdq() {
         0x66, 0x0F, 0x38, 0x25, 0xC8,
     ];
 
-    emu.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
-    emu.mem_map(0x100000, 0x1000, Permission::ALL).unwrap();
-    emu.mem_write(0x1000, &code).unwrap();
+    emu.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
+    emu.memory.map(0x100000, 0x1000, Permission::ALL).unwrap();
+    emu.memory.write(0x1000, &code).unwrap();
     emu.reg_write(Register::RIP, 0x1000);
     emu.reg_write(Register::RSP, 0x100400);
 
@@ -218,7 +218,7 @@ fn test_pmovsxdq() {
         0x00, 0x00, 0x00, 0x80, // -2147483648
     ];
 
-    emu.mem_write(0x100400, &test_data).unwrap();
+    emu.memory.write(0x100400, &test_data).unwrap();
 
     emu.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 10)
         .unwrap();
@@ -241,9 +241,9 @@ fn test_pmovzxbw() {
         0x66, 0x0F, 0x38, 0x30, 0xC8,
     ];
 
-    emu.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
-    emu.mem_map(0x100000, 0x1000, Permission::ALL).unwrap();
-    emu.mem_write(0x1000, &code).unwrap();
+    emu.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
+    emu.memory.map(0x100000, 0x1000, Permission::ALL).unwrap();
+    emu.memory.write(0x1000, &code).unwrap();
     emu.reg_write(Register::RIP, 0x1000);
     emu.reg_write(Register::RSP, 0x100400);
 
@@ -259,7 +259,7 @@ fn test_pmovzxbw() {
         0xF0, // 240
     ];
 
-    emu.mem_write(0x100400, &test_data).unwrap();
+    emu.memory.write(0x100400, &test_data).unwrap();
 
     emu.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 10)
         .unwrap();
@@ -288,9 +288,9 @@ fn test_pmovzxbd() {
         0x66, 0x0F, 0x38, 0x31, 0xC8,
     ];
 
-    emu.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
-    emu.mem_map(0x100000, 0x1000, Permission::ALL).unwrap();
-    emu.mem_write(0x1000, &code).unwrap();
+    emu.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
+    emu.memory.map(0x100000, 0x1000, Permission::ALL).unwrap();
+    emu.memory.write(0x1000, &code).unwrap();
     emu.reg_write(Register::RIP, 0x1000);
     emu.reg_write(Register::RSP, 0x100400);
 
@@ -302,7 +302,7 @@ fn test_pmovzxbd() {
         0x00, // 0
     ];
 
-    emu.mem_write(0x100400, &test_data).unwrap();
+    emu.memory.write(0x100400, &test_data).unwrap();
 
     emu.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 10)
         .unwrap();
@@ -327,9 +327,9 @@ fn test_pmovzxbq() {
         0x66, 0x0F, 0x38, 0x32, 0xC8,
     ];
 
-    emu.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
-    emu.mem_map(0x100000, 0x1000, Permission::ALL).unwrap();
-    emu.mem_write(0x1000, &code).unwrap();
+    emu.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
+    emu.memory.map(0x100000, 0x1000, Permission::ALL).unwrap();
+    emu.memory.write(0x1000, &code).unwrap();
     emu.reg_write(Register::RIP, 0x1000);
     emu.reg_write(Register::RSP, 0x100400);
 
@@ -339,7 +339,7 @@ fn test_pmovzxbq() {
         0x80, // 128
     ];
 
-    emu.mem_write(0x100400, &test_data).unwrap();
+    emu.memory.write(0x100400, &test_data).unwrap();
 
     emu.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 10)
         .unwrap();
@@ -362,9 +362,9 @@ fn test_pmovzxwd() {
         0x66, 0x0F, 0x38, 0x33, 0xC8,
     ];
 
-    emu.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
-    emu.mem_map(0x100000, 0x1000, Permission::ALL).unwrap();
-    emu.mem_write(0x1000, &code).unwrap();
+    emu.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
+    emu.memory.map(0x100000, 0x1000, Permission::ALL).unwrap();
+    emu.memory.write(0x1000, &code).unwrap();
     emu.reg_write(Register::RIP, 0x1000);
     emu.reg_write(Register::RSP, 0x100400);
 
@@ -376,7 +376,7 @@ fn test_pmovzxwd() {
         0x00, 0x00, // 0
     ];
 
-    emu.mem_write(0x100400, &test_data).unwrap();
+    emu.memory.write(0x100400, &test_data).unwrap();
 
     emu.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 10)
         .unwrap();
@@ -401,9 +401,9 @@ fn test_pmovzxwq() {
         0x66, 0x0F, 0x38, 0x34, 0xC8,
     ];
 
-    emu.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
-    emu.mem_map(0x100000, 0x1000, Permission::ALL).unwrap();
-    emu.mem_write(0x1000, &code).unwrap();
+    emu.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
+    emu.memory.map(0x100000, 0x1000, Permission::ALL).unwrap();
+    emu.memory.write(0x1000, &code).unwrap();
     emu.reg_write(Register::RIP, 0x1000);
     emu.reg_write(Register::RSP, 0x100400);
 
@@ -413,7 +413,7 @@ fn test_pmovzxwq() {
         0x00, 0x80, // 32768
     ];
 
-    emu.mem_write(0x100400, &test_data).unwrap();
+    emu.memory.write(0x100400, &test_data).unwrap();
 
     emu.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 10)
         .unwrap();
@@ -436,9 +436,9 @@ fn test_pmovzxdq() {
         0x66, 0x0F, 0x38, 0x35, 0xC8,
     ];
 
-    emu.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
-    emu.mem_map(0x100000, 0x1000, Permission::ALL).unwrap();
-    emu.mem_write(0x1000, &code).unwrap();
+    emu.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
+    emu.memory.map(0x100000, 0x1000, Permission::ALL).unwrap();
+    emu.memory.write(0x1000, &code).unwrap();
     emu.reg_write(Register::RIP, 0x1000);
     emu.reg_write(Register::RSP, 0x100400);
 
@@ -448,7 +448,7 @@ fn test_pmovzxdq() {
         0x00, 0x00, 0x00, 0x80, // 2147483648
     ];
 
-    emu.mem_write(0x100400, &test_data).unwrap();
+    emu.memory.write(0x100400, &test_data).unwrap();
 
     emu.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 10)
         .unwrap();
@@ -470,9 +470,9 @@ fn test_pmovsxbw_memory() {
         0x66, 0x0F, 0x38, 0x20, 0x0C, 0x24,
     ];
 
-    emu.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
-    emu.mem_map(0x100000, 0x1000, Permission::ALL).unwrap();
-    emu.mem_write(0x1000, &code).unwrap();
+    emu.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
+    emu.memory.map(0x100000, 0x1000, Permission::ALL).unwrap();
+    emu.memory.write(0x1000, &code).unwrap();
     emu.reg_write(Register::RIP, 0x1000);
     emu.reg_write(Register::RSP, 0x100400);
 
@@ -488,7 +488,7 @@ fn test_pmovsxbw_memory() {
         0xF0, // -16
     ];
 
-    emu.mem_write(0x100400, &test_data).unwrap();
+    emu.memory.write(0x100400, &test_data).unwrap();
 
     emu.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 10)
         .unwrap();

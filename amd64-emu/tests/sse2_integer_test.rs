@@ -1,11 +1,11 @@
-use amd64_emu::{Engine, EngineMode, Permission, Register};
+use amd64_emu::{memory::MemoryTrait as _, Engine, EngineMode, Permission, Register};
 
 #[test]
 fn test_paddb() {
     let mut engine = Engine::new(EngineMode::Mode64);
 
     // Map memory
-    engine.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
+    engine.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
 
     // Test PADDB - Add packed bytes
     let code = vec![
@@ -27,7 +27,7 @@ fn test_paddb() {
         0x00,
     ];
 
-    engine.mem_write(0x1000, &code).unwrap();
+    engine.memory.write(0x1000, &code).unwrap();
     engine.reg_write(Register::RIP, 0x1000);
 
     // Execute instructions (stop after the 4 instructions)
@@ -35,7 +35,7 @@ fn test_paddb() {
 
     // Check result
     let mut result = vec![0u8; 16];
-    engine.mem_read(0x1040, &mut result).unwrap();
+    engine.memory.read(0x1040, &mut result).unwrap();
 
     // Expected: Each byte is the sum of corresponding bytes
     assert_eq!(result[0], 0x11); // 0x10 + 0x01
@@ -61,7 +61,7 @@ fn test_paddw() {
     let mut engine = Engine::new(EngineMode::Mode64);
 
     // Map memory
-    engine.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
+    engine.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
 
     // Test PADDW - Add packed words (16-bit)
     let code = vec![
@@ -97,7 +97,7 @@ fn test_paddw() {
         0x00,
     ];
 
-    engine.mem_write(0x1000, &code).unwrap();
+    engine.memory.write(0x1000, &code).unwrap();
     engine.reg_write(Register::RIP, 0x1000);
 
     // Execute instructions (stop after the 4 instructions)
@@ -105,7 +105,7 @@ fn test_paddw() {
 
     // Check result
     let mut result = vec![0u8; 16];
-    engine.mem_read(0x1040, &mut result).unwrap();
+    engine.memory.read(0x1040, &mut result).unwrap();
 
     // Check each 16-bit word
     assert_eq!(&result[0..2], &[0x01, 0x10]); // 0x1000 + 0x0001 = 0x1001
@@ -123,7 +123,7 @@ fn test_paddd() {
     let mut engine = Engine::new(EngineMode::Mode64);
 
     // Map memory
-    engine.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
+    engine.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
 
     // Test PADDD - Add packed doublewords (32-bit)
     let code = vec![
@@ -151,7 +151,7 @@ fn test_paddd() {
         0x00,
     ];
 
-    engine.mem_write(0x1000, &code).unwrap();
+    engine.memory.write(0x1000, &code).unwrap();
     engine.reg_write(Register::RIP, 0x1000);
 
     // Execute instructions (stop after the 4 instructions)
@@ -159,7 +159,7 @@ fn test_paddd() {
 
     // Check result
     let mut result = vec![0u8; 16];
-    engine.mem_read(0x1040, &mut result).unwrap();
+    engine.memory.read(0x1040, &mut result).unwrap();
 
     // Check each 32-bit dword
     assert_eq!(&result[0..4], &[0x01, 0x00, 0x00, 0x10]); // 0x10000000 + 0x00000001
@@ -173,7 +173,7 @@ fn test_paddq() {
     let mut engine = Engine::new(EngineMode::Mode64);
 
     // Map memory
-    engine.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
+    engine.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
 
     // Test PADDQ - Add packed quadwords (64-bit)
     let code = vec![
@@ -197,7 +197,7 @@ fn test_paddq() {
         0x00,
     ];
 
-    engine.mem_write(0x1000, &code).unwrap();
+    engine.memory.write(0x1000, &code).unwrap();
     engine.reg_write(Register::RIP, 0x1000);
 
     // Execute instructions (stop after the 4 instructions)
@@ -205,7 +205,7 @@ fn test_paddq() {
 
     // Check result
     let mut result = vec![0u8; 16];
-    engine.mem_read(0x1040, &mut result).unwrap();
+    engine.memory.read(0x1040, &mut result).unwrap();
 
     // Check each 64-bit qword
     assert_eq!(
@@ -223,7 +223,7 @@ fn test_paddb_memory_operand() {
     let mut engine = Engine::new(EngineMode::Mode64);
 
     // Map memory
-    engine.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
+    engine.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
 
     // Test PADDB with memory operand
     let code = vec![
@@ -242,7 +242,7 @@ fn test_paddb_memory_operand() {
         0x00,
     ];
 
-    engine.mem_write(0x1000, &code).unwrap();
+    engine.memory.write(0x1000, &code).unwrap();
     engine.reg_write(Register::RIP, 0x1000);
 
     // Execute instructions (stop after the 3 instructions)
@@ -250,7 +250,7 @@ fn test_paddb_memory_operand() {
 
     // Check result (written at offset 0x1038)
     let mut result = vec![0u8; 16];
-    engine.mem_read(0x1038, &mut result).unwrap();
+    engine.memory.read(0x1038, &mut result).unwrap();
 
     // Check a few bytes
     assert_eq!(result[0], 0x11); // 0x01 + 0x10
@@ -264,7 +264,7 @@ fn test_psubb() {
     let mut engine = Engine::new(EngineMode::Mode64);
 
     // Map memory
-    engine.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
+    engine.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
 
     // Test PSUBB - Subtract packed bytes
     let code = vec![
@@ -286,7 +286,7 @@ fn test_psubb() {
         0x00,
     ];
 
-    engine.mem_write(0x1000, &code).unwrap();
+    engine.memory.write(0x1000, &code).unwrap();
     engine.reg_write(Register::RIP, 0x1000);
 
     // Execute instructions (stop after the 4 instructions)
@@ -294,7 +294,7 @@ fn test_psubb() {
 
     // Check result
     let mut result = vec![0u8; 16];
-    engine.mem_read(0x1040, &mut result).unwrap();
+    engine.memory.read(0x1040, &mut result).unwrap();
 
     // Expected: Each byte is the difference
     assert_eq!(result[0], 0x10); // 0x20 - 0x10
@@ -310,7 +310,7 @@ fn test_psubw() {
     let mut engine = Engine::new(EngineMode::Mode64);
 
     // Map memory
-    engine.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
+    engine.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
 
     // Test PSUBW - Subtract packed words (16-bit)
     let code = vec![
@@ -346,7 +346,7 @@ fn test_psubw() {
         0x00,
     ];
 
-    engine.mem_write(0x1000, &code).unwrap();
+    engine.memory.write(0x1000, &code).unwrap();
     engine.reg_write(Register::RIP, 0x1000);
 
     // Execute instructions (stop after the 4 instructions)
@@ -354,7 +354,7 @@ fn test_psubw() {
 
     // Check result
     let mut result = vec![0u8; 16];
-    engine.mem_read(0x1040, &mut result).unwrap();
+    engine.memory.read(0x1040, &mut result).unwrap();
 
     // Check each 16-bit word
     assert_eq!(&result[0..2], &[0x00, 0x10]); // 0x2000 - 0x1000 = 0x1000
@@ -368,7 +368,7 @@ fn test_pand() {
     let mut engine = Engine::new(EngineMode::Mode64);
 
     // Map memory
-    engine.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
+    engine.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
 
     // Test PAND - Bitwise AND of packed data
     let code = vec![
@@ -390,7 +390,7 @@ fn test_pand() {
         0x00,
     ];
 
-    engine.mem_write(0x1000, &code).unwrap();
+    engine.memory.write(0x1000, &code).unwrap();
     engine.reg_write(Register::RIP, 0x1000);
 
     // Execute instructions
@@ -398,7 +398,7 @@ fn test_pand() {
 
     // Check result
     let mut result = vec![0u8; 16];
-    engine.mem_read(0x1040, &mut result).unwrap();
+    engine.memory.read(0x1040, &mut result).unwrap();
 
     // Expected: Bitwise AND of corresponding bytes
     assert_eq!(&result[0..4], &[0x0F, 0x0F, 0x0F, 0x0F]); // 0xFF & 0x0F
@@ -412,7 +412,7 @@ fn test_pandn() {
     let mut engine = Engine::new(EngineMode::Mode64);
 
     // Map memory
-    engine.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
+    engine.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
 
     // Test PANDN - Bitwise AND NOT of packed data (NOT dst AND src)
     let code = vec![
@@ -434,7 +434,7 @@ fn test_pandn() {
         0x00,
     ];
 
-    engine.mem_write(0x1000, &code).unwrap();
+    engine.memory.write(0x1000, &code).unwrap();
     engine.reg_write(Register::RIP, 0x1000);
 
     // Execute instructions
@@ -442,7 +442,7 @@ fn test_pandn() {
 
     // Check result
     let mut result = vec![0u8; 16];
-    engine.mem_read(0x1040, &mut result).unwrap();
+    engine.memory.read(0x1040, &mut result).unwrap();
 
     // Expected: (~dst) & src
     assert_eq!(&result[0..4], &[0x00, 0x00, 0x00, 0x00]); // (~0xFF) & 0x0F = 0
@@ -456,7 +456,7 @@ fn test_por() {
     let mut engine = Engine::new(EngineMode::Mode64);
 
     // Map memory
-    engine.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
+    engine.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
 
     // Test POR - Bitwise OR of packed data
     let code = vec![
@@ -478,7 +478,7 @@ fn test_por() {
         0x00,
     ];
 
-    engine.mem_write(0x1000, &code).unwrap();
+    engine.memory.write(0x1000, &code).unwrap();
     engine.reg_write(Register::RIP, 0x1000);
 
     // Execute instructions
@@ -486,7 +486,7 @@ fn test_por() {
 
     // Check result
     let mut result = vec![0u8; 16];
-    engine.mem_read(0x1040, &mut result).unwrap();
+    engine.memory.read(0x1040, &mut result).unwrap();
 
     // Expected: Bitwise OR of corresponding bytes
     assert_eq!(&result[0..4], &[0xFF, 0xFF, 0xFF, 0xFF]); // 0xF0 | 0x0F = 0xFF
@@ -500,7 +500,7 @@ fn test_pxor() {
     let mut engine = Engine::new(EngineMode::Mode64);
 
     // Map memory
-    engine.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
+    engine.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
 
     // Test PXOR - Bitwise XOR of packed data
     let code = vec![
@@ -522,7 +522,7 @@ fn test_pxor() {
         0x00,
     ];
 
-    engine.mem_write(0x1000, &code).unwrap();
+    engine.memory.write(0x1000, &code).unwrap();
     engine.reg_write(Register::RIP, 0x1000);
 
     // Execute instructions
@@ -530,7 +530,7 @@ fn test_pxor() {
 
     // Check result
     let mut result = vec![0u8; 16];
-    engine.mem_read(0x1040, &mut result).unwrap();
+    engine.memory.read(0x1040, &mut result).unwrap();
 
     // Expected: Bitwise XOR of corresponding bytes
     assert_eq!(&result[0..4], &[0x00, 0x00, 0x00, 0x00]); // 0xFF ^ 0xFF = 0
@@ -544,7 +544,7 @@ fn test_pxor_self() {
     let mut engine = Engine::new(EngineMode::Mode64);
 
     // Map memory
-    engine.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
+    engine.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
 
     // Test PXOR with same register (common idiom to zero a register)
     let code = vec![
@@ -563,7 +563,7 @@ fn test_pxor_self() {
         0x00,
     ];
 
-    engine.mem_write(0x1000, &code).unwrap();
+    engine.memory.write(0x1000, &code).unwrap();
     engine.reg_write(Register::RIP, 0x1000);
 
     // Execute instructions (stop after the 3 instructions)
@@ -571,6 +571,6 @@ fn test_pxor_self() {
 
     // Check result - should be all zeros
     let mut result = vec![0u8; 16];
-    engine.mem_read(0x1030, &mut result).unwrap();
+    engine.memory.read(0x1030, &mut result).unwrap();
     assert_eq!(result, vec![0u8; 16]);
 }

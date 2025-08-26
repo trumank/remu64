@@ -1,4 +1,4 @@
-use amd64_emu::{Engine, EngineMode, Permission, Register};
+use amd64_emu::{memory::MemoryTrait as _, Engine, EngineMode, Permission, Register};
 
 #[test]
 fn test_movaps() {
@@ -10,9 +10,10 @@ fn test_movaps() {
 
     let base = 0x1000;
     engine
-        .mem_map(base, 0x1000, Permission::READ | Permission::EXEC)
+        .memory
+        .map(base, 0x1000, Permission::READ | Permission::EXEC)
         .unwrap();
-    engine.mem_write(base, &code).unwrap();
+    engine.memory.write_code(base, &code).unwrap();
 
     // Set XMM1 to a test value
     let test_value = 0x0123456789ABCDEF0123456789ABCDEFu128;
@@ -37,9 +38,10 @@ fn test_xorps() {
 
     let base = 0x1000;
     engine
-        .mem_map(base, 0x1000, Permission::READ | Permission::EXEC)
+        .memory
+        .map(base, 0x1000, Permission::READ | Permission::EXEC)
         .unwrap();
-    engine.mem_write(base, &code).unwrap();
+    engine.memory.write_code(base, &code).unwrap();
 
     // Set XMM0 to a non-zero value
     engine.xmm_write(Register::XMM0, 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFu128);
@@ -63,9 +65,10 @@ fn test_addps() {
 
     let base = 0x1000;
     engine
-        .mem_map(base, 0x1000, Permission::READ | Permission::EXEC)
+        .memory
+        .map(base, 0x1000, Permission::READ | Permission::EXEC)
         .unwrap();
-    engine.mem_write(base, &code).unwrap();
+    engine.memory.write_code(base, &code).unwrap();
 
     // Set up test values (4 floats in each XMM register)
     // XMM0 = [1.0, 2.0, 3.0, 4.0]
@@ -113,9 +116,10 @@ fn test_subps() {
 
     let base = 0x1000;
     engine
-        .mem_map(base, 0x1000, Permission::READ | Permission::EXEC)
+        .memory
+        .map(base, 0x1000, Permission::READ | Permission::EXEC)
         .unwrap();
-    engine.mem_write(base, &code).unwrap();
+    engine.memory.write_code(base, &code).unwrap();
 
     // Set up test values
     // XMM0 = [10.0, 20.0, 30.0, 40.0]
@@ -163,9 +167,10 @@ fn test_mulps() {
 
     let base = 0x1000;
     engine
-        .mem_map(base, 0x1000, Permission::READ | Permission::EXEC)
+        .memory
+        .map(base, 0x1000, Permission::READ | Permission::EXEC)
         .unwrap();
-    engine.mem_write(base, &code).unwrap();
+    engine.memory.write_code(base, &code).unwrap();
 
     // Set up test values
     // XMM0 = [2.0, 3.0, 4.0, 5.0]
@@ -213,9 +218,10 @@ fn test_divps() {
 
     let base = 0x1000;
     engine
-        .mem_map(base, 0x1000, Permission::READ | Permission::EXEC)
+        .memory
+        .map(base, 0x1000, Permission::READ | Permission::EXEC)
         .unwrap();
-    engine.mem_write(base, &code).unwrap();
+    engine.memory.write_code(base, &code).unwrap();
 
     // Set up test values
     // XMM0 = [10.0, 20.0, 30.0, 40.0]
@@ -263,9 +269,10 @@ fn test_andps() {
 
     let base = 0x1000;
     engine
-        .mem_map(base, 0x1000, Permission::READ | Permission::EXEC)
+        .memory
+        .map(base, 0x1000, Permission::READ | Permission::EXEC)
         .unwrap();
-    engine.mem_write(base, &code).unwrap();
+    engine.memory.write_code(base, &code).unwrap();
 
     // Set up test values for bitwise operations
     engine.xmm_write(Register::XMM0, 0xFFFFFFFF00000000FFFFFFFF00000000u128);
@@ -291,9 +298,10 @@ fn test_orps() {
 
     let base = 0x1000;
     engine
-        .mem_map(base, 0x1000, Permission::READ | Permission::EXEC)
+        .memory
+        .map(base, 0x1000, Permission::READ | Permission::EXEC)
         .unwrap();
-    engine.mem_write(base, &code).unwrap();
+    engine.memory.write_code(base, &code).unwrap();
 
     // Set up test values for bitwise operations
     engine.xmm_write(Register::XMM0, 0xFF00FF00FF00FF00FF00FF00FF00FF00u128);

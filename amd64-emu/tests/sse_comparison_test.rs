@@ -1,11 +1,11 @@
-use amd64_emu::{Engine, EngineMode, Permission, Register};
+use amd64_emu::{memory::MemoryTrait as _, Engine, EngineMode, Permission, Register};
 
 #[test]
 fn test_cmpps_equal() {
     let mut emu = Engine::new(EngineMode::Mode64);
 
     // Map memory for code
-    emu.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
+    emu.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
 
     // Initialize XMM registers with test values
     // XMM0 = [1.0, 2.0, 3.0, 4.0]
@@ -27,7 +27,7 @@ fn test_cmpps_equal() {
     // 0F C2 C1 00
     let code = vec![0x0F, 0xC2, 0xC1, 0x00];
 
-    emu.mem_write(0x1000, &code).unwrap();
+    emu.memory.write(0x1000, &code).unwrap();
     emu.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
         .unwrap();
 
@@ -43,7 +43,7 @@ fn test_cmpps_equal() {
 fn test_cmpps_less_than() {
     let mut emu = Engine::new(EngineMode::Mode64);
 
-    emu.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
+    emu.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
 
     // XMM0 = [1.0, 6.0, 2.0, 4.0]
     // XMM1 = [2.0, 5.0, 3.0, 3.0]
@@ -63,7 +63,7 @@ fn test_cmpps_less_than() {
     // CMPPS XMM0, XMM1, 1 (less than comparison)
     let code = vec![0x0F, 0xC2, 0xC1, 0x01];
 
-    emu.mem_write(0x1000, &code).unwrap();
+    emu.memory.write(0x1000, &code).unwrap();
     emu.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
         .unwrap();
 
@@ -79,7 +79,7 @@ fn test_cmpps_less_than() {
 fn test_cmpss_equal() {
     let mut emu = Engine::new(EngineMode::Mode64);
 
-    emu.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
+    emu.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
 
     // XMM0 = [3.0, keep, keep, keep]
     // XMM1 = [3.0, x, x, x]
@@ -97,7 +97,7 @@ fn test_cmpss_equal() {
     // F3 0F C2 C1 00
     let code = vec![0xF3, 0x0F, 0xC2, 0xC1, 0x00];
 
-    emu.mem_write(0x1000, &code).unwrap();
+    emu.memory.write(0x1000, &code).unwrap();
     emu.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
         .unwrap();
 
@@ -114,7 +114,7 @@ fn test_cmpss_equal() {
 fn test_comiss_equal() {
     let mut emu = Engine::new(EngineMode::Mode64);
 
-    emu.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
+    emu.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
 
     // XMM0 = [5.0, ...]
     // XMM1 = [5.0, ...]
@@ -128,7 +128,7 @@ fn test_comiss_equal() {
     // 0F 2F C1
     let code = vec![0x0F, 0x2F, 0xC1];
 
-    emu.mem_write(0x1000, &code).unwrap();
+    emu.memory.write(0x1000, &code).unwrap();
     emu.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
         .unwrap();
 
@@ -143,7 +143,7 @@ fn test_comiss_equal() {
 fn test_comiss_less_than() {
     let mut emu = Engine::new(EngineMode::Mode64);
 
-    emu.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
+    emu.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
 
     // XMM0 = [3.0, ...]
     // XMM1 = [7.0, ...]
@@ -156,7 +156,7 @@ fn test_comiss_less_than() {
     // COMISS XMM0, XMM1
     let code = vec![0x0F, 0x2F, 0xC1];
 
-    emu.mem_write(0x1000, &code).unwrap();
+    emu.memory.write(0x1000, &code).unwrap();
     emu.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
         .unwrap();
 
@@ -171,7 +171,7 @@ fn test_comiss_less_than() {
 fn test_comiss_greater_than() {
     let mut emu = Engine::new(EngineMode::Mode64);
 
-    emu.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
+    emu.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
 
     // XMM0 = [9.0, ...]
     // XMM1 = [2.0, ...]
@@ -184,7 +184,7 @@ fn test_comiss_greater_than() {
     // COMISS XMM0, XMM1
     let code = vec![0x0F, 0x2F, 0xC1];
 
-    emu.mem_write(0x1000, &code).unwrap();
+    emu.memory.write(0x1000, &code).unwrap();
     emu.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
         .unwrap();
 
@@ -199,7 +199,7 @@ fn test_comiss_greater_than() {
 fn test_ucomiss_nan() {
     let mut emu = Engine::new(EngineMode::Mode64);
 
-    emu.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
+    emu.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
 
     // XMM0 = [NaN, ...]
     // XMM1 = [5.0, ...]
@@ -213,7 +213,7 @@ fn test_ucomiss_nan() {
     // 0F 2E C1
     let code = vec![0x0F, 0x2E, 0xC1];
 
-    emu.mem_write(0x1000, &code).unwrap();
+    emu.memory.write(0x1000, &code).unwrap();
     emu.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
         .unwrap();
 
@@ -228,7 +228,7 @@ fn test_ucomiss_nan() {
 fn test_cmpps_unordered() {
     let mut emu = Engine::new(EngineMode::Mode64);
 
-    emu.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
+    emu.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
 
     // XMM0 = [NaN, 2.0, NaN, 4.0]
     // XMM1 = [1.0, NaN, 3.0, 4.0]
@@ -248,7 +248,7 @@ fn test_cmpps_unordered() {
     // CMPPS XMM0, XMM1, 3 (unordered comparison)
     let code = vec![0x0F, 0xC2, 0xC1, 0x03];
 
-    emu.mem_write(0x1000, &code).unwrap();
+    emu.memory.write(0x1000, &code).unwrap();
     emu.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
         .unwrap();
 

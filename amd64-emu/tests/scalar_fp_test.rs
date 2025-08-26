@@ -1,11 +1,11 @@
-use amd64_emu::{Engine, EngineMode, Permission, Register};
+use amd64_emu::{memory::MemoryTrait as _, Engine, EngineMode, Permission, Register};
 
 #[test]
 fn test_addsd() {
     let mut engine = Engine::new(EngineMode::Mode64);
 
     // Map memory
-    engine.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
+    engine.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
 
     // Test ADDSD - Add Scalar Double-Precision Floating-Point Value
     let code = vec![
@@ -28,7 +28,7 @@ fn test_addsd() {
         0x00,
     ];
 
-    engine.mem_write(0x1000, &code).unwrap();
+    engine.memory.write(0x1000, &code).unwrap();
     engine.reg_write(Register::RIP, 0x1000);
 
     // Execute instructions
@@ -39,7 +39,7 @@ fn test_addsd() {
 
     // Check result
     let mut result = vec![0u8; 16];
-    engine.mem_read(0x103C, &mut result).unwrap();
+    engine.memory.read(0x103C, &mut result).unwrap();
 
     // Expected: 4.0 + 3.0 = 7.0
     let result_double = f64::from_bits(u64::from_le_bytes([
@@ -63,7 +63,7 @@ fn test_subsd() {
     let mut engine = Engine::new(EngineMode::Mode64);
 
     // Map memory
-    engine.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
+    engine.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
 
     // Test SUBSD - Subtract Scalar Double-Precision Floating-Point Value
     let code = vec![
@@ -86,7 +86,7 @@ fn test_subsd() {
         0x00,
     ];
 
-    engine.mem_write(0x1000, &code).unwrap();
+    engine.memory.write(0x1000, &code).unwrap();
     engine.reg_write(Register::RIP, 0x1000);
 
     // Execute instructions
@@ -97,7 +97,7 @@ fn test_subsd() {
 
     // Check result
     let mut result = vec![0u8; 16];
-    engine.mem_read(0x103C, &mut result).unwrap();
+    engine.memory.read(0x103C, &mut result).unwrap();
 
     // Expected: 8.0 - 3.0 = 5.0
     let result_double = f64::from_bits(u64::from_le_bytes([
@@ -111,7 +111,7 @@ fn test_mulsd() {
     let mut engine = Engine::new(EngineMode::Mode64);
 
     // Map memory
-    engine.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
+    engine.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
 
     // Test MULSD - Multiply Scalar Double-Precision Floating-Point Value
     let code = vec![
@@ -134,7 +134,7 @@ fn test_mulsd() {
         0x00,
     ];
 
-    engine.mem_write(0x1000, &code).unwrap();
+    engine.memory.write(0x1000, &code).unwrap();
     engine.reg_write(Register::RIP, 0x1000);
 
     // Execute instructions
@@ -145,7 +145,7 @@ fn test_mulsd() {
 
     // Check result
     let mut result = vec![0u8; 16];
-    engine.mem_read(0x103C, &mut result).unwrap();
+    engine.memory.read(0x103C, &mut result).unwrap();
 
     // Expected: 5.0 * 2.0 = 10.0
     let result_double = f64::from_bits(u64::from_le_bytes([
@@ -159,7 +159,7 @@ fn test_divsd() {
     let mut engine = Engine::new(EngineMode::Mode64);
 
     // Map memory
-    engine.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
+    engine.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
 
     // Test DIVSD - Divide Scalar Double-Precision Floating-Point Value
     let code = vec![
@@ -182,7 +182,7 @@ fn test_divsd() {
         0x00,
     ];
 
-    engine.mem_write(0x1000, &code).unwrap();
+    engine.memory.write(0x1000, &code).unwrap();
     engine.reg_write(Register::RIP, 0x1000);
 
     // Execute instructions
@@ -193,7 +193,7 @@ fn test_divsd() {
 
     // Check result
     let mut result = vec![0u8; 16];
-    engine.mem_read(0x103C, &mut result).unwrap();
+    engine.memory.read(0x103C, &mut result).unwrap();
 
     // Expected: 12.0 / 3.0 = 4.0
     let result_double = f64::from_bits(u64::from_le_bytes([
@@ -207,7 +207,7 @@ fn test_addss() {
     let mut engine = Engine::new(EngineMode::Mode64);
 
     // Map memory
-    engine.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
+    engine.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
 
     // Test ADDSS - Add Scalar Single-Precision Floating-Point Value
     let code = vec![
@@ -234,7 +234,7 @@ fn test_addss() {
         0x00,
     ];
 
-    engine.mem_write(0x1000, &code).unwrap();
+    engine.memory.write(0x1000, &code).unwrap();
     engine.reg_write(Register::RIP, 0x1000);
 
     // Execute instructions
@@ -245,7 +245,7 @@ fn test_addss() {
 
     // Check result
     let mut result = vec![0u8; 16];
-    engine.mem_read(0x103C, &mut result).unwrap();
+    engine.memory.read(0x103C, &mut result).unwrap();
 
     // Expected: 4.0 + 3.0 = 7.0
     let result_float = f32::from_bits(u32::from_le_bytes([

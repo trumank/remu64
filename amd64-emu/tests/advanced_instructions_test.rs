@@ -1,18 +1,18 @@
-use amd64_emu::{Engine, EngineMode, Permission, Register};
+use amd64_emu::{memory::MemoryTrait as _, Engine, EngineMode, Permission, Register};
 
 #[test]
 fn test_neg_instruction() {
     let mut engine = Engine::new(EngineMode::Mode64);
 
     // Map memory for code
-    engine.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
+    engine.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
 
     // Test NEG with positive value
     engine.reg_write(Register::RAX, 0x42);
 
     // NEG RAX (48 F7 D8)
     let code = vec![0x48, 0xF7, 0xD8];
-    engine.mem_write(0x1000, &code).unwrap();
+    engine.memory.write(0x1000, &code).unwrap();
     engine
         .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
         .unwrap();
@@ -34,13 +34,13 @@ fn test_not_instruction() {
     let mut engine = Engine::new(EngineMode::Mode64);
 
     // Map memory for code
-    engine.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
+    engine.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
 
     engine.reg_write(Register::RAX, 0x00FF00FF00FF00FF);
 
     // NOT RAX (48 F7 D0)
     let code = vec![0x48, 0xF7, 0xD0];
-    engine.mem_write(0x1000, &code).unwrap();
+    engine.memory.write(0x1000, &code).unwrap();
     engine
         .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
         .unwrap();
@@ -53,14 +53,14 @@ fn test_shift_left() {
     let mut engine = Engine::new(EngineMode::Mode64);
 
     // Map memory for code
-    engine.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
+    engine.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
 
     engine.reg_write(Register::RAX, 0x1);
     engine.reg_write(Register::RCX, 4);
 
     // SHL RAX, CL (48 D3 E0)
     let code = vec![0x48, 0xD3, 0xE0];
-    engine.mem_write(0x1000, &code).unwrap();
+    engine.memory.write(0x1000, &code).unwrap();
     engine
         .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
         .unwrap();
@@ -73,14 +73,14 @@ fn test_shift_right_logical() {
     let mut engine = Engine::new(EngineMode::Mode64);
 
     // Map memory for code
-    engine.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
+    engine.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
 
     engine.reg_write(Register::RAX, 0x80);
     engine.reg_write(Register::RCX, 4);
 
     // SHR RAX, CL (48 D3 E8)
     let code = vec![0x48, 0xD3, 0xE8];
-    engine.mem_write(0x1000, &code).unwrap();
+    engine.memory.write(0x1000, &code).unwrap();
     engine
         .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
         .unwrap();
@@ -93,7 +93,7 @@ fn test_shift_right_arithmetic() {
     let mut engine = Engine::new(EngineMode::Mode64);
 
     // Map memory for code
-    engine.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
+    engine.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
 
     // Test with negative number to verify sign extension
     engine.reg_write(Register::RAX, 0xF000000000000000u64);
@@ -101,7 +101,7 @@ fn test_shift_right_arithmetic() {
 
     // SAR RAX, CL (48 D3 F8)
     let code = vec![0x48, 0xD3, 0xF8];
-    engine.mem_write(0x1000, &code).unwrap();
+    engine.memory.write(0x1000, &code).unwrap();
     engine
         .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
         .unwrap();
@@ -115,14 +115,14 @@ fn test_lea_instruction() {
     let mut engine = Engine::new(EngineMode::Mode64);
 
     // Map memory for code
-    engine.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
+    engine.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
 
     engine.reg_write(Register::RBX, 0x2000);
     engine.reg_write(Register::RSI, 0x8);
 
     // LEA RAX, [RBX + RSI*4 + 0x100] (48 8D 84 B3 00 01 00 00)
     let code = vec![0x48, 0x8D, 0x84, 0xB3, 0x00, 0x01, 0x00, 0x00];
-    engine.mem_write(0x1000, &code).unwrap();
+    engine.memory.write(0x1000, &code).unwrap();
     engine
         .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
         .unwrap();
@@ -136,14 +136,14 @@ fn test_rotate_left() {
     let mut engine = Engine::new(EngineMode::Mode64);
 
     // Map memory for code
-    engine.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
+    engine.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
 
     engine.reg_write(Register::RAX, 0x8000000000000001);
     engine.reg_write(Register::RCX, 1);
 
     // ROL RAX, CL (48 D3 C0)
     let code = vec![0x48, 0xD3, 0xC0];
-    engine.mem_write(0x1000, &code).unwrap();
+    engine.memory.write(0x1000, &code).unwrap();
     engine
         .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
         .unwrap();
@@ -157,14 +157,14 @@ fn test_rotate_right() {
     let mut engine = Engine::new(EngineMode::Mode64);
 
     // Map memory for code
-    engine.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
+    engine.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
 
     engine.reg_write(Register::RAX, 0x8000000000000001);
     engine.reg_write(Register::RCX, 1);
 
     // ROR RAX, CL (48 D3 C8)
     let code = vec![0x48, 0xD3, 0xC8];
-    engine.mem_write(0x1000, &code).unwrap();
+    engine.memory.write(0x1000, &code).unwrap();
     engine
         .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
         .unwrap();
@@ -178,15 +178,15 @@ fn test_xchg_instruction() {
     let mut engine = Engine::new(EngineMode::Mode64);
 
     // Map memory for code and data
-    engine.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
-    engine.mem_map(0x2000, 0x1000, Permission::ALL).unwrap();
+    engine.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
+    engine.memory.map(0x2000, 0x1000, Permission::ALL).unwrap();
 
     engine.reg_write(Register::RAX, 0x1234);
     engine.reg_write(Register::RBX, 0x5678);
 
     // XCHG RAX, RBX (48 87 D8)
     let code = vec![0x48, 0x87, 0xD8];
-    engine.mem_write(0x1000, &code).unwrap();
+    engine.memory.write(0x1000, &code).unwrap();
     engine
         .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
         .unwrap();

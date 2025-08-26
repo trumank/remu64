@@ -1,4 +1,4 @@
-use amd64_emu::{Engine, EngineMode, Permission, Register};
+use amd64_emu::{memory::MemoryTrait as _, Engine, EngineMode, Permission, Register};
 
 #[test]
 fn test_bt_instruction() {
@@ -6,7 +6,8 @@ fn test_bt_instruction() {
 
     // Map memory and load code
     engine
-        .mem_map(
+        .memory
+        .map(
             0x1000,
             0x1000,
             Permission::READ | Permission::WRITE | Permission::EXEC,
@@ -21,7 +22,7 @@ fn test_bt_instruction() {
         0x48, 0x0f, 0xa3, 0xc8, // bt rax, rcx
     ];
 
-    engine.mem_write(0x1000, &code).unwrap();
+    engine.memory.write(0x1000, &code).unwrap();
     engine.reg_write(Register::RIP, 0x1000);
 
     engine
@@ -38,7 +39,7 @@ fn test_bt_instruction() {
         0x48, 0x0f, 0xa3, 0xc8, // bt rax, rcx
     ];
 
-    engine.mem_write(0x1000, &code2).unwrap();
+    engine.memory.write(0x1000, &code2).unwrap();
     engine.reg_write(Register::RIP, 0x1000);
 
     engine
@@ -54,7 +55,8 @@ fn test_bts_instruction() {
     let mut engine = Engine::new(EngineMode::Mode64);
 
     engine
-        .mem_map(
+        .memory
+        .map(
             0x1000,
             0x1000,
             Permission::READ | Permission::WRITE | Permission::EXEC,
@@ -68,7 +70,7 @@ fn test_bts_instruction() {
         0x48, 0x0f, 0xab, 0xc8, // bts rax, rcx
     ];
 
-    engine.mem_write(0x1000, &code).unwrap();
+    engine.memory.write(0x1000, &code).unwrap();
     engine.reg_write(Register::RIP, 0x1000);
 
     engine
@@ -86,7 +88,8 @@ fn test_btr_instruction() {
     let mut engine = Engine::new(EngineMode::Mode64);
 
     engine
-        .mem_map(
+        .memory
+        .map(
             0x1000,
             0x1000,
             Permission::READ | Permission::WRITE | Permission::EXEC,
@@ -100,7 +103,7 @@ fn test_btr_instruction() {
         0x48, 0x0f, 0xb3, 0xc8, // btr rax, rcx
     ];
 
-    engine.mem_write(0x1000, &code).unwrap();
+    engine.memory.write(0x1000, &code).unwrap();
     engine.reg_write(Register::RIP, 0x1000);
 
     engine
@@ -118,7 +121,8 @@ fn test_btc_instruction() {
     let mut engine = Engine::new(EngineMode::Mode64);
 
     engine
-        .mem_map(
+        .memory
+        .map(
             0x1000,
             0x1000,
             Permission::READ | Permission::WRITE | Permission::EXEC,
@@ -132,7 +136,7 @@ fn test_btc_instruction() {
         0x48, 0x0f, 0xbb, 0xc8, // btc rax, rcx
     ];
 
-    engine.mem_write(0x1000, &code).unwrap();
+    engine.memory.write(0x1000, &code).unwrap();
     engine.reg_write(Register::RIP, 0x1000);
 
     engine
@@ -150,7 +154,8 @@ fn test_bsf_instruction() {
     let mut engine = Engine::new(EngineMode::Mode64);
 
     engine
-        .mem_map(
+        .memory
+        .map(
             0x1000,
             0x1000,
             Permission::READ | Permission::WRITE | Permission::EXEC,
@@ -163,7 +168,7 @@ fn test_bsf_instruction() {
         0x48, 0x0f, 0xbc, 0xc1, // bsf rax, rcx
     ];
 
-    engine.mem_write(0x1000, &code).unwrap();
+    engine.memory.write(0x1000, &code).unwrap();
     engine.reg_write(Register::RIP, 0x1000);
 
     engine
@@ -180,7 +185,8 @@ fn test_bsf_zero() {
     let mut engine = Engine::new(EngineMode::Mode64);
 
     engine
-        .mem_map(
+        .memory
+        .map(
             0x1000,
             0x1000,
             Permission::READ | Permission::WRITE | Permission::EXEC,
@@ -193,7 +199,7 @@ fn test_bsf_zero() {
         0x48, 0x0f, 0xbc, 0xc1, // bsf rax, rcx
     ];
 
-    engine.mem_write(0x1000, &code).unwrap();
+    engine.memory.write(0x1000, &code).unwrap();
     engine.reg_write(Register::RIP, 0x1000);
     engine.reg_write(Register::RAX, 0xdeadbeef); // Set initial value
 
@@ -212,7 +218,8 @@ fn test_bsr_instruction() {
     let mut engine = Engine::new(EngineMode::Mode64);
 
     engine
-        .mem_map(
+        .memory
+        .map(
             0x1000,
             0x1000,
             Permission::READ | Permission::WRITE | Permission::EXEC,
@@ -225,7 +232,7 @@ fn test_bsr_instruction() {
         0x48, 0x0f, 0xbd, 0xc1, // bsr rax, rcx
     ];
 
-    engine.mem_write(0x1000, &code).unwrap();
+    engine.memory.write(0x1000, &code).unwrap();
     engine.reg_write(Register::RIP, 0x1000);
 
     engine
@@ -242,7 +249,8 @@ fn test_bsr_zero() {
     let mut engine = Engine::new(EngineMode::Mode64);
 
     engine
-        .mem_map(
+        .memory
+        .map(
             0x1000,
             0x1000,
             Permission::READ | Permission::WRITE | Permission::EXEC,
@@ -255,7 +263,7 @@ fn test_bsr_zero() {
         0x48, 0x0f, 0xbd, 0xc1, // bsr rax, rcx
     ];
 
-    engine.mem_write(0x1000, &code).unwrap();
+    engine.memory.write(0x1000, &code).unwrap();
     engine.reg_write(Register::RIP, 0x1000);
     engine.reg_write(Register::RAX, 0xdeadbeef); // Set initial value
 
@@ -274,7 +282,8 @@ fn test_bit_ops_32bit() {
     let mut engine = Engine::new(EngineMode::Mode64);
 
     engine
-        .mem_map(
+        .memory
+        .map(
             0x1000,
             0x1000,
             Permission::READ | Permission::WRITE | Permission::EXEC,
@@ -288,7 +297,7 @@ fn test_bit_ops_32bit() {
         0x0f, 0xa3, 0xc8, // bt eax, ecx (32-bit)
     ];
 
-    engine.mem_write(0x1000, &code).unwrap();
+    engine.memory.write(0x1000, &code).unwrap();
     engine.reg_write(Register::RIP, 0x1000);
 
     engine

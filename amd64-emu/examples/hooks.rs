@@ -1,4 +1,5 @@
 use amd64_emu::hooks::HookManager;
+use amd64_emu::memory::MemoryTrait;
 use amd64_emu::{Engine, EngineMode, Permission, Register};
 
 // Custom hook manager implementation
@@ -18,8 +19,13 @@ impl CustomHooks {
     }
 }
 
-impl HookManager for CustomHooks {
-    fn on_code(&mut self, engine: &mut Engine, address: u64, size: usize) -> amd64_emu::Result<()> {
+impl<M: MemoryTrait> HookManager<M> for CustomHooks {
+    fn on_code(
+        &mut self,
+        engine: &mut Engine<M>,
+        address: u64,
+        size: usize,
+    ) -> amd64_emu::Result<()> {
         self.code_hook_count += 1;
         println!(
             "[CODE] Executing instruction at {:#x} (size: {} bytes)",
@@ -31,7 +37,7 @@ impl HookManager for CustomHooks {
 
     fn on_mem_read(
         &mut self,
-        _engine: &mut Engine,
+        _engine: &mut Engine<M>,
         address: u64,
         size: usize,
     ) -> amd64_emu::Result<()> {
@@ -45,7 +51,7 @@ impl HookManager for CustomHooks {
 
     fn on_mem_write(
         &mut self,
-        _engine: &mut Engine,
+        _engine: &mut Engine<M>,
         address: u64,
         size: usize,
     ) -> amd64_emu::Result<()> {
@@ -64,9 +70,10 @@ fn main() {
     let mut engine = Engine::new(EngineMode::Mode64);
     let mut hooks = CustomHooks::new();
 
-    engine.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
+    engine.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
     engine
-        .mem_map(0x2000, 0x1000, Permission::READ | Permission::WRITE)
+        .memory
+        .map(0x2000, 0x1000, Permission::READ | Permission::WRITE)
         .unwrap();
 
     let code = vec![
@@ -76,7 +83,7 @@ fn main() {
         0x00,
     ];
 
-    engine.mem_write(0x1000, &code).unwrap();
+    engine.memory.write(0x1000, &code).unwrap();
 
     println!("\nStarting emulation with hooks...\n");
     engine

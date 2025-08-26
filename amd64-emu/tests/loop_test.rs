@@ -1,4 +1,4 @@
-use amd64_emu::{Engine, EngineMode, Permission, Register};
+use amd64_emu::{memory::MemoryTrait as _, Engine, EngineMode, Permission, Register};
 
 #[test]
 fn test_loop_basic() {
@@ -6,7 +6,8 @@ fn test_loop_basic() {
 
     // Map memory
     engine
-        .mem_map(
+        .memory
+        .map(
             0x1000,
             0x1000,
             Permission::READ | Permission::WRITE | Permission::EXEC,
@@ -28,7 +29,7 @@ fn test_loop_basic() {
         0x90, // nop
     ];
 
-    engine.mem_write(0x1000, &code).unwrap();
+    engine.memory.write(0x1000, &code).unwrap();
     engine
         .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
         .unwrap();
@@ -44,7 +45,8 @@ fn test_loope_condition_met() {
 
     // Map memory
     engine
-        .mem_map(
+        .memory
+        .map(
             0x1000,
             0x1000,
             Permission::READ | Permission::WRITE | Permission::EXEC,
@@ -70,7 +72,7 @@ fn test_loope_condition_met() {
         0x90, // nop
     ];
 
-    engine.mem_write(0x1000, &code).unwrap();
+    engine.memory.write(0x1000, &code).unwrap();
     engine
         .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
         .unwrap();
@@ -93,7 +95,8 @@ fn test_loopne_condition_met() {
 
     // Map memory
     engine
-        .mem_map(
+        .memory
+        .map(
             0x1000,
             0x1000,
             Permission::READ | Permission::WRITE | Permission::EXEC,
@@ -119,7 +122,7 @@ fn test_loopne_condition_met() {
         0x90, // nop
     ];
 
-    engine.mem_write(0x1000, &code).unwrap();
+    engine.memory.write(0x1000, &code).unwrap();
     engine
         .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
         .unwrap();
@@ -135,7 +138,8 @@ fn test_loop_zero_count() {
 
     // Map memory
     engine
-        .mem_map(
+        .memory
+        .map(
             0x1000,
             0x1000,
             Permission::READ | Permission::WRITE | Permission::EXEC,
@@ -157,7 +161,7 @@ fn test_loop_zero_count() {
         0x90, // nop
     ];
 
-    engine.mem_write(0x1000, &code).unwrap();
+    engine.memory.write(0x1000, &code).unwrap();
     engine
         .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
         .unwrap();
@@ -173,7 +177,8 @@ fn test_loope_early_exit() {
 
     // Map memory
     engine
-        .mem_map(
+        .memory
+        .map(
             0x1000,
             0x1000,
             Permission::READ | Permission::WRITE | Permission::EXEC,
@@ -197,7 +202,7 @@ fn test_loope_early_exit() {
         0x90, // nop
     ];
 
-    engine.mem_write(0x1000, &code).unwrap();
+    engine.memory.write(0x1000, &code).unwrap();
     engine
         .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
         .unwrap();

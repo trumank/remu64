@@ -1,14 +1,18 @@
-use amd64_emu::{cpu::Register, memory::Permission, Engine, EngineMode};
+use amd64_emu::{
+    cpu::Register,
+    memory::{MemoryTrait as _, Permission},
+    Engine, EngineMode,
+};
 
 #[test]
 fn test_movs_byte() {
     let mut emu = Engine::new(EngineMode::Mode64);
 
     // Map memory
-    emu.mem_map(0x1000, 0x2000, Permission::all()).unwrap();
+    emu.memory.map(0x1000, 0x2000, Permission::all()).unwrap();
 
     // Write source data
-    emu.mem_write(0x1500, b"Hello").unwrap();
+    emu.memory.write(0x1500, b"Hello").unwrap();
 
     // Set up registers
     emu.reg_write(Register::RSI, 0x1500);
@@ -16,14 +20,14 @@ fn test_movs_byte() {
 
     // MOVS BYTE instruction
     let code = vec![0xA4]; // MOVSB
-    emu.mem_write(0x1000, &code).unwrap();
+    emu.memory.write(0x1000, &code).unwrap();
 
     emu.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
         .unwrap();
 
     // Check that byte was copied
     let mut buf = vec![0u8; 1];
-    emu.mem_read(0x1600, &mut buf).unwrap();
+    emu.memory.read(0x1600, &mut buf).unwrap();
     assert_eq!(buf[0], b'H');
 
     // Check RSI and RDI were incremented
@@ -36,10 +40,10 @@ fn test_rep_movs() {
     let mut emu = Engine::new(EngineMode::Mode64);
 
     // Map memory
-    emu.mem_map(0x1000, 0x2000, Permission::all()).unwrap();
+    emu.memory.map(0x1000, 0x2000, Permission::all()).unwrap();
 
     // Write source data
-    emu.mem_write(0x1500, b"Hello, World!").unwrap();
+    emu.memory.write(0x1500, b"Hello, World!").unwrap();
 
     // Set up registers
     emu.reg_write(Register::RSI, 0x1500);
@@ -48,14 +52,14 @@ fn test_rep_movs() {
 
     // REP MOVS BYTE instruction
     let code = vec![0xF3, 0xA4]; // REP MOVSB
-    emu.mem_write(0x1000, &code).unwrap();
+    emu.memory.write(0x1000, &code).unwrap();
 
     emu.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
         .unwrap();
 
     // Check that string was copied
     let mut buf = vec![0u8; 13];
-    emu.mem_read(0x1600, &mut buf).unwrap();
+    emu.memory.read(0x1600, &mut buf).unwrap();
     assert_eq!(&buf, b"Hello, World!");
 
     // Check RCX is 0
@@ -71,7 +75,7 @@ fn test_stos_byte() {
     let mut emu = Engine::new(EngineMode::Mode64);
 
     // Map memory
-    emu.mem_map(0x1000, 0x2000, Permission::all()).unwrap();
+    emu.memory.map(0x1000, 0x2000, Permission::all()).unwrap();
 
     // Set up registers
     emu.reg_write(Register::AL, 0x41); // 'A'
@@ -79,14 +83,14 @@ fn test_stos_byte() {
 
     // STOS BYTE instruction
     let code = vec![0xAA]; // STOSB
-    emu.mem_write(0x1000, &code).unwrap();
+    emu.memory.write(0x1000, &code).unwrap();
 
     emu.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
         .unwrap();
 
     // Check that byte was stored
     let mut buf = vec![0u8; 1];
-    emu.mem_read(0x1500, &mut buf).unwrap();
+    emu.memory.read(0x1500, &mut buf).unwrap();
     assert_eq!(buf[0], 0x41);
 
     // Check RDI was incremented
@@ -98,7 +102,7 @@ fn test_rep_stos() {
     let mut emu = Engine::new(EngineMode::Mode64);
 
     // Map memory
-    emu.mem_map(0x1000, 0x2000, Permission::all()).unwrap();
+    emu.memory.map(0x1000, 0x2000, Permission::all()).unwrap();
 
     // Set up registers
     emu.reg_write(Register::AL, 0x00); // Fill with zeros
@@ -106,18 +110,18 @@ fn test_rep_stos() {
     emu.reg_write(Register::RCX, 16); // Fill 16 bytes
 
     // Write non-zero data first
-    emu.mem_write(0x1500, b"XXXXXXXXXXXXXXXX").unwrap();
+    emu.memory.write(0x1500, b"XXXXXXXXXXXXXXXX").unwrap();
 
     // REP STOS BYTE instruction
     let code = vec![0xF3, 0xAA]; // REP STOSB
-    emu.mem_write(0x1000, &code).unwrap();
+    emu.memory.write(0x1000, &code).unwrap();
 
     emu.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
         .unwrap();
 
     // Check that memory was zeroed
     let mut buf = vec![0u8; 16];
-    emu.mem_read(0x1500, &mut buf).unwrap();
+    emu.memory.read(0x1500, &mut buf).unwrap();
     assert_eq!(buf, vec![0u8; 16]);
 
     // Check RCX is 0
@@ -132,10 +136,10 @@ fn test_lods_byte() {
     let mut emu = Engine::new(EngineMode::Mode64);
 
     // Map memory
-    emu.mem_map(0x1000, 0x2000, Permission::all()).unwrap();
+    emu.memory.map(0x1000, 0x2000, Permission::all()).unwrap();
 
     // Write source data
-    emu.mem_write(0x1500, b"Z").unwrap();
+    emu.memory.write(0x1500, b"Z").unwrap();
 
     // Set up registers
     emu.reg_write(Register::RSI, 0x1500);
@@ -143,7 +147,7 @@ fn test_lods_byte() {
 
     // LODS BYTE instruction
     let code = vec![0xAC]; // LODSB
-    emu.mem_write(0x1000, &code).unwrap();
+    emu.memory.write(0x1000, &code).unwrap();
 
     emu.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
         .unwrap();
@@ -160,10 +164,10 @@ fn test_scas_byte() {
     let mut emu = Engine::new(EngineMode::Mode64);
 
     // Map memory
-    emu.mem_map(0x1000, 0x2000, Permission::all()).unwrap();
+    emu.memory.map(0x1000, 0x2000, Permission::all()).unwrap();
 
     // Write data to scan
-    emu.mem_write(0x1500, b"Hello").unwrap();
+    emu.memory.write(0x1500, b"Hello").unwrap();
 
     // Set up registers
     emu.reg_write(Register::AL, b'e' as u64);
@@ -171,7 +175,7 @@ fn test_scas_byte() {
 
     // SCAS BYTE instruction
     let code = vec![0xAE]; // SCASB
-    emu.mem_write(0x1000, &code).unwrap();
+    emu.memory.write(0x1000, &code).unwrap();
 
     emu.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
         .unwrap();
@@ -189,10 +193,10 @@ fn test_repz_scas() {
     let mut emu = Engine::new(EngineMode::Mode64);
 
     // Map memory
-    emu.mem_map(0x1000, 0x2000, Permission::all()).unwrap();
+    emu.memory.map(0x1000, 0x2000, Permission::all()).unwrap();
 
     // Write data to scan (all 'A's then a 'B')
-    emu.mem_write(0x1500, b"AAAAAB").unwrap();
+    emu.memory.write(0x1500, b"AAAAAB").unwrap();
 
     // Set up registers
     emu.reg_write(Register::AL, b'A' as u64);
@@ -201,7 +205,7 @@ fn test_repz_scas() {
 
     // REPZ SCAS BYTE instruction - scan while equal
     let code = vec![0xF3, 0xAE]; // REPZ SCASB
-    emu.mem_write(0x1000, &code).unwrap();
+    emu.memory.write(0x1000, &code).unwrap();
 
     emu.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
         .unwrap();
@@ -220,11 +224,11 @@ fn test_cmps_byte() {
     let mut emu = Engine::new(EngineMode::Mode64);
 
     // Map memory
-    emu.mem_map(0x1000, 0x2000, Permission::all()).unwrap();
+    emu.memory.map(0x1000, 0x2000, Permission::all()).unwrap();
 
     // Write data to compare
-    emu.mem_write(0x1500, b"AB").unwrap();
-    emu.mem_write(0x1600, b"AC").unwrap();
+    emu.memory.write(0x1500, b"AB").unwrap();
+    emu.memory.write(0x1600, b"AC").unwrap();
 
     // Set up registers
     emu.reg_write(Register::RSI, 0x1501); // Point to 'B'
@@ -232,7 +236,7 @@ fn test_cmps_byte() {
 
     // CMPS BYTE instruction
     let code = vec![0xA6]; // CMPSB
-    emu.mem_write(0x1000, &code).unwrap();
+    emu.memory.write(0x1000, &code).unwrap();
 
     emu.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
         .unwrap();
@@ -252,11 +256,11 @@ fn test_repz_cmps() {
     let mut emu = Engine::new(EngineMode::Mode64);
 
     // Map memory
-    emu.mem_map(0x1000, 0x2000, Permission::all()).unwrap();
+    emu.memory.map(0x1000, 0x2000, Permission::all()).unwrap();
 
     // Write strings to compare
-    emu.mem_write(0x1500, b"Hello").unwrap();
-    emu.mem_write(0x1600, b"HeLLo").unwrap(); // Different at position 2
+    emu.memory.write(0x1500, b"Hello").unwrap();
+    emu.memory.write(0x1600, b"HeLLo").unwrap(); // Different at position 2
 
     // Set up registers
     emu.reg_write(Register::RSI, 0x1500);
@@ -265,7 +269,7 @@ fn test_repz_cmps() {
 
     // REPZ CMPS BYTE instruction - compare while equal
     let code = vec![0xF3, 0xA6]; // REPZ CMPSB
-    emu.mem_write(0x1000, &code).unwrap();
+    emu.memory.write(0x1000, &code).unwrap();
 
     emu.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
         .unwrap();

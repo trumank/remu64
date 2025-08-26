@@ -1,11 +1,11 @@
-use amd64_emu::{Engine, EngineMode, Permission, Register};
+use amd64_emu::{memory::MemoryTrait as _, Engine, EngineMode, Permission, Register};
 
 #[test]
 fn test_pcmpeqb() {
     let mut engine = Engine::new(EngineMode::Mode64);
 
     // Map memory
-    engine.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
+    engine.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
 
     // Test PCMPEQB - Compare packed bytes for equality
     let code = vec![
@@ -27,7 +27,7 @@ fn test_pcmpeqb() {
         0x00,
     ];
 
-    engine.mem_write(0x1000, &code).unwrap();
+    engine.memory.write(0x1000, &code).unwrap();
     engine.reg_write(Register::RIP, 0x1000);
 
     // Execute instructions
@@ -35,7 +35,7 @@ fn test_pcmpeqb() {
 
     // Check result
     let mut result = vec![0u8; 16];
-    engine.mem_read(0x1040, &mut result).unwrap();
+    engine.memory.read(0x1040, &mut result).unwrap();
 
     // Expected: 0xFF for equal bytes, 0x00 for unequal
     assert_eq!(result[0], 0xFF); // 0x01 == 0x01
@@ -61,7 +61,7 @@ fn test_pcmpeqw() {
     let mut engine = Engine::new(EngineMode::Mode64);
 
     // Map memory
-    engine.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
+    engine.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
 
     // Test PCMPEQW - Compare packed words for equality
     let code = vec![
@@ -97,7 +97,7 @@ fn test_pcmpeqw() {
         0x00,
     ];
 
-    engine.mem_write(0x1000, &code).unwrap();
+    engine.memory.write(0x1000, &code).unwrap();
     engine.reg_write(Register::RIP, 0x1000);
 
     // Execute instructions
@@ -105,7 +105,7 @@ fn test_pcmpeqw() {
 
     // Check result
     let mut result = vec![0u8; 16];
-    engine.mem_read(0x1040, &mut result).unwrap();
+    engine.memory.read(0x1040, &mut result).unwrap();
 
     // Check each 16-bit word
     assert_eq!(&result[0..2], &[0xFF, 0xFF]); // Equal
@@ -123,7 +123,7 @@ fn test_pcmpeqd() {
     let mut engine = Engine::new(EngineMode::Mode64);
 
     // Map memory
-    engine.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
+    engine.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
 
     // Test PCMPEQD - Compare packed doublewords for equality
     let code = vec![
@@ -151,7 +151,7 @@ fn test_pcmpeqd() {
         0x00,
     ];
 
-    engine.mem_write(0x1000, &code).unwrap();
+    engine.memory.write(0x1000, &code).unwrap();
     engine.reg_write(Register::RIP, 0x1000);
 
     // Execute instructions
@@ -159,7 +159,7 @@ fn test_pcmpeqd() {
 
     // Check result
     let mut result = vec![0u8; 16];
-    engine.mem_read(0x1040, &mut result).unwrap();
+    engine.memory.read(0x1040, &mut result).unwrap();
 
     // Check each 32-bit doubleword
     assert_eq!(&result[0..4], &[0xFF, 0xFF, 0xFF, 0xFF]); // Equal
@@ -173,7 +173,7 @@ fn test_pcmpgtb() {
     let mut engine = Engine::new(EngineMode::Mode64);
 
     // Map memory
-    engine.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
+    engine.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
 
     // Test PCMPGTB - Compare packed signed bytes for greater than
     let code = vec![
@@ -202,7 +202,7 @@ fn test_pcmpgtb() {
         0x00,
     ];
 
-    engine.mem_write(0x1000, &code).unwrap();
+    engine.memory.write(0x1000, &code).unwrap();
     engine.reg_write(Register::RIP, 0x1000);
 
     // Execute instructions
@@ -210,7 +210,7 @@ fn test_pcmpgtb() {
 
     // Check result
     let mut result = vec![0u8; 16];
-    engine.mem_read(0x1040, &mut result).unwrap();
+    engine.memory.read(0x1040, &mut result).unwrap();
 
     // Expected results based on signed comparison
     assert_eq!(result[0], 0xFF); // 1 > 0
@@ -236,7 +236,7 @@ fn test_pcmpgtw() {
     let mut engine = Engine::new(EngineMode::Mode64);
 
     // Map memory
-    engine.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
+    engine.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
 
     // Test PCMPGTW - Compare packed signed words for greater than
     let code = vec![
@@ -273,7 +273,7 @@ fn test_pcmpgtw() {
         0x00,
     ];
 
-    engine.mem_write(0x1000, &code).unwrap();
+    engine.memory.write(0x1000, &code).unwrap();
     engine.reg_write(Register::RIP, 0x1000);
 
     // Execute instructions
@@ -281,7 +281,7 @@ fn test_pcmpgtw() {
 
     // Check result
     let mut result = vec![0u8; 16];
-    engine.mem_read(0x1040, &mut result).unwrap();
+    engine.memory.read(0x1040, &mut result).unwrap();
 
     // Check each 16-bit word
     assert_eq!(&result[0..2], &[0xFF, 0xFF]); // 1 > 0
@@ -299,7 +299,7 @@ fn test_pcmpgtd() {
     let mut engine = Engine::new(EngineMode::Mode64);
 
     // Map memory
-    engine.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
+    engine.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
 
     // Test PCMPGTD - Compare packed signed doublewords for greater than
     let code = vec![
@@ -328,7 +328,7 @@ fn test_pcmpgtd() {
         0x00,
     ];
 
-    engine.mem_write(0x1000, &code).unwrap();
+    engine.memory.write(0x1000, &code).unwrap();
     engine.reg_write(Register::RIP, 0x1000);
 
     // Execute instructions
@@ -336,7 +336,7 @@ fn test_pcmpgtd() {
 
     // Check result
     let mut result = vec![0u8; 16];
-    engine.mem_read(0x1040, &mut result).unwrap();
+    engine.memory.read(0x1040, &mut result).unwrap();
 
     // Check each 32-bit doubleword
     assert_eq!(&result[0..4], &[0xFF, 0xFF, 0xFF, 0xFF]); // 1 > 0

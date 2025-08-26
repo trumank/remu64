@@ -1,4 +1,4 @@
-use amd64_emu::{Engine, EngineMode, Permission, Register};
+use amd64_emu::{memory::MemoryTrait as _, Engine, EngineMode, Permission, Register};
 
 #[test]
 fn test_shufps() {
@@ -12,9 +12,10 @@ fn test_shufps() {
 
     let base = 0x1000;
     engine
-        .mem_map(base, 0x1000, Permission::READ | Permission::EXEC)
+        .memory
+        .map(base, 0x1000, Permission::READ | Permission::EXEC)
         .unwrap();
-    engine.mem_write(base, &code).unwrap();
+    engine.memory.write_code(base, &code).unwrap();
 
     // Set up test values (4 floats in each XMM register)
     // XMM0 = [1.0, 2.0, 3.0, 4.0]
@@ -61,9 +62,10 @@ fn test_unpcklps() {
 
     let base = 0x1000;
     engine
-        .mem_map(base, 0x1000, Permission::READ | Permission::EXEC)
+        .memory
+        .map(base, 0x1000, Permission::READ | Permission::EXEC)
         .unwrap();
-    engine.mem_write(base, &code).unwrap();
+    engine.memory.write_code(base, &code).unwrap();
 
     // Set up test values
     // XMM0 = [1.0, 2.0, 3.0, 4.0]
@@ -106,9 +108,10 @@ fn test_unpckhps() {
 
     let base = 0x1000;
     engine
-        .mem_map(base, 0x1000, Permission::READ | Permission::EXEC)
+        .memory
+        .map(base, 0x1000, Permission::READ | Permission::EXEC)
         .unwrap();
-    engine.mem_write(base, &code).unwrap();
+    engine.memory.write_code(base, &code).unwrap();
 
     // Set up test values
     // XMM0 = [1.0, 2.0, 3.0, 4.0]
@@ -154,9 +157,10 @@ fn test_shufpd() {
 
     let base = 0x1000;
     engine
-        .mem_map(base, 0x1000, Permission::READ | Permission::EXEC)
+        .memory
+        .map(base, 0x1000, Permission::READ | Permission::EXEC)
         .unwrap();
-    engine.mem_write(base, &code).unwrap();
+    engine.memory.write_code(base, &code).unwrap();
 
     // Set up test values (2 doubles in each XMM register)
     // XMM0 = [1.0, 2.0]
@@ -195,9 +199,10 @@ fn test_unpcklpd() {
 
     let base = 0x1000;
     engine
-        .mem_map(base, 0x1000, Permission::READ | Permission::EXEC)
+        .memory
+        .map(base, 0x1000, Permission::READ | Permission::EXEC)
         .unwrap();
-    engine.mem_write(base, &code).unwrap();
+    engine.memory.write_code(base, &code).unwrap();
 
     // Set up test values (2 doubles in each XMM register)
     // XMM0 = [1.0, 2.0]
@@ -234,9 +239,10 @@ fn test_unpckhpd() {
 
     let base = 0x1000;
     engine
-        .mem_map(base, 0x1000, Permission::READ | Permission::EXEC)
+        .memory
+        .map(base, 0x1000, Permission::READ | Permission::EXEC)
         .unwrap();
-    engine.mem_write(base, &code).unwrap();
+    engine.memory.write_code(base, &code).unwrap();
 
     // Set up test values (2 doubles in each XMM register)
     // XMM0 = [1.0, 2.0]

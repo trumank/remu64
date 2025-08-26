@@ -1,10 +1,10 @@
-use amd64_emu::{Engine, EngineMode, Permission, Register};
+use amd64_emu::{memory::MemoryTrait as _, Engine, EngineMode, Permission, Register};
 
 fn main() {
     let mut engine = Engine::new(EngineMode::Mode64);
 
     // Map memory for code
-    engine.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
+    engine.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
 
     // Test if carry flag is set correctly for 8-bit ADD
     let code = vec![
@@ -12,7 +12,7 @@ fn main() {
         0x04, 0x01, // add al, 1 (should set carry)
     ];
 
-    engine.mem_write(0x1000, &code).unwrap();
+    engine.memory.write(0x1000, &code).unwrap();
 
     match engine.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0) {
         Ok(()) => {

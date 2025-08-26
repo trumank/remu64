@@ -3,7 +3,7 @@ use crate::memory_manager::MemoryManager;
 use crate::minidump_loader::MinidumpLoader;
 use crate::tracer::InstructionTracer;
 use amd64_emu::memory::MemoryTrait;
-use amd64_emu::{EmulatorError, Engine, EngineMode, HookManager, Memory, Permission, Register};
+use amd64_emu::{EmulatorError, Engine, EngineMode, HookManager, OwnedMemory, Permission, Register};
 use anyhow::{Context, Result};
 use iced_x86::Formatter;
 
@@ -152,7 +152,7 @@ impl<'a, M: MemoryTrait> HookManager<M> for ExecutionHooks<'a> {
 }
 
 pub struct FunctionExecutor {
-    engine: Engine<Memory>,
+    engine: Engine<OwnedMemory>,
     memory_manager: MemoryManager,
     stack_base: u64,
     tracer: InstructionTracer,
@@ -161,7 +161,7 @@ pub struct FunctionExecutor {
 
 impl FunctionExecutor {
     pub fn new(minidump_loader: MinidumpLoader) -> Result<Self> {
-        let mut engine = Engine::new(EngineMode::Mode64, Memory::new());
+        let mut engine = Engine::new(EngineMode::Mode64);
         let mut memory_manager = MemoryManager::with_minidump(minidump_loader);
 
         let stack_size = 0x10000;
@@ -303,11 +303,11 @@ impl FunctionExecutor {
         self.engine.reg_read(Register::RAX)
     }
 
-    pub fn get_engine(&self) -> &Engine<Memory> {
+    pub fn get_engine(&self) -> &Engine<OwnedMemory> {
         &self.engine
     }
 
-    pub fn get_engine_mut(&mut self) -> &mut Engine<Memory> {
+    pub fn get_engine_mut(&mut self) -> &mut Engine<OwnedMemory> {
         &mut self.engine
     }
 

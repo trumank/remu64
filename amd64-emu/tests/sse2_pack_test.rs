@@ -1,4 +1,4 @@
-use amd64_emu::{Engine, EngineMode, Permission, Register};
+use amd64_emu::{memory::MemoryTrait as _, Engine, EngineMode, Permission, Register};
 
 #[test]
 fn test_packsswb() {
@@ -12,9 +12,9 @@ fn test_packsswb() {
         0x66, 0x0F, 0x63, 0xC1,
     ];
 
-    emu.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
-    emu.mem_map(0x100000, 0x1000, Permission::ALL).unwrap();
-    emu.mem_write(0x1000, &code).unwrap();
+    emu.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
+    emu.memory.map(0x100000, 0x1000, Permission::ALL).unwrap();
+    emu.memory.write(0x1000, &code).unwrap();
     emu.reg_write(Register::RIP, 0x1000);
     emu.reg_write(Register::RSP, 0x100400);
 
@@ -43,8 +43,8 @@ fn test_packsswb() {
         0x00, 0x80, // 0x8000 (-32768) -> saturate to -128
     ];
 
-    emu.mem_write(0x100400, &xmm0_data).unwrap();
-    emu.mem_write(0x100410, &xmm1_data).unwrap();
+    emu.memory.write(0x100400, &xmm0_data).unwrap();
+    emu.memory.write(0x100410, &xmm1_data).unwrap();
 
     // Execute instructions
     emu.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 3)
@@ -90,9 +90,9 @@ fn test_packuswb() {
         0x66, 0x0F, 0x67, 0xC1,
     ];
 
-    emu.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
-    emu.mem_map(0x100000, 0x1000, Permission::ALL).unwrap();
-    emu.mem_write(0x1000, &code).unwrap();
+    emu.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
+    emu.memory.map(0x100000, 0x1000, Permission::ALL).unwrap();
+    emu.memory.write(0x1000, &code).unwrap();
     emu.reg_write(Register::RIP, 0x1000);
     emu.reg_write(Register::RSP, 0x100400);
 
@@ -121,8 +121,8 @@ fn test_packuswb() {
         0x00, 0x02, // 0x0200 (512) -> saturate to 255
     ];
 
-    emu.mem_write(0x100400, &xmm0_data).unwrap();
-    emu.mem_write(0x100410, &xmm1_data).unwrap();
+    emu.memory.write(0x100400, &xmm0_data).unwrap();
+    emu.memory.write(0x100410, &xmm1_data).unwrap();
 
     // Execute instructions
     emu.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 3)
@@ -163,9 +163,9 @@ fn test_packssdw() {
         0x66, 0x0F, 0x6B, 0xC1,
     ];
 
-    emu.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
-    emu.mem_map(0x100000, 0x1000, Permission::ALL).unwrap();
-    emu.mem_write(0x1000, &code).unwrap();
+    emu.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
+    emu.memory.map(0x100000, 0x1000, Permission::ALL).unwrap();
+    emu.memory.write(0x1000, &code).unwrap();
     emu.reg_write(Register::RIP, 0x1000);
     emu.reg_write(Register::RSP, 0x100400);
 
@@ -186,8 +186,8 @@ fn test_packssdw() {
         0x00, 0x00, 0x00, 0x80, // 0x80000000 (-2147483648) -> saturate to -32768
     ];
 
-    emu.mem_write(0x100400, &xmm0_data).unwrap();
-    emu.mem_write(0x100410, &xmm1_data).unwrap();
+    emu.memory.write(0x100400, &xmm0_data).unwrap();
+    emu.memory.write(0x100410, &xmm1_data).unwrap();
 
     // Execute instructions
     emu.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 3)
@@ -224,9 +224,9 @@ fn test_pack_memory_operand() {
         0x66, 0x0F, 0x63, 0x44, 0x24, 0x10,
     ];
 
-    emu.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
-    emu.mem_map(0x100000, 0x1000, Permission::ALL).unwrap();
-    emu.mem_write(0x1000, &code).unwrap();
+    emu.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
+    emu.memory.map(0x100000, 0x1000, Permission::ALL).unwrap();
+    emu.memory.write(0x1000, &code).unwrap();
     emu.reg_write(Register::RIP, 0x1000);
     emu.reg_write(Register::RSP, 0x100400);
 
@@ -240,8 +240,8 @@ fn test_pack_memory_operand() {
         0x00,
     ];
 
-    emu.mem_write(0x100400, &xmm0_data).unwrap();
-    emu.mem_write(0x100410, &mem_data).unwrap();
+    emu.memory.write(0x100400, &xmm0_data).unwrap();
+    emu.memory.write(0x100410, &mem_data).unwrap();
 
     // Execute instructions
     emu.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 2)

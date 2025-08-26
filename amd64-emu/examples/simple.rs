@@ -1,11 +1,11 @@
-use amd64_emu::{Engine, EngineMode, Permission, Register};
+use amd64_emu::{memory::MemoryTrait as _, Engine, EngineMode, Permission, Register};
 
 fn main() {
     env_logger::init();
 
     let mut engine = Engine::new(EngineMode::Mode64);
 
-    engine.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
+    engine.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
 
     let code = vec![
         0x48, 0xC7, 0xC0, 0x37, 0x13, 0x00, 0x00, 0x48, 0xC7, 0xC3, 0x42, 0x00, 0x00, 0x00, 0x48,
@@ -13,7 +13,7 @@ fn main() {
     ];
 
     println!("Writing {} bytes of code to 0x1000", code.len());
-    engine.mem_write(0x1000, &code).unwrap();
+    engine.memory.write(0x1000, &code).unwrap();
 
     println!("Starting emulation...");
     engine
