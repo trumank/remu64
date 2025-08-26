@@ -356,6 +356,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             Mnemonic::Punpcklwd => self.execute_punpcklwd(inst),
             Mnemonic::Pshufd => self.execute_pshufd(inst),
             Mnemonic::Pshuflw => self.execute_pshuflw(inst),
+            Mnemonic::Pshufhw => self.execute_pshufhw(inst),
             Mnemonic::Xorps => self.execute_xorps(inst),
             Mnemonic::Cmpps => self.execute_cmpps(inst),
             Mnemonic::Cmpss => self.execute_cmpss(inst),
@@ -1823,6 +1824,116 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             }
             _ => Err(EmulatorError::UnsupportedInstruction(format!(
                 "Unsupported PSHUFLW operand types: {:?}, {:?}, {:?}",
+                inst.op_kind(0),
+                inst.op_kind(1),
+                inst.op_kind(2)
+            ))),
+        }
+    }
+
+    fn execute_pshufhw(&mut self, inst: &Instruction) -> Result<()> {
+        // PSHUFHW: Packed Shuffle High Words
+        // Shuffles 16-bit words in the high 64 bits of a 128-bit XMM register based on an 8-bit immediate
+        // The low 64 bits are preserved unchanged
+        // Immediate bits: [7:6] -> word[7], [5:4] -> word[6], [3:2] -> word[5], [1:0] -> word[4]
+
+        if inst.op_count() != 3 {
+            return Err(EmulatorError::UnsupportedInstruction(
+                "PSHUFHW requires exactly 3 operands".to_string(),
+            ));
+        }
+
+        match (inst.op_kind(0), inst.op_kind(1), inst.op_kind(2)) {
+            (OpKind::Register, OpKind::Register, OpKind::Immediate8) => {
+                let dst_reg = self.convert_register(inst.op_register(0))?;
+                let src_reg = self.convert_register(inst.op_register(1))?;
+                let imm8 = inst.immediate8();
+
+                // Check if both operands are XMM registers
+                if !dst_reg.is_xmm() || !src_reg.is_xmm() {
+                    return Err(EmulatorError::UnsupportedInstruction(
+                        "PSHUFHW requires XMM registers".to_string(),
+                    ));
+                }
+
+                let src_value = self.engine.cpu.read_xmm(src_reg);
+
+                // Extract 4 words (16 bits each) from high 64 bits of source
+                // These are words 4-7 of the 128-bit value
+                let src_words = [
+                    ((src_value >> 64) & 0xFFFF) as u16,  // word[4]
+                    ((src_value >> 80) & 0xFFFF) as u16,  // word[5]
+                    ((src_value >> 96) & 0xFFFF) as u16,  // word[6]
+                    ((src_value >> 112) & 0xFFFF) as u16, // word[7]
+                ];
+
+                // Extract 2-bit selectors from immediate
+                // Note: selectors index into the 4-word array (0-3), not the absolute word positions
+                let sel0 = (imm8 & 0x03) as usize;        // bits [1:0] -> word[4]
+                let sel1 = ((imm8 >> 2) & 0x03) as usize; // bits [3:2] -> word[5]
+                let sel2 = ((imm8 >> 4) & 0x03) as usize; // bits [5:4] -> word[6]
+                let sel3 = ((imm8 >> 6) & 0x03) as usize; // bits [7:6] -> word[7]
+
+                // Build high 64 bits by selecting words based on immediate
+                let high_result = ((src_words[sel0] as u128) << 64)
+                    | ((src_words[sel1] as u128) << 80)
+                    | ((src_words[sel2] as u128) << 96)
+                    | ((src_words[sel3] as u128) << 112);
+
+                // Preserve low 64 bits
+                let low_64 = src_value & 0xFFFFFFFF_FFFFFFFFu128;
+                
+                // Combine low and high parts
+                let result = low_64 | high_result;
+
+                self.engine.cpu.write_xmm(dst_reg, result);
+                Ok(())
+            }
+            (OpKind::Register, OpKind::Memory, OpKind::Immediate8) => {
+                let dst_reg = self.convert_register(inst.op_register(0))?;
+                let imm8 = inst.immediate8();
+
+                if !dst_reg.is_xmm() {
+                    return Err(EmulatorError::UnsupportedInstruction(
+                        "PSHUFHW requires XMM register as destination".to_string(),
+                    ));
+                }
+
+                let addr = self.calculate_memory_address(inst, 1)?;
+                let src_value = self.read_memory_128(addr)?;
+
+                // Extract 4 words (16 bits each) from high 64 bits of source
+                // These are words 4-7 of the 128-bit value
+                let src_words = [
+                    ((src_value >> 64) & 0xFFFF) as u16,  // word[4]
+                    ((src_value >> 80) & 0xFFFF) as u16,  // word[5]
+                    ((src_value >> 96) & 0xFFFF) as u16,  // word[6]
+                    ((src_value >> 112) & 0xFFFF) as u16, // word[7]
+                ];
+
+                // Extract 2-bit selectors from immediate
+                let sel0 = (imm8 & 0x03) as usize;        // bits [1:0] -> word[4]
+                let sel1 = ((imm8 >> 2) & 0x03) as usize; // bits [3:2] -> word[5]
+                let sel2 = ((imm8 >> 4) & 0x03) as usize; // bits [5:4] -> word[6]
+                let sel3 = ((imm8 >> 6) & 0x03) as usize; // bits [7:6] -> word[7]
+
+                // Build high 64 bits by selecting words based on immediate
+                let high_result = ((src_words[sel0] as u128) << 64)
+                    | ((src_words[sel1] as u128) << 80)
+                    | ((src_words[sel2] as u128) << 96)
+                    | ((src_words[sel3] as u128) << 112);
+
+                // Preserve low 64 bits
+                let low_64 = src_value & 0xFFFFFFFF_FFFFFFFFu128;
+                
+                // Combine low and high parts
+                let result = low_64 | high_result;
+
+                self.engine.cpu.write_xmm(dst_reg, result);
+                Ok(())
+            }
+            _ => Err(EmulatorError::UnsupportedInstruction(format!(
+                "Unsupported PSHUFHW operand types: {:?}, {:?}, {:?}",
                 inst.op_kind(0),
                 inst.op_kind(1),
                 inst.op_kind(2)
