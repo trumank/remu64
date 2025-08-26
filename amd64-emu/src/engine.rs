@@ -402,6 +402,10 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             Mnemonic::Paddw => self.execute_paddw(inst),
             Mnemonic::Paddd => self.execute_paddd(inst),
             Mnemonic::Paddq => self.execute_paddq(inst),
+            Mnemonic::Psubb => self.execute_psubb(inst),
+            Mnemonic::Psubw => self.execute_psubw(inst),
+            Mnemonic::Psubd => self.execute_psubd(inst),
+            Mnemonic::Psubq => self.execute_psubq(inst),
             _ => {
                 println!(
                     "Unsupported instruction: {} ({:?}) at {:#x}",
@@ -2956,6 +2960,144 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         let sum_high = dst_high.wrapping_add(src_high);
         
         let result = (sum_low as u128) | ((sum_high as u128) << 64);
+        
+        self.engine.cpu.write_xmm(dst_reg, result);
+        Ok(())
+    }
+
+    fn execute_psubb(&mut self, inst: &Instruction) -> Result<()> {
+        // PSUBB: Subtract packed byte integers
+        let dst_reg = self.convert_register(inst.op_register(0))?;
+        let src_value = match inst.op_kind(1) {
+            OpKind::Register => {
+                let src_reg = self.convert_register(inst.op_register(1))?;
+                self.engine.cpu.read_xmm(src_reg)
+            }
+            OpKind::Memory => {
+                let addr = self.calculate_memory_address(inst, 1)?;
+                self.read_memory_128(addr)?
+            }
+            _ => {
+                return Err(EmulatorError::UnsupportedInstruction(
+                    "Invalid PSUBB source".to_string(),
+                ))
+            }
+        };
+
+        let dst_value = self.engine.cpu.read_xmm(dst_reg);
+        let mut result = 0u128;
+        
+        // Subtract 16 bytes
+        for i in 0..16 {
+            let dst_byte = ((dst_value >> (i * 8)) & 0xFF) as u8;
+            let src_byte = ((src_value >> (i * 8)) & 0xFF) as u8;
+            let diff = dst_byte.wrapping_sub(src_byte);
+            result |= (diff as u128) << (i * 8);
+        }
+        
+        self.engine.cpu.write_xmm(dst_reg, result);
+        Ok(())
+    }
+
+    fn execute_psubw(&mut self, inst: &Instruction) -> Result<()> {
+        // PSUBW: Subtract packed word integers
+        let dst_reg = self.convert_register(inst.op_register(0))?;
+        let src_value = match inst.op_kind(1) {
+            OpKind::Register => {
+                let src_reg = self.convert_register(inst.op_register(1))?;
+                self.engine.cpu.read_xmm(src_reg)
+            }
+            OpKind::Memory => {
+                let addr = self.calculate_memory_address(inst, 1)?;
+                self.read_memory_128(addr)?
+            }
+            _ => {
+                return Err(EmulatorError::UnsupportedInstruction(
+                    "Invalid PSUBW source".to_string(),
+                ))
+            }
+        };
+
+        let dst_value = self.engine.cpu.read_xmm(dst_reg);
+        let mut result = 0u128;
+        
+        // Subtract 8 words (16-bit values)
+        for i in 0..8 {
+            let dst_word = ((dst_value >> (i * 16)) & 0xFFFF) as u16;
+            let src_word = ((src_value >> (i * 16)) & 0xFFFF) as u16;
+            let diff = dst_word.wrapping_sub(src_word);
+            result |= (diff as u128) << (i * 16);
+        }
+        
+        self.engine.cpu.write_xmm(dst_reg, result);
+        Ok(())
+    }
+
+    fn execute_psubd(&mut self, inst: &Instruction) -> Result<()> {
+        // PSUBD: Subtract packed doubleword integers
+        let dst_reg = self.convert_register(inst.op_register(0))?;
+        let src_value = match inst.op_kind(1) {
+            OpKind::Register => {
+                let src_reg = self.convert_register(inst.op_register(1))?;
+                self.engine.cpu.read_xmm(src_reg)
+            }
+            OpKind::Memory => {
+                let addr = self.calculate_memory_address(inst, 1)?;
+                self.read_memory_128(addr)?
+            }
+            _ => {
+                return Err(EmulatorError::UnsupportedInstruction(
+                    "Invalid PSUBD source".to_string(),
+                ))
+            }
+        };
+
+        let dst_value = self.engine.cpu.read_xmm(dst_reg);
+        let mut result = 0u128;
+        
+        // Subtract 4 doublewords (32-bit values)
+        for i in 0..4 {
+            let dst_dword = ((dst_value >> (i * 32)) & 0xFFFFFFFF) as u32;
+            let src_dword = ((src_value >> (i * 32)) & 0xFFFFFFFF) as u32;
+            let diff = dst_dword.wrapping_sub(src_dword);
+            result |= (diff as u128) << (i * 32);
+        }
+        
+        self.engine.cpu.write_xmm(dst_reg, result);
+        Ok(())
+    }
+
+    fn execute_psubq(&mut self, inst: &Instruction) -> Result<()> {
+        // PSUBQ: Subtract packed quadword integers
+        let dst_reg = self.convert_register(inst.op_register(0))?;
+        let src_value = match inst.op_kind(1) {
+            OpKind::Register => {
+                let src_reg = self.convert_register(inst.op_register(1))?;
+                self.engine.cpu.read_xmm(src_reg)
+            }
+            OpKind::Memory => {
+                let addr = self.calculate_memory_address(inst, 1)?;
+                self.read_memory_128(addr)?
+            }
+            _ => {
+                return Err(EmulatorError::UnsupportedInstruction(
+                    "Invalid PSUBQ source".to_string(),
+                ))
+            }
+        };
+
+        let dst_value = self.engine.cpu.read_xmm(dst_reg);
+        
+        // Subtract 2 quadwords (64-bit values)
+        let dst_low = dst_value as u64;
+        let dst_high = (dst_value >> 64) as u64;
+        let src_low = src_value as u64;
+        let src_high = (src_value >> 64) as u64;
+        
+        let diff_low = dst_low.wrapping_sub(src_low);
+        let diff_high = dst_high.wrapping_sub(src_high);
+        
+        let result = (diff_low as u128) | ((diff_high as u128) << 64);
         
         self.engine.cpu.write_xmm(dst_reg, result);
         Ok(())
