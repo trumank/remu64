@@ -348,7 +348,6 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             Mnemonic::Enter => self.execute_enter(inst),
             Mnemonic::Leave => self.execute_leave(inst),
             Mnemonic::Popcnt => self.execute_popcnt(inst),
-            Mnemonic::Cdq => self.execute_cdq(inst),
             Mnemonic::Cqo => self.execute_cqo(inst),
             Mnemonic::Xadd => self.execute_xadd(inst),
             Mnemonic::Punpcklwd => self.execute_punpcklwd(inst),
@@ -2812,7 +2811,10 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         
         // Decrement RSP and store RBP
         let new_rsp = rsp_value.wrapping_sub(8);
-        self.write_memory_64(new_rsp, rbp_value)?;
+        // Write 64-bit value to memory
+        let mut bytes = [0u8; 8];
+        bytes.copy_from_slice(&rbp_value.to_le_bytes());
+        self.engine.memory.write(new_rsp, &bytes)?;
         self.engine.cpu.write_reg(Register::RSP, new_rsp);
         
         // Set RBP to current RSP
@@ -2834,7 +2836,10 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         self.engine.cpu.write_reg(Register::RSP, rbp_value);
         
         // Pop RBP
-        let old_rbp = self.read_memory_64(rbp_value)?;
+        // Read 64-bit value from memory
+        let mut bytes = [0u8; 8];
+        self.engine.memory.read(rbp_value, &mut bytes)?;
+        let old_rbp = u64::from_le_bytes(bytes);
         self.engine.cpu.write_reg(Register::RBP, old_rbp);
         
         // Increment RSP
@@ -2868,27 +2873,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         Ok(())
     }
 
-    fn execute_cdq(&mut self, inst: &Instruction) -> Result<()> {
-        // CDQ: Convert Doubleword to Quadword
-        // Sign-extend EAX to EDX:EAX
-        let eax_value = self.engine.cpu.read_reg(Register::RAX) as u32;
-        
-        // Sign extend EAX to EDX
-        let sign_extended = if eax_value & 0x80000000 != 0 {
-            0xFFFFFFFF  // Negative, fill EDX with 1s
-        } else {
-            0x00000000  // Positive, fill EDX with 0s
-        };
-        
-        // Write to EDX (preserve upper 32 bits of RDX)
-        let rdx_value = self.engine.cpu.read_reg(Register::RDX);
-        let new_rdx = (rdx_value & 0xFFFFFFFF00000000) | sign_extended as u64;
-        self.engine.cpu.write_reg(Register::RDX, new_rdx);
-        
-        Ok(())
-    }
-
-    fn execute_cqo(&mut self, inst: &Instruction) -> Result<()> {
+    fn execute_cqo(&mut self, _inst: &Instruction) -> Result<()> {
         // CQO: Convert Quadword to Octoword
         // Sign-extend RAX to RDX:RAX
         let rax_value = self.engine.cpu.read_reg(Register::RAX);
@@ -2921,7 +2906,8 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         self.write_operand(inst, 1, dest_value)?;
         
         // Update flags based on the addition
-        self.update_flags_add(dest_value, src_value, sum, inst)?;
+        // Update flags for addition
+        self.update_flags_arithmetic_iced(dest_value, src_value, sum, true, inst)?;
         
         Ok(())
     }
