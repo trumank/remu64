@@ -231,8 +231,8 @@ fn test_pmullw_memory_operand() {
         0x66, 0x0F, 0x6F, 0x05, 0x14, 0x00, 0x00, 0x00,  // movdqa xmm0, [rip + 0x14]
         // PMULLW xmm0, [rip + 0x1C] - multiply with memory operand
         0x66, 0x0F, 0xD5, 0x05, 0x1C, 0x00, 0x00, 0x00,  // pmullw xmm0, [rip + 0x1C]
-        // Move result to memory for checking
-        0x66, 0x0F, 0x7F, 0x05, 0x20, 0x00, 0x00, 0x00,  // movdqa [rip + 0x20], xmm0
+        // Move result to memory for checking - adjust displacement for correct address
+        0x66, 0x0F, 0x7F, 0x05, 0x24, 0x00, 0x00, 0x00,  // movdqa [rip + 0x24], xmm0
         
         // Data at offset 0x101C: XMM0 initial value
         0x0A, 0x00, 0x14, 0x00, 0x1E, 0x00, 0x28, 0x00,  // 10, 20, 30, 40
@@ -257,6 +257,9 @@ fn test_pmullw_memory_operand() {
     }
     
     // Check result
+    // The final movdqa stores to [rip + 0x24]
+    // When executed at 0x1010, the next RIP is 0x1018
+    // So it stores to 0x1018 + 0x24 = 0x103C
     let mut result = vec![0u8; 16];
     engine.mem_read(0x103C, &mut result).unwrap();
     
