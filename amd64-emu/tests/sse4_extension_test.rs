@@ -1,451 +1,506 @@
-use amd64_emu::{Engine, MemoryValue, OperandAccess, RegisterType};
-use iced_x86::{code_asm::*, Mnemonic};
+use amd64_emu::{Engine, EngineMode, Permission, Register};
 
 #[test]
 fn test_pmovsxbw() {
-    let mut engine = Engine::new();
-    engine.init_memory_region(0x1000, 0x1000);
+    let mut emu = Engine::new(EngineMode::Mode64);
     
-    // Test sign extension of 8 bytes to 8 words
-    // Load test data: mix of positive and negative bytes
-    let test_bytes: [i8; 8] = [0x7F, -128i8, 0x01, -1i8, 0x40, -64i8, 0x00, -16i8];
-    let mut test_data = 0u64;
-    for (i, &byte) in test_bytes.iter().enumerate() {
-        test_data |= (byte as u8 as u64) << (i * 8);
-    }
+    // Test PMOVSXBW - sign extend bytes to words
+    let code = vec![
+        // movdqa xmm0, [rsp]
+        0x66, 0x0F, 0x6F, 0x04, 0x24,
+        // pmovsxbw xmm1, xmm0
+        0x66, 0x0F, 0x38, 0x20, 0xC8,
+    ];
     
-    engine.cpu.write_xmm(0, test_data as u128);
+    emu.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
+    emu.mem_map(0x100000, 0x1000, Permission::ALL).unwrap();
+    emu.mem_write(0x1000, &code).unwrap();
+    emu.reg_write(Register::RIP, 0x1000);
+    emu.reg_write(Register::RSP, 0x100400);
     
-    let mut asm = CodeAssembler::new(64).unwrap();
-    asm.pmovsxbw(xmm1, xmm0).unwrap();
+    // Test data: mix of positive and negative bytes
+    let test_data = vec![
+        0x7F,       // 127
+        0x80,       // -128
+        0x01,       // 1
+        0xFF,       // -1
+        0x40,       // 64
+        0xC0,       // -64
+        0x00,       // 0
+        0xF0,       // -16
+    ];
     
-    let bytes = asm.assemble(0x1000).unwrap();
-    engine.write_memory(0x1000, &bytes);
-    engine.cpu.set_rip(0x1000);
+    emu.mem_write(0x100400, &test_data).unwrap();
     
-    engine.step().unwrap();
+    emu.emu_start(0x1000, 0x1000 + code.len() as u64).unwrap();
     
-    let result = engine.cpu.read_xmm(1);
+    let result = emu.reg_read_xmm(Register::XMM1);
     
-    // Check each word
-    for i in 0..8 {
-        let expected = test_bytes[i] as i16;
-        let actual = ((result >> (i * 16)) & 0xFFFF) as i16;
-        assert_eq!(actual, expected, "Word {} mismatch", i);
-    }
+    // Check each word - sign extended
+    assert_eq!((result & 0xFFFF) as i16, 127i16);
+    assert_eq!(((result >> 16) & 0xFFFF) as i16, -128i16);
+    assert_eq!(((result >> 32) & 0xFFFF) as i16, 1i16);
+    assert_eq!(((result >> 48) & 0xFFFF) as i16, -1i16);
+    assert_eq!(((result >> 64) & 0xFFFF) as i16, 64i16);
+    assert_eq!(((result >> 80) & 0xFFFF) as i16, -64i16);
+    assert_eq!(((result >> 96) & 0xFFFF) as i16, 0i16);
+    assert_eq!(((result >> 112) & 0xFFFF) as i16, -16i16);
 }
 
 #[test]
 fn test_pmovsxbd() {
-    let mut engine = Engine::new();
-    engine.init_memory_region(0x1000, 0x1000);
+    let mut emu = Engine::new(EngineMode::Mode64);
     
-    // Test sign extension of 4 bytes to 4 doublewords
-    let test_bytes: [i8; 4] = [0x7F, -128i8, 0x01, -1i8];
-    let mut test_data = 0u32;
-    for (i, &byte) in test_bytes.iter().enumerate() {
-        test_data |= (byte as u8 as u32) << (i * 8);
-    }
+    // Test PMOVSXBD - sign extend bytes to doublewords
+    let code = vec![
+        // movdqa xmm0, [rsp]
+        0x66, 0x0F, 0x6F, 0x04, 0x24,
+        // pmovsxbd xmm1, xmm0
+        0x66, 0x0F, 0x38, 0x21, 0xC8,
+    ];
     
-    engine.cpu.write_xmm(0, test_data as u128);
+    emu.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
+    emu.mem_map(0x100000, 0x1000, Permission::ALL).unwrap();
+    emu.mem_write(0x1000, &code).unwrap();
+    emu.reg_write(Register::RIP, 0x1000);
+    emu.reg_write(Register::RSP, 0x100400);
     
-    let mut asm = CodeAssembler::new(64).unwrap();
-    asm.pmovsxbd(xmm1, xmm0).unwrap();
+    // Test data: 4 bytes to extend
+    let test_data = vec![
+        0x7F,       // 127
+        0x80,       // -128
+        0x01,       // 1
+        0xFF,       // -1
+    ];
     
-    let bytes = asm.assemble(0x1000).unwrap();
-    engine.write_memory(0x1000, &bytes);
-    engine.cpu.set_rip(0x1000);
+    emu.mem_write(0x100400, &test_data).unwrap();
     
-    engine.step().unwrap();
+    emu.emu_start(0x1000, 0x1000 + code.len() as u64).unwrap();
     
-    let result = engine.cpu.read_xmm(1);
+    let result = emu.reg_read_xmm(Register::XMM1);
     
-    // Check each doubleword
-    for i in 0..4 {
-        let expected = test_bytes[i] as i32;
-        let actual = ((result >> (i * 32)) & 0xFFFFFFFF) as i32;
-        assert_eq!(actual, expected, "Doubleword {} mismatch", i);
-    }
+    // Check each doubleword - sign extended
+    assert_eq!((result & 0xFFFFFFFF) as i32, 127i32);
+    assert_eq!(((result >> 32) & 0xFFFFFFFF) as i32, -128i32);
+    assert_eq!(((result >> 64) & 0xFFFFFFFF) as i32, 1i32);
+    assert_eq!(((result >> 96) & 0xFFFFFFFF) as i32, -1i32);
 }
 
 #[test]
 fn test_pmovsxbq() {
-    let mut engine = Engine::new();
-    engine.init_memory_region(0x1000, 0x1000);
+    let mut emu = Engine::new(EngineMode::Mode64);
     
-    // Test sign extension of 2 bytes to 2 quadwords
-    let test_bytes: [i8; 2] = [0x7F, -128i8];
-    let test_data = (test_bytes[0] as u8 as u16) | ((test_bytes[1] as u8 as u16) << 8);
+    // Test PMOVSXBQ - sign extend bytes to quadwords
+    let code = vec![
+        // movdqa xmm0, [rsp]
+        0x66, 0x0F, 0x6F, 0x04, 0x24,
+        // pmovsxbq xmm1, xmm0
+        0x66, 0x0F, 0x38, 0x22, 0xC8,
+    ];
     
-    engine.cpu.write_xmm(0, test_data as u128);
+    emu.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
+    emu.mem_map(0x100000, 0x1000, Permission::ALL).unwrap();
+    emu.mem_write(0x1000, &code).unwrap();
+    emu.reg_write(Register::RIP, 0x1000);
+    emu.reg_write(Register::RSP, 0x100400);
     
-    let mut asm = CodeAssembler::new(64).unwrap();
-    asm.pmovsxbq(xmm1, xmm0).unwrap();
+    // Test data: 2 bytes to extend
+    let test_data = vec![
+        0x7F,       // 127
+        0x80,       // -128
+    ];
     
-    let bytes = asm.assemble(0x1000).unwrap();
-    engine.write_memory(0x1000, &bytes);
-    engine.cpu.set_rip(0x1000);
+    emu.mem_write(0x100400, &test_data).unwrap();
     
-    engine.step().unwrap();
+    emu.emu_start(0x1000, 0x1000 + code.len() as u64).unwrap();
     
-    let result = engine.cpu.read_xmm(1);
+    let result = emu.reg_read_xmm(Register::XMM1);
     
-    // Check each quadword
-    for i in 0..2 {
-        let expected = test_bytes[i] as i64;
-        let actual = ((result >> (i * 64)) & 0xFFFFFFFFFFFFFFFF) as i64;
-        assert_eq!(actual, expected, "Quadword {} mismatch", i);
-    }
+    // Check each quadword - sign extended
+    assert_eq!((result & 0xFFFFFFFFFFFFFFFF) as i64, 127i64);
+    assert_eq!(((result >> 64) & 0xFFFFFFFFFFFFFFFF) as i64, -128i64);
 }
 
 #[test]
 fn test_pmovsxwd() {
-    let mut engine = Engine::new();
-    engine.init_memory_region(0x1000, 0x1000);
+    let mut emu = Engine::new(EngineMode::Mode64);
     
-    // Test sign extension of 4 words to 4 doublewords
-    let test_words: [i16; 4] = [0x7FFF, -32768i16, 0x0001, -1i16];
-    let mut test_data = 0u64;
-    for (i, &word) in test_words.iter().enumerate() {
-        test_data |= (word as u16 as u64) << (i * 16);
-    }
+    // Test PMOVSXWD - sign extend words to doublewords
+    let code = vec![
+        // movdqa xmm0, [rsp]
+        0x66, 0x0F, 0x6F, 0x04, 0x24,
+        // pmovsxwd xmm1, xmm0
+        0x66, 0x0F, 0x38, 0x23, 0xC8,
+    ];
     
-    engine.cpu.write_xmm(0, test_data as u128);
+    emu.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
+    emu.mem_map(0x100000, 0x1000, Permission::ALL).unwrap();
+    emu.mem_write(0x1000, &code).unwrap();
+    emu.reg_write(Register::RIP, 0x1000);
+    emu.reg_write(Register::RSP, 0x100400);
     
-    let mut asm = CodeAssembler::new(64).unwrap();
-    asm.pmovsxwd(xmm1, xmm0).unwrap();
+    // Test data: 4 words to extend
+    let test_data = vec![
+        0xFF, 0x7F,  // 32767
+        0x00, 0x80,  // -32768
+        0x01, 0x00,  // 1
+        0xFF, 0xFF,  // -1
+    ];
     
-    let bytes = asm.assemble(0x1000).unwrap();
-    engine.write_memory(0x1000, &bytes);
-    engine.cpu.set_rip(0x1000);
+    emu.mem_write(0x100400, &test_data).unwrap();
     
-    engine.step().unwrap();
+    emu.emu_start(0x1000, 0x1000 + code.len() as u64).unwrap();
     
-    let result = engine.cpu.read_xmm(1);
+    let result = emu.reg_read_xmm(Register::XMM1);
     
-    // Check each doubleword
-    for i in 0..4 {
-        let expected = test_words[i] as i32;
-        let actual = ((result >> (i * 32)) & 0xFFFFFFFF) as i32;
-        assert_eq!(actual, expected, "Doubleword {} mismatch", i);
-    }
+    // Check each doubleword - sign extended
+    assert_eq!((result & 0xFFFFFFFF) as i32, 32767i32);
+    assert_eq!(((result >> 32) & 0xFFFFFFFF) as i32, -32768i32);
+    assert_eq!(((result >> 64) & 0xFFFFFFFF) as i32, 1i32);
+    assert_eq!(((result >> 96) & 0xFFFFFFFF) as i32, -1i32);
 }
 
 #[test]
 fn test_pmovsxwq() {
-    let mut engine = Engine::new();
-    engine.init_memory_region(0x1000, 0x1000);
+    let mut emu = Engine::new(EngineMode::Mode64);
     
-    // Test sign extension of 2 words to 2 quadwords
-    let test_words: [i16; 2] = [0x7FFF, -32768i16];
-    let test_data = (test_words[0] as u16 as u32) | ((test_words[1] as u16 as u32) << 16);
+    // Test PMOVSXWQ - sign extend words to quadwords
+    let code = vec![
+        // movdqa xmm0, [rsp]
+        0x66, 0x0F, 0x6F, 0x04, 0x24,
+        // pmovsxwq xmm1, xmm0
+        0x66, 0x0F, 0x38, 0x24, 0xC8,
+    ];
     
-    engine.cpu.write_xmm(0, test_data as u128);
+    emu.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
+    emu.mem_map(0x100000, 0x1000, Permission::ALL).unwrap();
+    emu.mem_write(0x1000, &code).unwrap();
+    emu.reg_write(Register::RIP, 0x1000);
+    emu.reg_write(Register::RSP, 0x100400);
     
-    let mut asm = CodeAssembler::new(64).unwrap();
-    asm.pmovsxwq(xmm1, xmm0).unwrap();
+    // Test data: 2 words to extend
+    let test_data = vec![
+        0xFF, 0x7F,  // 32767
+        0x00, 0x80,  // -32768
+    ];
     
-    let bytes = asm.assemble(0x1000).unwrap();
-    engine.write_memory(0x1000, &bytes);
-    engine.cpu.set_rip(0x1000);
+    emu.mem_write(0x100400, &test_data).unwrap();
     
-    engine.step().unwrap();
+    emu.emu_start(0x1000, 0x1000 + code.len() as u64).unwrap();
     
-    let result = engine.cpu.read_xmm(1);
+    let result = emu.reg_read_xmm(Register::XMM1);
     
-    // Check each quadword
-    for i in 0..2 {
-        let expected = test_words[i] as i64;
-        let actual = ((result >> (i * 64)) & 0xFFFFFFFFFFFFFFFF) as i64;
-        assert_eq!(actual, expected, "Quadword {} mismatch", i);
-    }
+    // Check each quadword - sign extended
+    assert_eq!((result & 0xFFFFFFFFFFFFFFFF) as i64, 32767i64);
+    assert_eq!(((result >> 64) & 0xFFFFFFFFFFFFFFFF) as i64, -32768i64);
 }
 
 #[test]
 fn test_pmovsxdq() {
-    let mut engine = Engine::new();
-    engine.init_memory_region(0x1000, 0x1000);
+    let mut emu = Engine::new(EngineMode::Mode64);
     
-    // Test sign extension of 2 doublewords to 2 quadwords
-    let test_dwords: [i32; 2] = [0x7FFFFFFF, -2147483648i32];
-    let test_data = (test_dwords[0] as u32 as u64) | ((test_dwords[1] as u32 as u64) << 32);
+    // Test PMOVSXDQ - sign extend doublewords to quadwords
+    let code = vec![
+        // movdqa xmm0, [rsp]
+        0x66, 0x0F, 0x6F, 0x04, 0x24,
+        // pmovsxdq xmm1, xmm0
+        0x66, 0x0F, 0x38, 0x25, 0xC8,
+    ];
     
-    engine.cpu.write_xmm(0, test_data as u128);
+    emu.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
+    emu.mem_map(0x100000, 0x1000, Permission::ALL).unwrap();
+    emu.mem_write(0x1000, &code).unwrap();
+    emu.reg_write(Register::RIP, 0x1000);
+    emu.reg_write(Register::RSP, 0x100400);
     
-    let mut asm = CodeAssembler::new(64).unwrap();
-    asm.pmovsxdq(xmm1, xmm0).unwrap();
+    // Test data: 2 doublewords to extend
+    let test_data = vec![
+        0xFF, 0xFF, 0xFF, 0x7F,  // 2147483647
+        0x00, 0x00, 0x00, 0x80,  // -2147483648
+    ];
     
-    let bytes = asm.assemble(0x1000).unwrap();
-    engine.write_memory(0x1000, &bytes);
-    engine.cpu.set_rip(0x1000);
+    emu.mem_write(0x100400, &test_data).unwrap();
     
-    engine.step().unwrap();
+    emu.emu_start(0x1000, 0x1000 + code.len() as u64).unwrap();
     
-    let result = engine.cpu.read_xmm(1);
+    let result = emu.reg_read_xmm(Register::XMM1);
     
-    // Check each quadword
-    for i in 0..2 {
-        let expected = test_dwords[i] as i64;
-        let actual = ((result >> (i * 64)) & 0xFFFFFFFFFFFFFFFF) as i64;
-        assert_eq!(actual, expected, "Quadword {} mismatch", i);
-    }
+    // Check each quadword - sign extended
+    assert_eq!((result & 0xFFFFFFFFFFFFFFFF) as i64, 2147483647i64);
+    assert_eq!(((result >> 64) & 0xFFFFFFFFFFFFFFFF) as i64, -2147483648i64);
 }
 
 #[test]
 fn test_pmovzxbw() {
-    let mut engine = Engine::new();
-    engine.init_memory_region(0x1000, 0x1000);
+    let mut emu = Engine::new(EngineMode::Mode64);
     
-    // Test zero extension of 8 bytes to 8 words
-    let test_bytes: [u8; 8] = [0xFF, 0x80, 0x01, 0x00, 0x40, 0xC0, 0x7F, 0xF0];
-    let mut test_data = 0u64;
-    for (i, &byte) in test_bytes.iter().enumerate() {
-        test_data |= (byte as u64) << (i * 8);
-    }
+    // Test PMOVZXBW - zero extend bytes to words
+    let code = vec![
+        // movdqa xmm0, [rsp]
+        0x66, 0x0F, 0x6F, 0x04, 0x24,
+        // pmovzxbw xmm1, xmm0
+        0x66, 0x0F, 0x38, 0x30, 0xC8,
+    ];
     
-    engine.cpu.write_xmm(0, test_data as u128);
+    emu.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
+    emu.mem_map(0x100000, 0x1000, Permission::ALL).unwrap();
+    emu.mem_write(0x1000, &code).unwrap();
+    emu.reg_write(Register::RIP, 0x1000);
+    emu.reg_write(Register::RSP, 0x100400);
     
-    let mut asm = CodeAssembler::new(64).unwrap();
-    asm.pmovzxbw(xmm1, xmm0).unwrap();
+    // Test data: all bytes zero extended
+    let test_data = vec![
+        0xFF,       // 255
+        0x80,       // 128  
+        0x01,       // 1
+        0x00,       // 0
+        0x40,       // 64
+        0xC0,       // 192
+        0x7F,       // 127
+        0xF0,       // 240
+    ];
     
-    let bytes = asm.assemble(0x1000).unwrap();
-    engine.write_memory(0x1000, &bytes);
-    engine.cpu.set_rip(0x1000);
+    emu.mem_write(0x100400, &test_data).unwrap();
     
-    engine.step().unwrap();
+    emu.emu_start(0x1000, 0x1000 + code.len() as u64).unwrap();
     
-    let result = engine.cpu.read_xmm(1);
+    let result = emu.reg_read_xmm(Register::XMM1);
     
-    // Check each word
-    for i in 0..8 {
-        let expected = test_bytes[i] as u16;
-        let actual = (result >> (i * 16)) & 0xFFFF;
-        assert_eq!(actual, expected as u128, "Word {} mismatch", i);
-    }
+    // Check each word - zero extended
+    assert_eq!((result & 0xFFFF) as u16, 255u16);
+    assert_eq!(((result >> 16) & 0xFFFF) as u16, 128u16);
+    assert_eq!(((result >> 32) & 0xFFFF) as u16, 1u16);
+    assert_eq!(((result >> 48) & 0xFFFF) as u16, 0u16);
+    assert_eq!(((result >> 64) & 0xFFFF) as u16, 64u16);
+    assert_eq!(((result >> 80) & 0xFFFF) as u16, 192u16);
+    assert_eq!(((result >> 96) & 0xFFFF) as u16, 127u16);
+    assert_eq!(((result >> 112) & 0xFFFF) as u16, 240u16);
 }
 
 #[test]
 fn test_pmovzxbd() {
-    let mut engine = Engine::new();
-    engine.init_memory_region(0x1000, 0x1000);
+    let mut emu = Engine::new(EngineMode::Mode64);
     
-    // Test zero extension of 4 bytes to 4 doublewords
-    let test_bytes: [u8; 4] = [0xFF, 0x80, 0x01, 0x00];
-    let mut test_data = 0u32;
-    for (i, &byte) in test_bytes.iter().enumerate() {
-        test_data |= (byte as u32) << (i * 8);
-    }
+    // Test PMOVZXBD - zero extend bytes to doublewords
+    let code = vec![
+        // movdqa xmm0, [rsp]
+        0x66, 0x0F, 0x6F, 0x04, 0x24,
+        // pmovzxbd xmm1, xmm0
+        0x66, 0x0F, 0x38, 0x31, 0xC8,
+    ];
     
-    engine.cpu.write_xmm(0, test_data as u128);
+    emu.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
+    emu.mem_map(0x100000, 0x1000, Permission::ALL).unwrap();
+    emu.mem_write(0x1000, &code).unwrap();
+    emu.reg_write(Register::RIP, 0x1000);
+    emu.reg_write(Register::RSP, 0x100400);
     
-    let mut asm = CodeAssembler::new(64).unwrap();
-    asm.pmovzxbd(xmm1, xmm0).unwrap();
+    // Test data: 4 bytes to extend
+    let test_data = vec![
+        0xFF,       // 255
+        0x80,       // 128
+        0x01,       // 1
+        0x00,       // 0
+    ];
     
-    let bytes = asm.assemble(0x1000).unwrap();
-    engine.write_memory(0x1000, &bytes);
-    engine.cpu.set_rip(0x1000);
+    emu.mem_write(0x100400, &test_data).unwrap();
     
-    engine.step().unwrap();
+    emu.emu_start(0x1000, 0x1000 + code.len() as u64).unwrap();
     
-    let result = engine.cpu.read_xmm(1);
+    let result = emu.reg_read_xmm(Register::XMM1);
     
-    // Check each doubleword
-    for i in 0..4 {
-        let expected = test_bytes[i] as u32;
-        let actual = (result >> (i * 32)) & 0xFFFFFFFF;
-        assert_eq!(actual, expected as u128, "Doubleword {} mismatch", i);
-    }
+    // Check each doubleword - zero extended
+    assert_eq!((result & 0xFFFFFFFF) as u32, 255u32);
+    assert_eq!(((result >> 32) & 0xFFFFFFFF) as u32, 128u32);
+    assert_eq!(((result >> 64) & 0xFFFFFFFF) as u32, 1u32);
+    assert_eq!(((result >> 96) & 0xFFFFFFFF) as u32, 0u32);
 }
 
 #[test]
 fn test_pmovzxbq() {
-    let mut engine = Engine::new();
-    engine.init_memory_region(0x1000, 0x1000);
+    let mut emu = Engine::new(EngineMode::Mode64);
     
-    // Test zero extension of 2 bytes to 2 quadwords
-    let test_bytes: [u8; 2] = [0xFF, 0x80];
-    let test_data = (test_bytes[0] as u16) | ((test_bytes[1] as u16) << 8);
+    // Test PMOVZXBQ - zero extend bytes to quadwords
+    let code = vec![
+        // movdqa xmm0, [rsp]
+        0x66, 0x0F, 0x6F, 0x04, 0x24,
+        // pmovzxbq xmm1, xmm0
+        0x66, 0x0F, 0x38, 0x32, 0xC8,
+    ];
     
-    engine.cpu.write_xmm(0, test_data as u128);
+    emu.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
+    emu.mem_map(0x100000, 0x1000, Permission::ALL).unwrap();
+    emu.mem_write(0x1000, &code).unwrap();
+    emu.reg_write(Register::RIP, 0x1000);
+    emu.reg_write(Register::RSP, 0x100400);
     
-    let mut asm = CodeAssembler::new(64).unwrap();
-    asm.pmovzxbq(xmm1, xmm0).unwrap();
+    // Test data: 2 bytes to extend
+    let test_data = vec![
+        0xFF,       // 255
+        0x80,       // 128
+    ];
     
-    let bytes = asm.assemble(0x1000).unwrap();
-    engine.write_memory(0x1000, &bytes);
-    engine.cpu.set_rip(0x1000);
+    emu.mem_write(0x100400, &test_data).unwrap();
     
-    engine.step().unwrap();
+    emu.emu_start(0x1000, 0x1000 + code.len() as u64).unwrap();
     
-    let result = engine.cpu.read_xmm(1);
+    let result = emu.reg_read_xmm(Register::XMM1);
     
-    // Check each quadword
-    for i in 0..2 {
-        let expected = test_bytes[i] as u64;
-        let actual = (result >> (i * 64)) & 0xFFFFFFFFFFFFFFFF;
-        assert_eq!(actual, expected as u128, "Quadword {} mismatch", i);
-    }
+    // Check each quadword - zero extended
+    assert_eq!((result & 0xFFFFFFFFFFFFFFFF) as u64, 255u64);
+    assert_eq!(((result >> 64) & 0xFFFFFFFFFFFFFFFF) as u64, 128u64);
 }
 
 #[test]
 fn test_pmovzxwd() {
-    let mut engine = Engine::new();
-    engine.init_memory_region(0x1000, 0x1000);
+    let mut emu = Engine::new(EngineMode::Mode64);
     
-    // Test zero extension of 4 words to 4 doublewords
-    let test_words: [u16; 4] = [0xFFFF, 0x8000, 0x0001, 0x0000];
-    let mut test_data = 0u64;
-    for (i, &word) in test_words.iter().enumerate() {
-        test_data |= (word as u64) << (i * 16);
-    }
+    // Test PMOVZXWD - zero extend words to doublewords
+    let code = vec![
+        // movdqa xmm0, [rsp]
+        0x66, 0x0F, 0x6F, 0x04, 0x24,
+        // pmovzxwd xmm1, xmm0
+        0x66, 0x0F, 0x38, 0x33, 0xC8,
+    ];
     
-    engine.cpu.write_xmm(0, test_data as u128);
+    emu.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
+    emu.mem_map(0x100000, 0x1000, Permission::ALL).unwrap();
+    emu.mem_write(0x1000, &code).unwrap();
+    emu.reg_write(Register::RIP, 0x1000);
+    emu.reg_write(Register::RSP, 0x100400);
     
-    let mut asm = CodeAssembler::new(64).unwrap();
-    asm.pmovzxwd(xmm1, xmm0).unwrap();
+    // Test data: 4 words to extend
+    let test_data = vec![
+        0xFF, 0xFF,  // 65535
+        0x00, 0x80,  // 32768
+        0x01, 0x00,  // 1
+        0x00, 0x00,  // 0
+    ];
     
-    let bytes = asm.assemble(0x1000).unwrap();
-    engine.write_memory(0x1000, &bytes);
-    engine.cpu.set_rip(0x1000);
+    emu.mem_write(0x100400, &test_data).unwrap();
     
-    engine.step().unwrap();
+    emu.emu_start(0x1000, 0x1000 + code.len() as u64).unwrap();
     
-    let result = engine.cpu.read_xmm(1);
+    let result = emu.reg_read_xmm(Register::XMM1);
     
-    // Check each doubleword
-    for i in 0..4 {
-        let expected = test_words[i] as u32;
-        let actual = (result >> (i * 32)) & 0xFFFFFFFF;
-        assert_eq!(actual, expected as u128, "Doubleword {} mismatch", i);
-    }
+    // Check each doubleword - zero extended
+    assert_eq!((result & 0xFFFFFFFF) as u32, 65535u32);
+    assert_eq!(((result >> 32) & 0xFFFFFFFF) as u32, 32768u32);
+    assert_eq!(((result >> 64) & 0xFFFFFFFF) as u32, 1u32);
+    assert_eq!(((result >> 96) & 0xFFFFFFFF) as u32, 0u32);
 }
 
 #[test]
 fn test_pmovzxwq() {
-    let mut engine = Engine::new();
-    engine.init_memory_region(0x1000, 0x1000);
+    let mut emu = Engine::new(EngineMode::Mode64);
     
-    // Test zero extension of 2 words to 2 quadwords
-    let test_words: [u16; 2] = [0xFFFF, 0x8000];
-    let test_data = (test_words[0] as u32) | ((test_words[1] as u32) << 16);
+    // Test PMOVZXWQ - zero extend words to quadwords
+    let code = vec![
+        // movdqa xmm0, [rsp]
+        0x66, 0x0F, 0x6F, 0x04, 0x24,
+        // pmovzxwq xmm1, xmm0
+        0x66, 0x0F, 0x38, 0x34, 0xC8,
+    ];
     
-    engine.cpu.write_xmm(0, test_data as u128);
+    emu.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
+    emu.mem_map(0x100000, 0x1000, Permission::ALL).unwrap();
+    emu.mem_write(0x1000, &code).unwrap();
+    emu.reg_write(Register::RIP, 0x1000);
+    emu.reg_write(Register::RSP, 0x100400);
     
-    let mut asm = CodeAssembler::new(64).unwrap();
-    asm.pmovzxwq(xmm1, xmm0).unwrap();
+    // Test data: 2 words to extend
+    let test_data = vec![
+        0xFF, 0xFF,  // 65535
+        0x00, 0x80,  // 32768
+    ];
     
-    let bytes = asm.assemble(0x1000).unwrap();
-    engine.write_memory(0x1000, &bytes);
-    engine.cpu.set_rip(0x1000);
+    emu.mem_write(0x100400, &test_data).unwrap();
     
-    engine.step().unwrap();
+    emu.emu_start(0x1000, 0x1000 + code.len() as u64).unwrap();
     
-    let result = engine.cpu.read_xmm(1);
+    let result = emu.reg_read_xmm(Register::XMM1);
     
-    // Check each quadword
-    for i in 0..2 {
-        let expected = test_words[i] as u64;
-        let actual = (result >> (i * 64)) & 0xFFFFFFFFFFFFFFFF;
-        assert_eq!(actual, expected as u128, "Quadword {} mismatch", i);
-    }
+    // Check each quadword - zero extended
+    assert_eq!((result & 0xFFFFFFFFFFFFFFFF) as u64, 65535u64);
+    assert_eq!(((result >> 64) & 0xFFFFFFFFFFFFFFFF) as u64, 32768u64);
 }
 
 #[test]
 fn test_pmovzxdq() {
-    let mut engine = Engine::new();
-    engine.init_memory_region(0x1000, 0x1000);
+    let mut emu = Engine::new(EngineMode::Mode64);
     
-    // Test zero extension of 2 doublewords to 2 quadwords
-    let test_dwords: [u32; 2] = [0xFFFFFFFF, 0x80000000];
-    let test_data = (test_dwords[0] as u64) | ((test_dwords[1] as u64) << 32);
+    // Test PMOVZXDQ - zero extend doublewords to quadwords
+    let code = vec![
+        // movdqa xmm0, [rsp]
+        0x66, 0x0F, 0x6F, 0x04, 0x24,
+        // pmovzxdq xmm1, xmm0
+        0x66, 0x0F, 0x38, 0x35, 0xC8,
+    ];
     
-    engine.cpu.write_xmm(0, test_data as u128);
+    emu.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
+    emu.mem_map(0x100000, 0x1000, Permission::ALL).unwrap();
+    emu.mem_write(0x1000, &code).unwrap();
+    emu.reg_write(Register::RIP, 0x1000);
+    emu.reg_write(Register::RSP, 0x100400);
     
-    let mut asm = CodeAssembler::new(64).unwrap();
-    asm.pmovzxdq(xmm1, xmm0).unwrap();
+    // Test data: 2 doublewords to extend
+    let test_data = vec![
+        0xFF, 0xFF, 0xFF, 0xFF,  // 4294967295
+        0x00, 0x00, 0x00, 0x80,  // 2147483648
+    ];
     
-    let bytes = asm.assemble(0x1000).unwrap();
-    engine.write_memory(0x1000, &bytes);
-    engine.cpu.set_rip(0x1000);
+    emu.mem_write(0x100400, &test_data).unwrap();
     
-    engine.step().unwrap();
+    emu.emu_start(0x1000, 0x1000 + code.len() as u64).unwrap();
     
-    let result = engine.cpu.read_xmm(1);
+    let result = emu.reg_read_xmm(Register::XMM1);
     
-    // Check each quadword
-    for i in 0..2 {
-        let expected = test_dwords[i] as u64;
-        let actual = (result >> (i * 64)) & 0xFFFFFFFFFFFFFFFF;
-        assert_eq!(actual, expected as u128, "Quadword {} mismatch", i);
-    }
+    // Check each quadword - zero extended
+    assert_eq!((result & 0xFFFFFFFFFFFFFFFF) as u64, 4294967295u64);
+    assert_eq!(((result >> 64) & 0xFFFFFFFFFFFFFFFF) as u64, 2147483648u64);
 }
 
 #[test]
 fn test_pmovsxbw_memory() {
-    let mut engine = Engine::new();
-    engine.init_memory_region(0x1000, 0x1000);
-    engine.init_memory_region(0x2000, 0x1000);
+    let mut emu = Engine::new(EngineMode::Mode64);
     
-    // Store test data in memory
-    let test_bytes: [i8; 8] = [0x7F, -128i8, 0x01, -1i8, 0x40, -64i8, 0x00, -16i8];
-    let mut test_data = 0u64;
-    for (i, &byte) in test_bytes.iter().enumerate() {
-        test_data |= (byte as u8 as u64) << (i * 8);
-    }
+    // Test PMOVSXBW with memory operand
+    let code = vec![
+        // pmovsxbw xmm1, qword ptr [rsp]
+        0x66, 0x0F, 0x38, 0x20, 0x0C, 0x24,
+    ];
     
-    // Write to memory
-    engine.write_memory(0x2000, &test_data.to_le_bytes());
+    emu.mem_map(0x1000, 0x1000, Permission::ALL).unwrap();
+    emu.mem_map(0x100000, 0x1000, Permission::ALL).unwrap();
+    emu.mem_write(0x1000, &code).unwrap();
+    emu.reg_write(Register::RIP, 0x1000);
+    emu.reg_write(Register::RSP, 0x100400);
     
-    let mut asm = CodeAssembler::new(64).unwrap();
-    asm.pmovsxbw(xmm1, qword_ptr(0x2000)).unwrap();
+    // Test data: 8 bytes to sign extend
+    let test_data = vec![
+        0x7F,       // 127
+        0x80,       // -128
+        0x01,       // 1
+        0xFF,       // -1
+        0x40,       // 64
+        0xC0,       // -64
+        0x00,       // 0
+        0xF0,       // -16
+    ];
     
-    let bytes = asm.assemble(0x1000).unwrap();
-    engine.write_memory(0x1000, &bytes);
-    engine.cpu.set_rip(0x1000);
+    emu.mem_write(0x100400, &test_data).unwrap();
     
-    engine.step().unwrap();
+    emu.emu_start(0x1000, 0x1000 + code.len() as u64).unwrap();
     
-    let result = engine.cpu.read_xmm(1);
+    let result = emu.reg_read_xmm(Register::XMM1);
     
-    // Check each word
-    for i in 0..8 {
-        let expected = test_bytes[i] as i16;
-        let actual = ((result >> (i * 16)) & 0xFFFF) as i16;
-        assert_eq!(actual, expected, "Word {} mismatch", i);
-    }
-}
-
-#[test]
-fn test_pmovzxbw_memory() {
-    let mut engine = Engine::new();
-    engine.init_memory_region(0x1000, 0x1000);
-    engine.init_memory_region(0x2000, 0x1000);
-    
-    // Store test data in memory
-    let test_bytes: [u8; 8] = [0xFF, 0x80, 0x01, 0x00, 0x40, 0xC0, 0x7F, 0xF0];
-    let mut test_data = 0u64;
-    for (i, &byte) in test_bytes.iter().enumerate() {
-        test_data |= (byte as u64) << (i * 8);
-    }
-    
-    // Write to memory
-    engine.write_memory(0x2000, &test_data.to_le_bytes());
-    
-    let mut asm = CodeAssembler::new(64).unwrap();
-    asm.pmovzxbw(xmm1, qword_ptr(0x2000)).unwrap();
-    
-    let bytes = asm.assemble(0x1000).unwrap();
-    engine.write_memory(0x1000, &bytes);
-    engine.cpu.set_rip(0x1000);
-    
-    engine.step().unwrap();
-    
-    let result = engine.cpu.read_xmm(1);
-    
-    // Check each word
-    for i in 0..8 {
-        let expected = test_bytes[i] as u16;
-        let actual = (result >> (i * 16)) & 0xFFFF;
-        assert_eq!(actual, expected as u128, "Word {} mismatch", i);
-    }
+    // Check each word - sign extended
+    assert_eq!((result & 0xFFFF) as i16, 127i16);
+    assert_eq!(((result >> 16) & 0xFFFF) as i16, -128i16);
+    assert_eq!(((result >> 32) & 0xFFFF) as i16, 1i16);
+    assert_eq!(((result >> 48) & 0xFFFF) as i16, -1i16);
+    assert_eq!(((result >> 64) & 0xFFFF) as i16, 64i16);
+    assert_eq!(((result >> 80) & 0xFFFF) as i16, -64i16);
+    assert_eq!(((result >> 96) & 0xFFFF) as i16, 0i16);
+    assert_eq!(((result >> 112) & 0xFFFF) as i16, -16i16);
 }
