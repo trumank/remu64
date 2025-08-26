@@ -410,6 +410,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             Mnemonic::Pmulhw => self.execute_pmulhw(inst),
             Mnemonic::Pmulhuw => self.execute_pmulhuw(inst),
             Mnemonic::Pmuludq => self.execute_pmuludq(inst),
+            Mnemonic::Pmaddwd => self.execute_pmaddwd(inst),
             Mnemonic::Pand => self.execute_pand(inst),
             Mnemonic::Pandn => self.execute_pandn(inst),
             Mnemonic::Por => self.execute_por(inst),
@@ -5525,6 +5526,50 @@ impl<H: HookManager> ExecutionContext<'_, H> {
                 word as u8
             };
             result |= (byte as u128) << ((i + 8) * 8);
+        }
+        
+        self.engine.cpu.write_xmm(dst_reg, result);
+        Ok(())
+    }
+
+    fn execute_pmaddwd(&mut self, inst: &Instruction) -> Result<()> {
+        // PMADDWD: Multiply packed signed words and add pairs of results
+        // Multiplies 8 pairs of signed words, then adds adjacent products to form 4 signed dwords
+        let dst_reg = self.convert_register(inst.op_register(0))?;
+        let src_value = match inst.op_kind(1) {
+            OpKind::Register => {
+                let src_reg = self.convert_register(inst.op_register(1))?;
+                self.engine.cpu.read_xmm(src_reg)
+            }
+            OpKind::Memory => {
+                let addr = self.calculate_memory_address(inst, 1)?;
+                self.read_memory_128(addr)?
+            }
+            _ => {
+                return Err(EmulatorError::UnsupportedInstruction(
+                    "Invalid PMADDWD source".to_string(),
+                ))
+            }
+        };
+
+        let dst_value = self.engine.cpu.read_xmm(dst_reg);
+        let mut result = 0u128;
+        
+        // Process 4 pairs of words to produce 4 dwords
+        for i in 0..4 {
+            // Get two consecutive words from each operand
+            let dst_word1 = ((dst_value >> (i * 32)) & 0xFFFF) as i16;
+            let dst_word2 = ((dst_value >> (i * 32 + 16)) & 0xFFFF) as i16;
+            let src_word1 = ((src_value >> (i * 32)) & 0xFFFF) as i16;
+            let src_word2 = ((src_value >> (i * 32 + 16)) & 0xFFFF) as i16;
+            
+            // Multiply and add the products
+            let product1 = (dst_word1 as i32) * (src_word1 as i32);
+            let product2 = (dst_word2 as i32) * (src_word2 as i32);
+            let sum = product1.wrapping_add(product2);
+            
+            // Store the 32-bit result
+            result |= ((sum as u32) as u128) << (i * 32);
         }
         
         self.engine.cpu.write_xmm(dst_reg, result);
