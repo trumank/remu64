@@ -14,8 +14,8 @@ pub enum EngineMode {
 }
 
 pub struct Engine {
-    cpu: CpuState,
-    memory: Memory,
+    pub cpu: CpuState,
+    pub memory: Memory,
     decoder: Decoder,
     _mode: EngineMode,
     stop_requested: Arc<AtomicBool>,

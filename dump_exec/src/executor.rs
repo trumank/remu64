@@ -171,7 +171,12 @@ impl FunctionExecutor {
         let return_address = 0xDEADBEEFCAFEBABE_u64;
 
         // Setup calling convention with shadow space
-        CallingConvention::setup_fastcall(&mut self.engine, args, self.stack_base, return_address)?;
+        CallingConvention::setup_fastcall(
+            &mut self.engine,
+            args.clone(),
+            self.stack_base,
+            return_address,
+        )?;
 
         // Set RIP to function start
         self.engine.reg_write(Register::RIP, function_address);

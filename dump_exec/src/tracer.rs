@@ -189,6 +189,27 @@ impl InstructionTracer {
                 "         R12={:016x} R13={:016x} R14={:016x} R15={:016x}",
                 r12, r13, r14, r15
             )?;
+
+            // Show XMM and YMM registers
+            // for i in 0..16 {
+            //     let xmm_reg = match i {
+            //         0 => Register::XMM0, 1 => Register::XMM1, 2 => Register::XMM2, 3 => Register::XMM3,
+            //         4 => Register::XMM4, 5 => Register::XMM5, 6 => Register::XMM6, 7 => Register::XMM7,
+            //         8 => Register::XMM8, 9 => Register::XMM9, 10 => Register::XMM10, 11 => Register::XMM11,
+            //         12 => Register::XMM12, 13 => Register::XMM13, 14 => Register::XMM14, 15 => Register::XMM15,
+            //         _ => unreachable!(),
+            //     };
+            //     let ymm_reg = match i {
+            //         0 => Register::YMM0, 1 => Register::YMM1, 2 => Register::YMM2, 3 => Register::YMM3,
+            //         4 => Register::YMM4, 5 => Register::YMM5, 6 => Register::YMM6, 7 => Register::YMM7,
+            //         8 => Register::YMM8, 9 => Register::YMM9, 10 => Register::YMM10, 11 => Register::YMM11,
+            //         12 => Register::YMM12, 13 => Register::YMM13, 14 => Register::YMM14, 15 => Register::YMM15,
+            //         _ => unreachable!(),
+            //     };
+            //     let xmm_val = engine.cpu.read_xmm(xmm_reg);
+            //     let ymm_val = engine.cpu.read_ymm(ymm_reg);
+            //     writeln!(self.output, "         XMM{:<2}={:032x} YMM{:<2}={:032x}{:032x}", i, xmm_val, i, ymm_val[1], ymm_val[0])?;
+            // }
         } else {
             // Standard trace mode - show basic registers
             writeln!(
