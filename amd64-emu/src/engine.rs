@@ -5534,7 +5534,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         // imm16 = size of stack frame, imm8 = nesting level (we'll only implement level 0)
 
         // Get operands - for ENTER, operands are immediates
-        let frame_size = inst.immediate(0) as u64;
+        let frame_size = inst.immediate(0);
         let nesting_level = inst.immediate(1) as u8;
 
         if nesting_level != 0 {
@@ -6391,7 +6391,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             // Shift each 16-bit word left
             for i in 0..8 {
                 let word = ((dst_value >> (i * 16)) & 0xFFFF) as u16;
-                let shifted = (word << shift_amount) & 0xFFFF;
+                let shifted = word << shift_amount;
                 result |= (shifted as u128) << (i * 16);
             }
         }
@@ -6430,7 +6430,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             // Shift each 32-bit doubleword left
             for i in 0..4 {
                 let dword = ((dst_value >> (i * 32)) & 0xFFFFFFFF) as u32;
-                let shifted = (dword << shift_amount) & 0xFFFFFFFF;
+                let shifted = dword << shift_amount;
                 result |= (shifted as u128) << (i * 32);
             }
         }

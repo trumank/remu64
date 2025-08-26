@@ -55,7 +55,7 @@ fn test_packsswb() {
     // Expected: packed bytes from xmm0 (low) and xmm1 (high)
     // xmm0 -> 0x7F, 0x7F, 0x80, 0x80, 0x20, 0xE0, 0x40, 0x7F
     // xmm1 -> 0x10, 0xF0, 0x00, 0xFF, 0x50, 0x80, 0x01, 0x80
-    let expected = 0x7Fu128
+    let expected = (0x7Fu128
         | (0x7Fu128 << 8)
         | (0x80u128 << 16)
         | (0x80u128 << 24)
@@ -64,8 +64,7 @@ fn test_packsswb() {
         | (0x40u128 << 48)
         | (0x7Fu128 << 56)
         | (0x10u128 << 64)
-        | (0xF0u128 << 72)
-        | (0x00u128 << 80)
+        | (0xF0u128 << 72))
         | (0xFFu128 << 88)
         | (0x50u128 << 96)
         | (0x80u128 << 104)
@@ -134,16 +133,12 @@ fn test_packuswb() {
     // Expected: unsigned bytes from xmm0 (low) and xmm1 (high)
     // xmm0 -> 0xFF, 0xFF, 0x00, 0x00, 0x80, 0x00, 0xFE, 0xFF
     // xmm1 -> 0x01, 0x00, 0xFF, 0x00, 0x50, 0x00, 0xC8, 0xFF
-    let expected = 0xFFu128
-        | (0xFFu128 << 8)
-        | (0x00u128 << 16)
-        | (0x00u128 << 24)
-        | (0x80u128 << 32)
-        | (0x00u128 << 40)
+    let expected = ((((0xFFu128
+        | (0xFFu128 << 8)))
+        | (0x80u128 << 32))
         | (0xFEu128 << 48)
         | (0xFFu128 << 56)
-        | (0x01u128 << 64)
-        | (0x00u128 << 72)
+        | (0x01u128 << 64))
         | (0xFFu128 << 80)
         | (0x00u128 << 88)
         | (0x50u128 << 96)
@@ -205,13 +200,12 @@ fn test_packssdw() {
     // Expected: signed words from xmm0 (low) and xmm1 (high)
     // xmm0 -> 0x7FFF, 0x7FFF, 0x8000, 0x8000
     // xmm1 -> 0x1000, 0xF000, 0x0000, 0x8000
-    let expected = 0x7FFFu128
+    let expected = (0x7FFFu128
         | (0x7FFFu128 << 16)
         | (0x8000u128 << 32)
         | (0x8000u128 << 48)
         | (0x1000u128 << 64)
-        | (0xF000u128 << 80)
-        | (0x0000u128 << 96)
+        | (0xF000u128 << 80))
         | (0x8000u128 << 112);
 
     assert_eq!(

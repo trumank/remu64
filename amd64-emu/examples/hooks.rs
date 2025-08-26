@@ -36,7 +36,7 @@ impl HookManager for CustomHooks {
         size: usize,
     ) -> amd64_emu::Result<()> {
         // Only log reads in the 0x2000 range
-        if address >= 0x2000 && address < 0x3000 {
+        if (0x2000..0x3000).contains(&address) {
             self.mem_read_count.push((address, size));
             println!("[MEM READ] Reading {} bytes from {:#x}", size, address);
         }
@@ -50,7 +50,7 @@ impl HookManager for CustomHooks {
         size: usize,
     ) -> amd64_emu::Result<()> {
         // Only log writes in the 0x2000 range
-        if address >= 0x2000 && address < 0x3000 {
+        if (0x2000..0x3000).contains(&address) {
             self.mem_write_count.push((address, size));
             println!("[MEM WRITE] Writing {} bytes to {:#x}", size, address);
         }
