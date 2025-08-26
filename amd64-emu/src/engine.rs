@@ -384,6 +384,16 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             Mnemonic::Cvtss2sd => self.execute_cvtss2sd(inst),
             Mnemonic::Cvtsd2ss => self.execute_cvtsd2ss(inst),
             Mnemonic::Cvtps2dq => self.execute_cvtps2dq(inst),
+            // Scalar double-precision floating-point operations
+            Mnemonic::Addsd => self.execute_addsd(inst),
+            Mnemonic::Subsd => self.execute_subsd(inst),
+            Mnemonic::Mulsd => self.execute_mulsd(inst),
+            Mnemonic::Divsd => self.execute_divsd(inst),
+            // Scalar single-precision floating-point operations  
+            Mnemonic::Addss => self.execute_addss(inst),
+            Mnemonic::Subss => self.execute_subss(inst),
+            Mnemonic::Mulss => self.execute_mulss(inst),
+            Mnemonic::Divss => self.execute_divss(inst),
             Mnemonic::Cvttps2dq => self.execute_cvttps2dq(inst),
             Mnemonic::Cvtdq2ps => self.execute_cvtdq2ps(inst),
             Mnemonic::Cvtsi2ss => self.execute_cvtsi2ss(inst),
@@ -3534,6 +3544,246 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         };
         
         self.engine.cpu.write_reg(dst_reg, int_val as u64);
+        Ok(())
+    }
+
+    // Scalar Double-Precision Floating-Point Arithmetic Operations
+
+    fn execute_addsd(&mut self, inst: &Instruction) -> Result<()> {
+        // ADDSD: Add Scalar Double-Precision Floating-Point Value
+        // Adds the low double-precision float values, preserves upper bits
+        let dst_reg = self.convert_register(inst.op_register(0))?;
+        let src_value = match inst.op_kind(1) {
+            OpKind::Register => {
+                let src_reg = self.convert_register(inst.op_register(1))?;
+                self.engine.cpu.read_xmm(src_reg) as u64
+            }
+            OpKind::Memory => {
+                let addr = self.calculate_memory_address(inst, 1)?;
+                self.read_memory_64(addr)?
+            }
+            _ => {
+                return Err(EmulatorError::UnsupportedInstruction(
+                    "Invalid ADDSD source".to_string(),
+                ))
+            }
+        };
+
+        let dst_value = self.engine.cpu.read_xmm(dst_reg);
+        let dst_double = f64::from_bits(dst_value as u64);
+        let src_double = f64::from_bits(src_value);
+        let result_double = dst_double + src_double;
+        
+        // Replace lower 64 bits with result, preserve upper 64 bits
+        let result = (result_double.to_bits() as u128) | (dst_value & 0xFFFFFFFFFFFFFFFF0000000000000000);
+        self.engine.cpu.write_xmm(dst_reg, result);
+        Ok(())
+    }
+
+    fn execute_subsd(&mut self, inst: &Instruction) -> Result<()> {
+        // SUBSD: Subtract Scalar Double-Precision Floating-Point Value
+        let dst_reg = self.convert_register(inst.op_register(0))?;
+        let src_value = match inst.op_kind(1) {
+            OpKind::Register => {
+                let src_reg = self.convert_register(inst.op_register(1))?;
+                self.engine.cpu.read_xmm(src_reg) as u64
+            }
+            OpKind::Memory => {
+                let addr = self.calculate_memory_address(inst, 1)?;
+                self.read_memory_64(addr)?
+            }
+            _ => {
+                return Err(EmulatorError::UnsupportedInstruction(
+                    "Invalid SUBSD source".to_string(),
+                ))
+            }
+        };
+
+        let dst_value = self.engine.cpu.read_xmm(dst_reg);
+        let dst_double = f64::from_bits(dst_value as u64);
+        let src_double = f64::from_bits(src_value);
+        let result_double = dst_double - src_double;
+        
+        let result = (result_double.to_bits() as u128) | (dst_value & 0xFFFFFFFFFFFFFFFF0000000000000000);
+        self.engine.cpu.write_xmm(dst_reg, result);
+        Ok(())
+    }
+
+    fn execute_mulsd(&mut self, inst: &Instruction) -> Result<()> {
+        // MULSD: Multiply Scalar Double-Precision Floating-Point Value
+        let dst_reg = self.convert_register(inst.op_register(0))?;
+        let src_value = match inst.op_kind(1) {
+            OpKind::Register => {
+                let src_reg = self.convert_register(inst.op_register(1))?;
+                self.engine.cpu.read_xmm(src_reg) as u64
+            }
+            OpKind::Memory => {
+                let addr = self.calculate_memory_address(inst, 1)?;
+                self.read_memory_64(addr)?
+            }
+            _ => {
+                return Err(EmulatorError::UnsupportedInstruction(
+                    "Invalid MULSD source".to_string(),
+                ))
+            }
+        };
+
+        let dst_value = self.engine.cpu.read_xmm(dst_reg);
+        let dst_double = f64::from_bits(dst_value as u64);
+        let src_double = f64::from_bits(src_value);
+        let result_double = dst_double * src_double;
+        
+        let result = (result_double.to_bits() as u128) | (dst_value & 0xFFFFFFFFFFFFFFFF0000000000000000);
+        self.engine.cpu.write_xmm(dst_reg, result);
+        Ok(())
+    }
+
+    fn execute_divsd(&mut self, inst: &Instruction) -> Result<()> {
+        // DIVSD: Divide Scalar Double-Precision Floating-Point Value
+        let dst_reg = self.convert_register(inst.op_register(0))?;
+        let src_value = match inst.op_kind(1) {
+            OpKind::Register => {
+                let src_reg = self.convert_register(inst.op_register(1))?;
+                self.engine.cpu.read_xmm(src_reg) as u64
+            }
+            OpKind::Memory => {
+                let addr = self.calculate_memory_address(inst, 1)?;
+                self.read_memory_64(addr)?
+            }
+            _ => {
+                return Err(EmulatorError::UnsupportedInstruction(
+                    "Invalid DIVSD source".to_string(),
+                ))
+            }
+        };
+
+        let dst_value = self.engine.cpu.read_xmm(dst_reg);
+        let dst_double = f64::from_bits(dst_value as u64);
+        let src_double = f64::from_bits(src_value);
+        let result_double = dst_double / src_double;
+        
+        let result = (result_double.to_bits() as u128) | (dst_value & 0xFFFFFFFFFFFFFFFF0000000000000000);
+        self.engine.cpu.write_xmm(dst_reg, result);
+        Ok(())
+    }
+
+    // Scalar Single-Precision Floating-Point Arithmetic Operations
+
+    fn execute_addss(&mut self, inst: &Instruction) -> Result<()> {
+        // ADDSS: Add Scalar Single-Precision Floating-Point Value
+        // Adds the low single-precision float values, preserves upper bits
+        let dst_reg = self.convert_register(inst.op_register(0))?;
+        let src_value = match inst.op_kind(1) {
+            OpKind::Register => {
+                let src_reg = self.convert_register(inst.op_register(1))?;
+                self.engine.cpu.read_xmm(src_reg) as u32
+            }
+            OpKind::Memory => {
+                let addr = self.calculate_memory_address(inst, 1)?;
+                self.read_memory_32(addr)?
+            }
+            _ => {
+                return Err(EmulatorError::UnsupportedInstruction(
+                    "Invalid ADDSS source".to_string(),
+                ))
+            }
+        };
+
+        let dst_value = self.engine.cpu.read_xmm(dst_reg);
+        let dst_float = f32::from_bits(dst_value as u32);
+        let src_float = f32::from_bits(src_value);
+        let result_float = dst_float + src_float;
+        
+        // Replace lower 32 bits with result, preserve upper 96 bits
+        let result = (result_float.to_bits() as u128) | (dst_value & 0xFFFFFFFFFFFFFFFFFFFFFFFF00000000);
+        self.engine.cpu.write_xmm(dst_reg, result);
+        Ok(())
+    }
+
+    fn execute_subss(&mut self, inst: &Instruction) -> Result<()> {
+        // SUBSS: Subtract Scalar Single-Precision Floating-Point Value
+        let dst_reg = self.convert_register(inst.op_register(0))?;
+        let src_value = match inst.op_kind(1) {
+            OpKind::Register => {
+                let src_reg = self.convert_register(inst.op_register(1))?;
+                self.engine.cpu.read_xmm(src_reg) as u32
+            }
+            OpKind::Memory => {
+                let addr = self.calculate_memory_address(inst, 1)?;
+                self.read_memory_32(addr)?
+            }
+            _ => {
+                return Err(EmulatorError::UnsupportedInstruction(
+                    "Invalid SUBSS source".to_string(),
+                ))
+            }
+        };
+
+        let dst_value = self.engine.cpu.read_xmm(dst_reg);
+        let dst_float = f32::from_bits(dst_value as u32);
+        let src_float = f32::from_bits(src_value);
+        let result_float = dst_float - src_float;
+        
+        let result = (result_float.to_bits() as u128) | (dst_value & 0xFFFFFFFFFFFFFFFFFFFFFFFF00000000);
+        self.engine.cpu.write_xmm(dst_reg, result);
+        Ok(())
+    }
+
+    fn execute_mulss(&mut self, inst: &Instruction) -> Result<()> {
+        // MULSS: Multiply Scalar Single-Precision Floating-Point Value
+        let dst_reg = self.convert_register(inst.op_register(0))?;
+        let src_value = match inst.op_kind(1) {
+            OpKind::Register => {
+                let src_reg = self.convert_register(inst.op_register(1))?;
+                self.engine.cpu.read_xmm(src_reg) as u32
+            }
+            OpKind::Memory => {
+                let addr = self.calculate_memory_address(inst, 1)?;
+                self.read_memory_32(addr)?
+            }
+            _ => {
+                return Err(EmulatorError::UnsupportedInstruction(
+                    "Invalid MULSS source".to_string(),
+                ))
+            }
+        };
+
+        let dst_value = self.engine.cpu.read_xmm(dst_reg);
+        let dst_float = f32::from_bits(dst_value as u32);
+        let src_float = f32::from_bits(src_value);
+        let result_float = dst_float * src_float;
+        
+        let result = (result_float.to_bits() as u128) | (dst_value & 0xFFFFFFFFFFFFFFFFFFFFFFFF00000000);
+        self.engine.cpu.write_xmm(dst_reg, result);
+        Ok(())
+    }
+
+    fn execute_divss(&mut self, inst: &Instruction) -> Result<()> {
+        // DIVSS: Divide Scalar Single-Precision Floating-Point Value
+        let dst_reg = self.convert_register(inst.op_register(0))?;
+        let src_value = match inst.op_kind(1) {
+            OpKind::Register => {
+                let src_reg = self.convert_register(inst.op_register(1))?;
+                self.engine.cpu.read_xmm(src_reg) as u32
+            }
+            OpKind::Memory => {
+                let addr = self.calculate_memory_address(inst, 1)?;
+                self.read_memory_32(addr)?
+            }
+            _ => {
+                return Err(EmulatorError::UnsupportedInstruction(
+                    "Invalid DIVSS source".to_string(),
+                ))
+            }
+        };
+
+        let dst_value = self.engine.cpu.read_xmm(dst_reg);
+        let dst_float = f32::from_bits(dst_value as u32);
+        let src_float = f32::from_bits(src_value);
+        let result_float = dst_float / src_float;
+        
+        let result = (result_float.to_bits() as u128) | (dst_value & 0xFFFFFFFFFFFFFFFFFFFFFFFF00000000);
+        self.engine.cpu.write_xmm(dst_reg, result);
         Ok(())
     }
 
