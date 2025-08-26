@@ -136,7 +136,7 @@ impl FunctionExecutor {
         let mut engine = Engine::new(EngineMode::Mode64);
         let mut memory_manager = MemoryManager::with_minidump(minidump_loader);
 
-        let stack_size = 0x10;
+        let stack_size = 0x10000;
         let stack_base = memory_manager
             .allocate_stack(stack_size)
             .context("Failed to allocate stack")?;
@@ -170,9 +170,8 @@ impl FunctionExecutor {
         // Use a canary return address that we can detect
         let return_address = 0xDEADBEEFCAFEBABE_u64;
 
-        // Setup calling convention
+        // Setup calling convention with shadow space
         CallingConvention::setup_fastcall(&mut self.engine, args, self.stack_base, return_address)?;
-        CallingConvention::setup_shadow_space(&mut self.engine);
 
         // Set RIP to function start
         self.engine.reg_write(Register::RIP, function_address);
