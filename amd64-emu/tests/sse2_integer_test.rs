@@ -41,7 +41,7 @@ fn test_paddb() {
     engine.reg_write(Register::RIP, 0x1000);
     
     // Execute instructions
-    assert!(engine.run(0x1000, 100000).is_ok());
+    assert!(engine.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0).is_ok());
     
     // Check result
     let mut result = vec![0u8; 16];
@@ -119,7 +119,7 @@ fn test_paddw() {
     engine.reg_write(Register::RIP, 0x1000);
     
     // Execute instructions
-    assert!(engine.run(0x1000, 100000).is_ok());
+    assert!(engine.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0).is_ok());
     
     // Check result
     let mut result = vec![0u8; 16];
@@ -181,7 +181,7 @@ fn test_paddd() {
     engine.reg_write(Register::RIP, 0x1000);
     
     // Execute instructions
-    assert!(engine.run(0x1000, 100000).is_ok());
+    assert!(engine.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0).is_ok());
     
     // Check result
     let mut result = vec![0u8; 16];
@@ -235,7 +235,7 @@ fn test_paddq() {
     engine.reg_write(Register::RIP, 0x1000);
     
     // Execute instructions
-    assert!(engine.run(0x1000, 100000).is_ok());
+    assert!(engine.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0).is_ok());
     
     // Check result
     let mut result = vec![0u8; 16];
@@ -285,7 +285,7 @@ fn test_paddb_memory_operand() {
     engine.reg_write(Register::RIP, 0x1000);
     
     // Execute instructions
-    assert!(engine.run(0x1000, 100000).is_ok());
+    assert!(engine.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0).is_ok());
     
     // Check result
     let mut result = vec![0u8; 16];
