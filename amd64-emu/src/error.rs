@@ -41,6 +41,9 @@ pub enum EmulatorError {
     #[error("Invalid operand")]
     InvalidOperand,
 
+    #[error("Unsupported operand type")]
+    UnsupportedOperandType,
+
     #[error("Internal error: {0}")]
     InternalError(String),
 }
