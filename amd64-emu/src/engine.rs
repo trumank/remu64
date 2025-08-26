@@ -410,6 +410,12 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             Mnemonic::Pandn => self.execute_pandn(inst),
             Mnemonic::Por => self.execute_por(inst),
             Mnemonic::Pxor => self.execute_pxor(inst),
+            Mnemonic::Pcmpeqb => self.execute_pcmpeqb(inst),
+            Mnemonic::Pcmpeqw => self.execute_pcmpeqw(inst),
+            Mnemonic::Pcmpeqd => self.execute_pcmpeqd(inst),
+            Mnemonic::Pcmpgtb => self.execute_pcmpgtb(inst),
+            Mnemonic::Pcmpgtw => self.execute_pcmpgtw(inst),
+            Mnemonic::Pcmpgtd => self.execute_pcmpgtd(inst),
             _ => {
                 println!(
                     "Unsupported instruction: {} ({:?}) at {:#x}",
@@ -3210,6 +3216,210 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         
         // Perform bitwise XOR on the entire 128-bit value
         let result = dst_value ^ src_value;
+        
+        self.engine.cpu.write_xmm(dst_reg, result);
+        Ok(())
+    }
+
+    fn execute_pcmpeqb(&mut self, inst: &Instruction) -> Result<()> {
+        // PCMPEQB: Compare packed bytes for equality
+        let dst_reg = self.convert_register(inst.op_register(0))?;
+        let src_value = match inst.op_kind(1) {
+            OpKind::Register => {
+                let src_reg = self.convert_register(inst.op_register(1))?;
+                self.engine.cpu.read_xmm(src_reg)
+            }
+            OpKind::Memory => {
+                let addr = self.calculate_memory_address(inst, 1)?;
+                self.read_memory_128(addr)?
+            }
+            _ => {
+                return Err(EmulatorError::UnsupportedInstruction(
+                    "Invalid PCMPEQB source".to_string(),
+                ))
+            }
+        };
+        let dst_value = self.engine.cpu.read_xmm(dst_reg);
+        
+        // Compare each byte
+        let mut result = 0u128;
+        for i in 0..16 {
+            let dst_byte = ((dst_value >> (i * 8)) & 0xFF) as u8;
+            let src_byte = ((src_value >> (i * 8)) & 0xFF) as u8;
+            if dst_byte == src_byte {
+                result |= 0xFFu128 << (i * 8);
+            }
+        }
+        
+        self.engine.cpu.write_xmm(dst_reg, result);
+        Ok(())
+    }
+
+    fn execute_pcmpeqw(&mut self, inst: &Instruction) -> Result<()> {
+        // PCMPEQW: Compare packed words for equality
+        let dst_reg = self.convert_register(inst.op_register(0))?;
+        let src_value = match inst.op_kind(1) {
+            OpKind::Register => {
+                let src_reg = self.convert_register(inst.op_register(1))?;
+                self.engine.cpu.read_xmm(src_reg)
+            }
+            OpKind::Memory => {
+                let addr = self.calculate_memory_address(inst, 1)?;
+                self.read_memory_128(addr)?
+            }
+            _ => {
+                return Err(EmulatorError::UnsupportedInstruction(
+                    "Invalid PCMPEQW source".to_string(),
+                ))
+            }
+        };
+        let dst_value = self.engine.cpu.read_xmm(dst_reg);
+        
+        // Compare each 16-bit word
+        let mut result = 0u128;
+        for i in 0..8 {
+            let dst_word = ((dst_value >> (i * 16)) & 0xFFFF) as u16;
+            let src_word = ((src_value >> (i * 16)) & 0xFFFF) as u16;
+            if dst_word == src_word {
+                result |= 0xFFFFu128 << (i * 16);
+            }
+        }
+        
+        self.engine.cpu.write_xmm(dst_reg, result);
+        Ok(())
+    }
+
+    fn execute_pcmpeqd(&mut self, inst: &Instruction) -> Result<()> {
+        // PCMPEQD: Compare packed doublewords for equality
+        let dst_reg = self.convert_register(inst.op_register(0))?;
+        let src_value = match inst.op_kind(1) {
+            OpKind::Register => {
+                let src_reg = self.convert_register(inst.op_register(1))?;
+                self.engine.cpu.read_xmm(src_reg)
+            }
+            OpKind::Memory => {
+                let addr = self.calculate_memory_address(inst, 1)?;
+                self.read_memory_128(addr)?
+            }
+            _ => {
+                return Err(EmulatorError::UnsupportedInstruction(
+                    "Invalid PCMPEQD source".to_string(),
+                ))
+            }
+        };
+        let dst_value = self.engine.cpu.read_xmm(dst_reg);
+        
+        // Compare each 32-bit doubleword
+        let mut result = 0u128;
+        for i in 0..4 {
+            let dst_dword = ((dst_value >> (i * 32)) & 0xFFFFFFFF) as u32;
+            let src_dword = ((src_value >> (i * 32)) & 0xFFFFFFFF) as u32;
+            if dst_dword == src_dword {
+                result |= 0xFFFFFFFFu128 << (i * 32);
+            }
+        }
+        
+        self.engine.cpu.write_xmm(dst_reg, result);
+        Ok(())
+    }
+
+    fn execute_pcmpgtb(&mut self, inst: &Instruction) -> Result<()> {
+        // PCMPGTB: Compare packed signed bytes for greater than
+        let dst_reg = self.convert_register(inst.op_register(0))?;
+        let src_value = match inst.op_kind(1) {
+            OpKind::Register => {
+                let src_reg = self.convert_register(inst.op_register(1))?;
+                self.engine.cpu.read_xmm(src_reg)
+            }
+            OpKind::Memory => {
+                let addr = self.calculate_memory_address(inst, 1)?;
+                self.read_memory_128(addr)?
+            }
+            _ => {
+                return Err(EmulatorError::UnsupportedInstruction(
+                    "Invalid PCMPGTB source".to_string(),
+                ))
+            }
+        };
+        let dst_value = self.engine.cpu.read_xmm(dst_reg);
+        
+        // Compare each signed byte
+        let mut result = 0u128;
+        for i in 0..16 {
+            let dst_byte = ((dst_value >> (i * 8)) & 0xFF) as u8 as i8;
+            let src_byte = ((src_value >> (i * 8)) & 0xFF) as u8 as i8;
+            if dst_byte > src_byte {
+                result |= 0xFFu128 << (i * 8);
+            }
+        }
+        
+        self.engine.cpu.write_xmm(dst_reg, result);
+        Ok(())
+    }
+
+    fn execute_pcmpgtw(&mut self, inst: &Instruction) -> Result<()> {
+        // PCMPGTW: Compare packed signed words for greater than
+        let dst_reg = self.convert_register(inst.op_register(0))?;
+        let src_value = match inst.op_kind(1) {
+            OpKind::Register => {
+                let src_reg = self.convert_register(inst.op_register(1))?;
+                self.engine.cpu.read_xmm(src_reg)
+            }
+            OpKind::Memory => {
+                let addr = self.calculate_memory_address(inst, 1)?;
+                self.read_memory_128(addr)?
+            }
+            _ => {
+                return Err(EmulatorError::UnsupportedInstruction(
+                    "Invalid PCMPGTW source".to_string(),
+                ))
+            }
+        };
+        let dst_value = self.engine.cpu.read_xmm(dst_reg);
+        
+        // Compare each signed 16-bit word
+        let mut result = 0u128;
+        for i in 0..8 {
+            let dst_word = ((dst_value >> (i * 16)) & 0xFFFF) as u16 as i16;
+            let src_word = ((src_value >> (i * 16)) & 0xFFFF) as u16 as i16;
+            if dst_word > src_word {
+                result |= 0xFFFFu128 << (i * 16);
+            }
+        }
+        
+        self.engine.cpu.write_xmm(dst_reg, result);
+        Ok(())
+    }
+
+    fn execute_pcmpgtd(&mut self, inst: &Instruction) -> Result<()> {
+        // PCMPGTD: Compare packed signed doublewords for greater than
+        let dst_reg = self.convert_register(inst.op_register(0))?;
+        let src_value = match inst.op_kind(1) {
+            OpKind::Register => {
+                let src_reg = self.convert_register(inst.op_register(1))?;
+                self.engine.cpu.read_xmm(src_reg)
+            }
+            OpKind::Memory => {
+                let addr = self.calculate_memory_address(inst, 1)?;
+                self.read_memory_128(addr)?
+            }
+            _ => {
+                return Err(EmulatorError::UnsupportedInstruction(
+                    "Invalid PCMPGTD source".to_string(),
+                ))
+            }
+        };
+        let dst_value = self.engine.cpu.read_xmm(dst_reg);
+        
+        // Compare each signed 32-bit doubleword
+        let mut result = 0u128;
+        for i in 0..4 {
+            let dst_dword = ((dst_value >> (i * 32)) & 0xFFFFFFFF) as u32 as i32;
+            let src_dword = ((src_value >> (i * 32)) & 0xFFFFFFFF) as u32 as i32;
+            if dst_dword > src_dword {
+                result |= 0xFFFFFFFFu128 << (i * 32);
+            }
+        }
         
         self.engine.cpu.write_xmm(dst_reg, result);
         Ok(())
