@@ -157,19 +157,6 @@ impl<'a> MemoryTrait for MinidumpMemory<'a> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use std::collections::HashMap;
-
-    fn create_mock_memory_data() -> Vec<(u64, Vec<u8>)> {
-        vec![
-            (0x1000, (0..4096).map(|i| (i % 256) as u8).collect()),
-            (0x10000, vec![0xAA; 8192]),
-            (
-                0x20000,
-                (0..2048).map(|i| (255 - (i % 256)) as u8).collect(),
-            ),
-        ]
-    }
 
     // Note: These tests would need actual minidump data to run properly
     // For now they serve as documentation of the intended behavior

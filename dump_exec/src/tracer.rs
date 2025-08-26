@@ -1,4 +1,4 @@
-use crate::MinidumpLoader;
+use crate::process_trait::ProcessTrait;
 use amd64_emu::{memory::MemoryTrait, Engine, Register};
 use anyhow::Result;
 use colored::*;
@@ -91,12 +91,12 @@ impl InstructionTracer {
         self.full_trace
     }
 
-    pub fn trace_instruction<M: MemoryTrait>(
+    pub fn trace_instruction<M: MemoryTrait, P: ProcessTrait>(
         &mut self,
         rip: u64,
         instruction_bytes: &[u8],
         engine: &Engine<M>,
-        loader: Option<&MinidumpLoader>,
+        process: Option<&P>,
     ) -> Result<()> {
         if !self.enabled {
             return Ok(());
@@ -141,7 +141,7 @@ impl InstructionTracer {
         let r15 = engine.reg_read(Register::R15);
 
         // Check if RIP is in a known module
-        let module_info = loader.and_then(|l| l.find_module_for_address(rip));
+        let module_info = process.and_then(|p| p.find_module_for_address(rip));
 
         // Format the address with module information and always show RIP
         let address_str = match module_info {

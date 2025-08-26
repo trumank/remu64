@@ -4,6 +4,7 @@ pub mod fastcall;
 pub mod memory_manager;
 pub mod minidump_loader;
 pub mod minidump_memory;
+pub mod process_trait;
 pub mod stack_manager;
 pub mod tracer;
 pub mod vm_context;
@@ -14,6 +15,7 @@ pub use fastcall::{ArgumentType, CallingConvention, FName, FString};
 pub use memory_manager::MemoryManager;
 pub use minidump_loader::MinidumpLoader;
 pub use minidump_memory::MinidumpMemory;
+pub use process_trait::{MemoryRegion, ModuleInfo, ProcessArchitecture, ProcessTrait};
 pub use stack_manager::StackManager;
 pub use vm_context::VMContext;
 
@@ -31,7 +33,7 @@ impl DumpExec {
         MinidumpLoader::from_minidump(dump)
     }
 
-    pub fn create_executor<'a>(loader: &'a MinidumpLoader<'a>) -> Result<FunctionExecutor<'a>> {
-        FunctionExecutor::new(loader)
+    pub fn create_executor<P: ProcessTrait>(process: P) -> Result<FunctionExecutor<P>> {
+        FunctionExecutor::new(process)
     }
 }

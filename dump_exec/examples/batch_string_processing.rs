@@ -26,7 +26,7 @@ fn process_strings_batch(minidump_loader: &dump_exec::MinidumpLoader<'_>) -> Res
     // Create executor once and reuse it
     let mut executor = DumpExec::create_executor(minidump_loader)?;
 
-    for i in 0..10000 {
+    for i in 0..1000000 {
         executor.reset_for_reuse()?;
 
         let result = process_single_string(&mut executor, (i, i))?;
@@ -35,8 +35,8 @@ fn process_strings_batch(minidump_loader: &dump_exec::MinidumpLoader<'_>) -> Res
     Ok(())
 }
 
-fn process_single_string(
-    executor: &mut dump_exec::FunctionExecutor<'_>,
+fn process_single_string<P: dump_exec::ProcessTrait>(
+    executor: &mut dump_exec::FunctionExecutor<P>,
     input: (i32, i32),
 ) -> Result<String> {
     let fname_bytes = [

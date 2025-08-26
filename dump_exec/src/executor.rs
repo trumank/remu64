@@ -1,26 +1,28 @@
 use crate::execution_controller::{ExecutionController, ExecutionHooks};
 use crate::fastcall::{ArgumentType, CallingConvention, FString};
-use crate::minidump_loader::MinidumpLoader;
+use crate::process_trait::ProcessTrait;
 use crate::tracer::InstructionTracer;
 use crate::vm_context::VMContext;
 use amd64_emu::Register;
 use anyhow::Result;
 
-pub struct FunctionExecutor<'a> {
-    pub vm_context: VMContext<'a>,
+pub struct FunctionExecutor<P: ProcessTrait> {
+    pub vm_context: VMContext<P::Memory>,
+    pub process: P,
     pub stack_base: u64,
     pub tracer: InstructionTracer,
     pub fstring_addresses: Vec<u64>,
 }
 
-impl<'a> FunctionExecutor<'a> {
-    pub fn new(minidump_loader: &'a MinidumpLoader<'a>) -> Result<FunctionExecutor<'a>> {
-        let vm_context = VMContext::new(minidump_loader)?;
+impl<P: ProcessTrait> FunctionExecutor<P> {
+    pub fn new(process: P) -> Result<FunctionExecutor<P>> {
+        let vm_context = VMContext::new(&process)?;
         let stack_base = 0x7fff_f000_0000u64;
         let tracer = InstructionTracer::new(false);
 
         let mut executor = FunctionExecutor {
             vm_context,
+            process,
             stack_base,
             tracer,
             fstring_addresses: Vec::new(),
@@ -57,7 +59,7 @@ impl<'a> FunctionExecutor<'a> {
             .reg_write(Register::RIP, function_address);
 
         let mut hooks = ExecutionHooks {
-            minidump_loader: self.vm_context.minidump_loader,
+            process: &self.process,
             tracer: &mut self.tracer,
             instruction_count: 0,
         };
@@ -123,5 +125,25 @@ impl<'a> FunctionExecutor<'a> {
     /// Convenience method that delegates to VMContext
     pub fn push_bytes_to_stack(&mut self, data: &[u8]) -> Result<u64> {
         self.vm_context.push_bytes_to_stack(data)
+    }
+
+    /// Get module by name from the process
+    pub fn get_module_by_name(&self, name: &str) -> Option<crate::process_trait::ModuleInfo> {
+        self.process.get_module_by_name(name)
+    }
+
+    /// Get module base address by name
+    pub fn get_module_base_address(&self, name: &str) -> Option<u64> {
+        self.process.get_module_base_address(name)
+    }
+
+    /// List all modules in the process
+    pub fn list_modules(&self) -> Vec<crate::process_trait::ModuleInfo> {
+        self.process.list_modules()
+    }
+
+    /// Find module for a given address
+    pub fn find_module_for_address(&self, address: u64) -> Option<(String, u64, u64)> {
+        self.process.find_module_for_address(address)
     }
 }

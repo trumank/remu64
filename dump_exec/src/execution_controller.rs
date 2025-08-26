@@ -1,17 +1,17 @@
-use crate::minidump_loader::MinidumpLoader;
+use crate::process_trait::ProcessTrait;
 use crate::tracer::InstructionTracer;
 use amd64_emu::memory::MemoryTrait;
 use amd64_emu::{EmulatorError, Engine, HookManager};
 use anyhow::Result;
 use iced_x86::Formatter;
 
-pub struct ExecutionHooks<'a, 'b> {
-    pub minidump_loader: &'a MinidumpLoader<'a>,
+pub struct ExecutionHooks<'a, 'b, P: ProcessTrait> {
+    pub process: &'a P,
     pub tracer: &'b mut InstructionTracer,
     pub instruction_count: u64,
 }
 
-impl<'a, 'b, M: MemoryTrait> HookManager<M> for ExecutionHooks<'a, 'b> {
+impl<'a, 'b, P: ProcessTrait, M: MemoryTrait> HookManager<M> for ExecutionHooks<'a, 'b, P> {
     fn on_code(
         &mut self,
         engine: &mut Engine<M>,
@@ -24,12 +24,7 @@ impl<'a, 'b, M: MemoryTrait> HookManager<M> for ExecutionHooks<'a, 'b> {
             let mut instruction_bytes = vec![0; size];
             engine.memory.read(address, &mut instruction_bytes).unwrap();
             self.tracer
-                .trace_instruction(
-                    address,
-                    &instruction_bytes,
-                    engine,
-                    Some(self.minidump_loader),
-                )
+                .trace_instruction(address, &instruction_bytes, engine, Some(self.process))
                 .unwrap();
         }
 
@@ -56,8 +51,8 @@ impl ExecutionController {
         }
     }
 
-    pub fn format_instruction_error<M: MemoryTrait>(
-        minidump_loader: &MinidumpLoader<'_>,
+    pub fn format_instruction_error<P: ProcessTrait>(
+        process: &P,
         rip: u64,
         instruction_bytes: &[u8],
         error: EmulatorError,
@@ -96,7 +91,7 @@ impl ExecutionController {
             "<unable to decode>".to_string()
         };
 
-        let address_str = match minidump_loader.find_module_for_address(rip) {
+        let address_str = match process.find_module_for_address(rip) {
             Some((module_name, _base, offset)) => {
                 format!("0x{:016x} ({}+0x{:x})", rip, module_name, offset)
             }

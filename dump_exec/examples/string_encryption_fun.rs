@@ -25,7 +25,10 @@ fn main() -> Result<()> {
 }
 
 // Helper function to allocate memory (simplified version)
-fn allocate_memory(executor: &mut dump_exec::FunctionExecutor, size: usize) -> Result<u64> {
+fn allocate_memory<P: dump_exec::ProcessTrait>(
+    executor: &mut dump_exec::FunctionExecutor<P>,
+    size: usize,
+) -> Result<u64> {
     use amd64_emu::Permission;
 
     // Use a fixed allocation area for simplicity
@@ -49,7 +52,10 @@ fn allocate_memory(executor: &mut dump_exec::FunctionExecutor, size: usize) -> R
 }
 
 // Helper function to read null-terminated string
-fn read_string(executor: &mut dump_exec::FunctionExecutor, addr: u64) -> Result<String> {
+fn read_string<P: dump_exec::ProcessTrait>(
+    executor: &mut dump_exec::FunctionExecutor<P>,
+    addr: u64,
+) -> Result<String> {
     let mut string_bytes = Vec::new();
     let mut offset = 0u64;
 

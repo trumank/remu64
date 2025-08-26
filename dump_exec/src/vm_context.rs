@@ -1,27 +1,22 @@
-use crate::minidump_loader::MinidumpLoader;
-use crate::minidump_memory::MinidumpMemory;
-use amd64_emu::memory::{CowMemory, MemoryTrait as _};
+use crate::process_trait::ProcessTrait;
+use amd64_emu::memory::{CowMemory, MemoryTrait};
 use amd64_emu::{Engine, EngineMode, Permission, Register};
 use anyhow::Result;
 
-pub struct VMContext<'a> {
-    pub engine: Engine<CowMemory<MinidumpMemory<'a>>>,
-    pub minidump_loader: &'a MinidumpLoader<'a>,
+pub struct VMContext<M: MemoryTrait> {
+    pub engine: Engine<CowMemory<M>>,
 }
 
-impl<'a> VMContext<'a> {
-    pub fn new(minidump_loader: &'a MinidumpLoader<'a>) -> Result<Self> {
-        let minidump_memory = MinidumpMemory::new(minidump_loader.get_dump())?;
-        let cow_memory = CowMemory::new(minidump_memory);
+impl<M: MemoryTrait> VMContext<M> {
+    pub fn new<P: ProcessTrait<Memory = M>>(process: &P) -> Result<Self> {
+        let base_memory = process.create_memory()?;
+        let cow_memory = CowMemory::new(base_memory);
         let mut engine = Engine::new_memory(EngineMode::Mode64, cow_memory);
 
-        let teb_address = minidump_loader.get_teb_address()?;
+        let teb_address = process.get_teb_address()?;
         engine.set_gs_base(teb_address);
 
-        Ok(VMContext {
-            engine,
-            minidump_loader,
-        })
+        Ok(VMContext { engine })
     }
 
     pub fn setup_stack(&mut self, base: u64, size: u64) -> Result<()> {
