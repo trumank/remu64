@@ -306,6 +306,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             Mnemonic::Cdq => self.execute_cdq(inst),
             Mnemonic::Cdqe => self.execute_cdqe(inst),
             Mnemonic::And => self.execute_and(inst),
+            Mnemonic::Or => self.execute_or(inst),
             Mnemonic::Sar => self.execute_sar(inst),
             Mnemonic::Movsxd => self.execute_movsxd(inst),
             Mnemonic::Movzx => self.execute_movzx(inst),
@@ -324,15 +325,22 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             Mnemonic::Cmovns => self.execute_cmovns(inst),
             Mnemonic::Cmova => self.execute_cmova(inst),
             Mnemonic::Cmovle => self.execute_cmovle(inst),
+            Mnemonic::Cmove => self.execute_cmove(inst),
             Mnemonic::Vmovdqu => self.execute_vmovdqu(inst),
             Mnemonic::Vmovdqa => self.execute_vmovdqa(inst),
             Mnemonic::Movdqu => self.execute_movdqu(inst),
+            Mnemonic::Movdqa => self.execute_movdqa(inst),
+            Mnemonic::Movd => self.execute_movd(inst),
             Mnemonic::Vzeroupper => self.execute_vzeroupper(inst),
             Mnemonic::Imul => self.execute_imul(inst),
             Mnemonic::Nop => self.execute_nop(inst),
             Mnemonic::Neg => self.execute_neg(inst),
             Mnemonic::Sbb => self.execute_sbb(inst),
             Mnemonic::Rol => self.execute_rol(inst),
+            Mnemonic::Cmpxchg => self.execute_cmpxchg(inst),
+            Mnemonic::Punpcklwd => self.execute_punpcklwd(inst),
+            Mnemonic::Pshufd => self.execute_pshufd(inst),
+            Mnemonic::Xorps => self.execute_xorps(inst),
             _ => {
                 println!(
                     "Unsupported instruction: {} ({:?}) at {:#x}",
@@ -558,6 +566,19 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         let result = dst_value & src_value;
 
         // Update flags (AND only affects flags, clears OF and CF)
+        self.update_flags_logical_iced(result, inst)?;
+
+        // Write result back to destination
+        self.write_operand(inst, 0, result)?;
+        Ok(())
+    }
+
+    fn execute_or(&mut self, inst: &Instruction) -> Result<()> {
+        let dst_value = self.read_operand(inst, 0)?;
+        let src_value = self.read_operand(inst, 1)?;
+        let result = dst_value | src_value;
+
+        // Update flags (OR is a logical operation)
         self.update_flags_logical_iced(result, inst)?;
 
         // Write result back to destination
@@ -860,6 +881,19 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         Ok(())
     }
 
+    fn execute_cmove(&mut self, inst: &Instruction) -> Result<()> {
+        // CMOVE: Conditional move if equal (ZF=1), same as CMOVZ
+        let zf = self.engine.cpu.rflags.contains(Flags::ZF);
+
+        if zf {
+            let src_value = self.read_operand(inst, 1)?;
+            self.write_operand(inst, 0, src_value)?;
+        }
+        // If condition is false, no move occurs
+
+        Ok(())
+    }
+
     fn execute_vmovdqu(&mut self, inst: &Instruction) -> Result<()> {
         // VMOVDQU: Vector Move Unaligned Packed Integer Values (256-bit)
         // Can move from YMM to memory, memory to YMM, or YMM to YMM
@@ -958,6 +992,126 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             }
             _ => Err(EmulatorError::UnsupportedInstruction(format!(
                 "Unsupported MOVDQU operand types: {:?}, {:?}",
+                inst.op_kind(0),
+                inst.op_kind(1)
+            ))),
+        }
+    }
+
+    fn execute_movdqa(&mut self, inst: &Instruction) -> Result<()> {
+        // MOVDQA: Move Aligned Packed Integer Values (128-bit SSE)
+        // Same as MOVDQU but requires 16-byte alignment (we'll ignore alignment for now)
+        match (inst.op_kind(0), inst.op_kind(1)) {
+            (OpKind::Register, OpKind::Memory) => {
+                // xmm, [mem] - load from memory to XMM register
+                let addr = self.calculate_memory_address(inst, 1)?;
+                let src_data = self.read_memory_128(addr)?;
+                let dst_reg = self.convert_register(inst.op_register(0))?;
+                self.engine.cpu.write_xmm(dst_reg, src_data);
+                Ok(())
+            }
+            (OpKind::Memory, OpKind::Register) => {
+                // [mem], xmm - store from XMM register to memory
+                let addr = self.calculate_memory_address(inst, 0)?;
+                let src_reg = self.convert_register(inst.op_register(1))?;
+                let src_data = self.engine.cpu.read_xmm(src_reg);
+                self.write_memory_128(addr, src_data)?;
+                Ok(())
+            }
+            (OpKind::Register, OpKind::Register) => {
+                // xmm, xmm - move XMM register to XMM register
+                let src_reg = self.convert_register(inst.op_register(1))?;
+                let dst_reg = self.convert_register(inst.op_register(0))?;
+                let src_data = self.engine.cpu.read_xmm(src_reg);
+                self.engine.cpu.write_xmm(dst_reg, src_data);
+                Ok(())
+            }
+            _ => Err(EmulatorError::UnsupportedInstruction(format!(
+                "Unsupported MOVDQA operand types: {:?}, {:?}",
+                inst.op_kind(0),
+                inst.op_kind(1)
+            ))),
+        }
+    }
+
+    fn execute_movd(&mut self, inst: &Instruction) -> Result<()> {
+        // MOVD: Move 32-bit value between general-purpose register and XMM register
+        match (inst.op_kind(0), inst.op_kind(1)) {
+            (OpKind::Register, OpKind::Register) => {
+                let dst_reg = self.convert_register(inst.op_register(0))?;
+                let src_reg = self.convert_register(inst.op_register(1))?;
+
+                // Check if destination is XMM and source is general-purpose
+                if matches!(
+                    dst_reg,
+                    Register::XMM0
+                        | Register::XMM1
+                        | Register::XMM2
+                        | Register::XMM3
+                        | Register::XMM4
+                        | Register::XMM5
+                        | Register::XMM6
+                        | Register::XMM7
+                        | Register::XMM8
+                        | Register::XMM9
+                        | Register::XMM10
+                        | Register::XMM11
+                        | Register::XMM12
+                        | Register::XMM13
+                        | Register::XMM14
+                        | Register::XMM15
+                ) {
+                    // Moving from general-purpose register to XMM
+                    let src_value = self.engine.cpu.read_reg(src_reg) as u32; // Take lower 32 bits
+                                                                              // Zero out the XMM register and set the lower 32 bits
+                    self.engine.cpu.write_xmm(dst_reg, src_value as u128);
+                } else if matches!(
+                    src_reg,
+                    Register::XMM0
+                        | Register::XMM1
+                        | Register::XMM2
+                        | Register::XMM3
+                        | Register::XMM4
+                        | Register::XMM5
+                        | Register::XMM6
+                        | Register::XMM7
+                        | Register::XMM8
+                        | Register::XMM9
+                        | Register::XMM10
+                        | Register::XMM11
+                        | Register::XMM12
+                        | Register::XMM13
+                        | Register::XMM14
+                        | Register::XMM15
+                ) {
+                    // Moving from XMM register to general-purpose register
+                    let src_value = self.engine.cpu.read_xmm(src_reg) as u32; // Take lower 32 bits
+                    self.engine.cpu.write_reg(dst_reg, src_value as u64);
+                } else {
+                    return Err(EmulatorError::UnsupportedInstruction(
+                        "MOVD requires one XMM and one general-purpose register".to_string(),
+                    ));
+                }
+                Ok(())
+            }
+            (OpKind::Register, OpKind::Memory) => {
+                // xmm, [mem] - load 32 bits from memory to XMM register
+                let dst_reg = self.convert_register(inst.op_register(0))?;
+                let addr = self.calculate_memory_address(inst, 1)?;
+                let src_value = self.read_memory_sized(addr, 4)? as u32;
+                self.engine.cpu.write_xmm(dst_reg, src_value as u128);
+                Ok(())
+            }
+            (OpKind::Memory, OpKind::Register) => {
+                // [mem], xmm - store lower 32 bits of XMM register to memory
+                let src_reg = self.convert_register(inst.op_register(1))?;
+                let addr = self.calculate_memory_address(inst, 0)?;
+                let src_value = self.engine.cpu.read_xmm(src_reg) as u32;
+                self.write_memory_sized(addr, src_value as u64, 4)?;
+                Ok(())
+            }
+            _ => Err(EmulatorError::UnsupportedInstruction(format!(
+                "Unsupported MOVD operand types: {:?}, {:?}",
                 inst.op_kind(0),
                 inst.op_kind(1)
             ))),
@@ -1144,6 +1298,305 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         // Write result back to destination
         self.write_operand(inst, 0, result)?;
         Ok(())
+    }
+
+    fn execute_cmpxchg(&mut self, inst: &Instruction) -> Result<()> {
+        // CMPXCHG: Compare and exchange
+        // Compare AL/AX/EAX/RAX with destination operand
+        // If equal: ZF=1, destination = source
+        // If not equal: ZF=0, AL/AX/EAX/RAX = destination
+
+        let dest_value = self.read_operand(inst, 0)?;
+        let src_value = self.read_operand(inst, 1)?;
+        let size = self.get_operand_size_from_instruction(inst, 0)?;
+
+        // Get the appropriate accumulator register based on operand size
+        let acc_reg = match size {
+            1 => Register::AL,
+            2 => Register::AX,
+            4 => Register::EAX,
+            8 => Register::RAX,
+            _ => {
+                return Err(EmulatorError::UnsupportedInstruction(format!(
+                    "Unsupported size for CMPXCHG: {}",
+                    size
+                )))
+            }
+        };
+
+        let acc_value = self.engine.cpu.read_reg(acc_reg);
+
+        // Mask values based on operand size
+        let mask = match size {
+            1 => 0xFF,
+            2 => 0xFFFF,
+            4 => 0xFFFFFFFF,
+            8 => 0xFFFFFFFFFFFFFFFF,
+            _ => unreachable!(),
+        };
+
+        let masked_acc = acc_value & mask;
+        let masked_dest = dest_value & mask;
+
+        if masked_acc == masked_dest {
+            // Values are equal: set ZF=1, store source in destination
+            self.engine.cpu.rflags.insert(Flags::ZF);
+            self.write_operand(inst, 0, src_value & mask)?;
+        } else {
+            // Values are not equal: set ZF=0, load destination into accumulator
+            self.engine.cpu.rflags.remove(Flags::ZF);
+            self.engine.cpu.write_reg(acc_reg, dest_value & mask);
+        }
+
+        // Update other flags based on comparison (like CMP instruction)
+        let result = masked_acc.wrapping_sub(masked_dest);
+        self.update_flags_arithmetic_iced(masked_acc, masked_dest, result, true, inst)?;
+
+        Ok(())
+    }
+
+    fn execute_punpcklwd(&mut self, inst: &Instruction) -> Result<()> {
+        // PUNPCKLWD: Unpack and interleave low words
+        // For XMM registers: takes low 4 words (64 bits) from each operand and interleaves them
+        // Result: [dst[0], src[0], dst[1], src[1], dst[2], src[2], dst[3], src[3]]
+
+        match (inst.op_kind(0), inst.op_kind(1)) {
+            (OpKind::Register, OpKind::Register) => {
+                let dst_reg = self.convert_register(inst.op_register(0))?;
+                let src_reg = self.convert_register(inst.op_register(1))?;
+
+                // Check if both operands are XMM registers
+                if !dst_reg.is_xmm() || !src_reg.is_xmm() {
+                    return Err(EmulatorError::UnsupportedInstruction(
+                        "PUNPCKLWD requires XMM registers".to_string(),
+                    ));
+                }
+
+                let dst_value = self.engine.cpu.read_xmm(dst_reg);
+                let src_value = self.engine.cpu.read_xmm(src_reg);
+
+                // Extract low 4 words (16 bits each) from destination and source
+                let dst_words = [
+                    (dst_value & 0xFFFF) as u16,
+                    ((dst_value >> 16) & 0xFFFF) as u16,
+                    ((dst_value >> 32) & 0xFFFF) as u16,
+                    ((dst_value >> 48) & 0xFFFF) as u16,
+                ];
+
+                let src_words = [
+                    (src_value & 0xFFFF) as u16,
+                    ((src_value >> 16) & 0xFFFF) as u16,
+                    ((src_value >> 32) & 0xFFFF) as u16,
+                    ((src_value >> 48) & 0xFFFF) as u16,
+                ];
+
+                // Interleave: dst[0], src[0], dst[1], src[1], dst[2], src[2], dst[3], src[3]
+                let result = (dst_words[0] as u128)
+                    | ((src_words[0] as u128) << 16)
+                    | ((dst_words[1] as u128) << 32)
+                    | ((src_words[1] as u128) << 48)
+                    | ((dst_words[2] as u128) << 64)
+                    | ((src_words[2] as u128) << 80)
+                    | ((dst_words[3] as u128) << 96)
+                    | ((src_words[3] as u128) << 112);
+
+                self.engine.cpu.write_xmm(dst_reg, result);
+                Ok(())
+            }
+            (OpKind::Register, OpKind::Memory) => {
+                let dst_reg = self.convert_register(inst.op_register(0))?;
+
+                if !dst_reg.is_xmm() {
+                    return Err(EmulatorError::UnsupportedInstruction(
+                        "PUNPCKLWD requires XMM register as destination".to_string(),
+                    ));
+                }
+
+                let dst_value = self.engine.cpu.read_xmm(dst_reg);
+                let addr = self.calculate_memory_address(inst, 1)?;
+                let src_value = self.read_memory_128(addr)?;
+
+                // Extract low 4 words (16 bits each) from destination and source
+                let dst_words = [
+                    (dst_value & 0xFFFF) as u16,
+                    ((dst_value >> 16) & 0xFFFF) as u16,
+                    ((dst_value >> 32) & 0xFFFF) as u16,
+                    ((dst_value >> 48) & 0xFFFF) as u16,
+                ];
+
+                let src_words = [
+                    (src_value & 0xFFFF) as u16,
+                    ((src_value >> 16) & 0xFFFF) as u16,
+                    ((src_value >> 32) & 0xFFFF) as u16,
+                    ((src_value >> 48) & 0xFFFF) as u16,
+                ];
+
+                // Interleave: dst[0], src[0], dst[1], src[1], dst[2], src[2], dst[3], src[3]
+                let result = (dst_words[0] as u128)
+                    | ((src_words[0] as u128) << 16)
+                    | ((dst_words[1] as u128) << 32)
+                    | ((src_words[1] as u128) << 48)
+                    | ((dst_words[2] as u128) << 64)
+                    | ((src_words[2] as u128) << 80)
+                    | ((dst_words[3] as u128) << 96)
+                    | ((src_words[3] as u128) << 112);
+
+                self.engine.cpu.write_xmm(dst_reg, result);
+                Ok(())
+            }
+            _ => Err(EmulatorError::UnsupportedInstruction(format!(
+                "Unsupported PUNPCKLWD operand types: {:?}, {:?}",
+                inst.op_kind(0),
+                inst.op_kind(1)
+            ))),
+        }
+    }
+
+    fn execute_pshufd(&mut self, inst: &Instruction) -> Result<()> {
+        // PSHUFD: Packed Shuffle Doublewords
+        // Shuffles 32-bit doublewords in a 128-bit XMM register based on an 8-bit immediate
+        // Each 2-bit field in the immediate selects which source dword to copy to each position
+        // Immediate bits: [7:6] -> dword[3], [5:4] -> dword[2], [3:2] -> dword[1], [1:0] -> dword[0]
+
+        if inst.op_count() != 3 {
+            return Err(EmulatorError::UnsupportedInstruction(
+                "PSHUFD requires exactly 3 operands".to_string(),
+            ));
+        }
+
+        match (inst.op_kind(0), inst.op_kind(1), inst.op_kind(2)) {
+            (OpKind::Register, OpKind::Register, OpKind::Immediate8) => {
+                let dst_reg = self.convert_register(inst.op_register(0))?;
+                let src_reg = self.convert_register(inst.op_register(1))?;
+                let imm8 = inst.immediate8();
+
+                // Check if both operands are XMM registers
+                if !dst_reg.is_xmm() || !src_reg.is_xmm() {
+                    return Err(EmulatorError::UnsupportedInstruction(
+                        "PSHUFD requires XMM registers".to_string(),
+                    ));
+                }
+
+                let src_value = self.engine.cpu.read_xmm(src_reg);
+
+                // Extract 4 doublewords (32 bits each) from source
+                let src_dwords = [
+                    (src_value & 0xFFFFFFFF) as u32,         // dword[0]
+                    ((src_value >> 32) & 0xFFFFFFFF) as u32, // dword[1]
+                    ((src_value >> 64) & 0xFFFFFFFF) as u32, // dword[2]
+                    ((src_value >> 96) & 0xFFFFFFFF) as u32, // dword[3]
+                ];
+
+                // Extract 2-bit selectors from immediate
+                let sel0 = (imm8 & 0x03) as usize; // bits [1:0] -> dword[0]
+                let sel1 = ((imm8 >> 2) & 0x03) as usize; // bits [3:2] -> dword[1]
+                let sel2 = ((imm8 >> 4) & 0x03) as usize; // bits [5:4] -> dword[2]
+                let sel3 = ((imm8 >> 6) & 0x03) as usize; // bits [7:6] -> dword[3]
+
+                // Build result by selecting dwords based on immediate
+                let result = (src_dwords[sel0] as u128)
+                    | ((src_dwords[sel1] as u128) << 32)
+                    | ((src_dwords[sel2] as u128) << 64)
+                    | ((src_dwords[sel3] as u128) << 96);
+
+                self.engine.cpu.write_xmm(dst_reg, result);
+                Ok(())
+            }
+            (OpKind::Register, OpKind::Memory, OpKind::Immediate8) => {
+                let dst_reg = self.convert_register(inst.op_register(0))?;
+                let imm8 = inst.immediate8();
+
+                if !dst_reg.is_xmm() {
+                    return Err(EmulatorError::UnsupportedInstruction(
+                        "PSHUFD requires XMM register as destination".to_string(),
+                    ));
+                }
+
+                let addr = self.calculate_memory_address(inst, 1)?;
+                let src_value = self.read_memory_128(addr)?;
+
+                // Extract 4 doublewords (32 bits each) from source
+                let src_dwords = [
+                    (src_value & 0xFFFFFFFF) as u32,         // dword[0]
+                    ((src_value >> 32) & 0xFFFFFFFF) as u32, // dword[1]
+                    ((src_value >> 64) & 0xFFFFFFFF) as u32, // dword[2]
+                    ((src_value >> 96) & 0xFFFFFFFF) as u32, // dword[3]
+                ];
+
+                // Extract 2-bit selectors from immediate
+                let sel0 = (imm8 & 0x03) as usize; // bits [1:0] -> dword[0]
+                let sel1 = ((imm8 >> 2) & 0x03) as usize; // bits [3:2] -> dword[1]
+                let sel2 = ((imm8 >> 4) & 0x03) as usize; // bits [5:4] -> dword[2]
+                let sel3 = ((imm8 >> 6) & 0x03) as usize; // bits [7:6] -> dword[3]
+
+                // Build result by selecting dwords based on immediate
+                let result = (src_dwords[sel0] as u128)
+                    | ((src_dwords[sel1] as u128) << 32)
+                    | ((src_dwords[sel2] as u128) << 64)
+                    | ((src_dwords[sel3] as u128) << 96);
+
+                self.engine.cpu.write_xmm(dst_reg, result);
+                Ok(())
+            }
+            _ => Err(EmulatorError::UnsupportedInstruction(format!(
+                "Unsupported PSHUFD operand types: {:?}, {:?}, {:?}",
+                inst.op_kind(0),
+                inst.op_kind(1),
+                inst.op_kind(2)
+            ))),
+        }
+    }
+
+    fn execute_xorps(&mut self, inst: &Instruction) -> Result<()> {
+        // XORPS: Bitwise XOR of Packed Single-Precision Floating-Point Values
+        // Performs bitwise XOR between two 128-bit XMM registers
+
+        match (inst.op_kind(0), inst.op_kind(1)) {
+            (OpKind::Register, OpKind::Register) => {
+                let dst_reg = self.convert_register(inst.op_register(0))?;
+                let src_reg = self.convert_register(inst.op_register(1))?;
+
+                // Check if both operands are XMM registers
+                if !dst_reg.is_xmm() || !src_reg.is_xmm() {
+                    return Err(EmulatorError::UnsupportedInstruction(
+                        "XORPS requires XMM registers".to_string(),
+                    ));
+                }
+
+                let dst_value = self.engine.cpu.read_xmm(dst_reg);
+                let src_value = self.engine.cpu.read_xmm(src_reg);
+
+                // Perform bitwise XOR
+                let result = dst_value ^ src_value;
+
+                self.engine.cpu.write_xmm(dst_reg, result);
+                Ok(())
+            }
+            (OpKind::Register, OpKind::Memory) => {
+                let dst_reg = self.convert_register(inst.op_register(0))?;
+
+                if !dst_reg.is_xmm() {
+                    return Err(EmulatorError::UnsupportedInstruction(
+                        "XORPS requires XMM register as destination".to_string(),
+                    ));
+                }
+
+                let dst_value = self.engine.cpu.read_xmm(dst_reg);
+                let addr = self.calculate_memory_address(inst, 1)?;
+                let src_value = self.read_memory_128(addr)?;
+
+                // Perform bitwise XOR
+                let result = dst_value ^ src_value;
+
+                self.engine.cpu.write_xmm(dst_reg, result);
+                Ok(())
+            }
+            _ => Err(EmulatorError::UnsupportedInstruction(format!(
+                "Unsupported XORPS operand types: {:?}, {:?}",
+                inst.op_kind(0),
+                inst.op_kind(1)
+            ))),
+        }
     }
 
     fn read_ymm_memory(&mut self, inst: &Instruction, operand_idx: u32) -> Result<[u128; 2]> {
