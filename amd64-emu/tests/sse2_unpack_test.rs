@@ -1,11 +1,11 @@
-use amd64_emu::{Engine, EngineMode, Memory, Permission, Register};
+use amd64_emu::{Engine, EngineMode, Permission, Register};
 
 #[test]
 fn test_punpcklbw() {
     let mut engine = Engine::new(EngineMode::Mode64);
     
     // Map memory for code
-    engine.mem_map(0x1000, 0x1000, Permission::READ | Permission::EXECUTE).unwrap();
+    engine.mem_map(0x1000, 0x1000, Permission::READ | Permission::EXEC).unwrap();
     
     // PUNPCKLBW XMM0, XMM1
     // Interleaves low 8 bytes from XMM0 and XMM1
@@ -36,7 +36,7 @@ fn test_punpckhbw() {
     let mut engine = Engine::new(EngineMode::Mode64);
     
     // Map memory for code
-    engine.mem_map(0x1000, 0x1000, Permission::READ | Permission::EXECUTE).unwrap();
+    engine.mem_map(0x1000, 0x1000, Permission::READ | Permission::EXEC).unwrap();
     
     // PUNPCKHBW XMM0, XMM1
     // Interleaves high 8 bytes from XMM0 and XMM1
@@ -65,7 +65,7 @@ fn test_punpckldq() {
     let mut engine = Engine::new(EngineMode::Mode64);
     
     // Map memory for code
-    engine.mem_map(0x1000, 0x1000, Permission::READ | Permission::EXECUTE).unwrap();
+    engine.mem_map(0x1000, 0x1000, Permission::READ | Permission::EXEC).unwrap();
     
     // PUNPCKLDQ XMM0, XMM1
     // Interleaves low 2 doublewords from XMM0 and XMM1
@@ -93,7 +93,7 @@ fn test_punpckhdq() {
     let mut engine = Engine::new(EngineMode::Mode64);
     
     // Map memory for code
-    engine.mem_map(0x1000, 0x1000, Permission::READ | Permission::EXECUTE).unwrap();
+    engine.mem_map(0x1000, 0x1000, Permission::READ | Permission::EXEC).unwrap();
     
     // PUNPCKHDQ XMM0, XMM1
     // Interleaves high 2 doublewords from XMM0 and XMM1
@@ -121,7 +121,7 @@ fn test_punpcklqdq() {
     let mut engine = Engine::new(EngineMode::Mode64);
     
     // Map memory for code
-    engine.mem_map(0x1000, 0x1000, Permission::READ | Permission::EXECUTE).unwrap();
+    engine.mem_map(0x1000, 0x1000, Permission::READ | Permission::EXEC).unwrap();
     
     // PUNPCKLQDQ XMM0, XMM1
     // Places low quadword from XMM0 and low quadword from XMM1
@@ -149,7 +149,7 @@ fn test_punpckhqdq() {
     let mut engine = Engine::new(EngineMode::Mode64);
     
     // Map memory for code
-    engine.mem_map(0x1000, 0x1000, Permission::READ | Permission::EXECUTE).unwrap();
+    engine.mem_map(0x1000, 0x1000, Permission::READ | Permission::EXEC).unwrap();
     
     // PUNPCKHQDQ XMM0, XMM1
     // Places high quadword from XMM0 and high quadword from XMM1
@@ -177,7 +177,7 @@ fn test_punpcklbw_memory() {
     let mut engine = Engine::new(EngineMode::Mode64);
     
     // Map memory for code and data
-    engine.mem_map(0x1000, 0x2000, Permission::READ | Permission::WRITE | Permission::EXECUTE).unwrap();
+    engine.mem_map(0x1000, 0x2000, Permission::READ | Permission::WRITE | Permission::EXEC).unwrap();
     
     // PUNPCKLBW XMM0, [0x2000]
     let code = vec![
@@ -208,7 +208,7 @@ fn test_punpckldq_memory() {
     let mut engine = Engine::new(EngineMode::Mode64);
     
     // Map memory for code and data
-    engine.mem_map(0x1000, 0x2000, Permission::READ | Permission::WRITE | Permission::EXECUTE).unwrap();
+    engine.mem_map(0x1000, 0x2000, Permission::READ | Permission::WRITE | Permission::EXEC).unwrap();
     
     // PUNPCKLDQ XMM0, [0x2000]
     let code = vec![
