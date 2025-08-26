@@ -358,6 +358,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             Mnemonic::Pshuflw => self.execute_pshuflw(inst),
             Mnemonic::Pshufhw => self.execute_pshufhw(inst),
             Mnemonic::Pextrw => self.execute_pextrw(inst),
+            Mnemonic::Pinsrw => self.execute_pinsrw(inst),
             Mnemonic::Xorps => self.execute_xorps(inst),
             Mnemonic::Cmpps => self.execute_cmpps(inst),
             Mnemonic::Cmpss => self.execute_cmpss(inst),
@@ -1981,6 +1982,89 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             }
             _ => Err(EmulatorError::UnsupportedInstruction(format!(
                 "Unsupported PEXTRW operand types: {:?}, {:?}, {:?}",
+                inst.op_kind(0),
+                inst.op_kind(1),
+                inst.op_kind(2)
+            ))),
+        }
+    }
+
+    fn execute_pinsrw(&mut self, inst: &Instruction) -> Result<()> {
+        // PINSRW: Insert Word
+        // Inserts a 16-bit word from a general-purpose register or memory into an XMM register
+        // at a position specified by an immediate value
+
+        if inst.op_count() != 3 {
+            return Err(EmulatorError::UnsupportedInstruction(
+                "PINSRW requires exactly 3 operands".to_string(),
+            ));
+        }
+
+        match (inst.op_kind(0), inst.op_kind(1), inst.op_kind(2)) {
+            (OpKind::Register, OpKind::Register, OpKind::Immediate8) => {
+                let dst_reg = self.convert_register(inst.op_register(0))?;
+                let src_reg = self.convert_register(inst.op_register(1))?;
+                let imm8 = inst.immediate8();
+
+                // Check if destination is XMM register
+                if !dst_reg.is_xmm() {
+                    return Err(EmulatorError::UnsupportedInstruction(
+                        "PINSRW requires XMM register as destination".to_string(),
+                    ));
+                }
+
+                // Read source value from general-purpose register
+                let src_value = self.read_register(src_reg)? & 0xFFFF; // Only low 16 bits
+
+                // Read current XMM value
+                let mut xmm_value = self.engine.cpu.read_xmm(dst_reg);
+
+                // Extract word index (only low 3 bits are used for 8 words)
+                let word_index = (imm8 & 0x07) as u32;
+
+                // Create mask to clear the target word
+                let shift_amount = word_index * 16;
+                let mask = !(0xFFFFu128 << shift_amount);
+
+                // Clear the target word and insert the new word
+                xmm_value = (xmm_value & mask) | ((src_value as u128) << shift_amount);
+
+                self.engine.cpu.write_xmm(dst_reg, xmm_value);
+                Ok(())
+            }
+            (OpKind::Register, OpKind::Memory, OpKind::Immediate8) => {
+                let dst_reg = self.convert_register(inst.op_register(0))?;
+                let imm8 = inst.immediate8();
+
+                // Check if destination is XMM register
+                if !dst_reg.is_xmm() {
+                    return Err(EmulatorError::UnsupportedInstruction(
+                        "PINSRW requires XMM register as destination".to_string(),
+                    ));
+                }
+
+                // Read 16-bit value from memory
+                let addr = self.calculate_memory_address(inst, 1)?;
+                let src_value = self.engine.memory.read_u16(addr)? as u128;
+
+                // Read current XMM value
+                let mut xmm_value = self.engine.cpu.read_xmm(dst_reg);
+
+                // Extract word index (only low 3 bits are used for 8 words)
+                let word_index = (imm8 & 0x07) as u32;
+
+                // Create mask to clear the target word
+                let shift_amount = word_index * 16;
+                let mask = !(0xFFFFu128 << shift_amount);
+
+                // Clear the target word and insert the new word
+                xmm_value = (xmm_value & mask) | (src_value << shift_amount);
+
+                self.engine.cpu.write_xmm(dst_reg, xmm_value);
+                Ok(())
+            }
+            _ => Err(EmulatorError::UnsupportedInstruction(format!(
+                "Unsupported PINSRW operand types: {:?}, {:?}, {:?}",
                 inst.op_kind(0),
                 inst.op_kind(1),
                 inst.op_kind(2)
