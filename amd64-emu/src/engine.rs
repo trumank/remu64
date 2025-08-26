@@ -389,7 +389,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             Mnemonic::Subsd => self.execute_subsd(inst),
             Mnemonic::Mulsd => self.execute_mulsd(inst),
             Mnemonic::Divsd => self.execute_divsd(inst),
-            // Scalar single-precision floating-point operations  
+            // Scalar single-precision floating-point operations
             Mnemonic::Addss => self.execute_addss(inst),
             Mnemonic::Subss => self.execute_subss(inst),
             Mnemonic::Mulss => self.execute_mulss(inst),
@@ -1793,7 +1793,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
                 ];
 
                 // Extract 2-bit selectors from immediate
-                let sel0 = (imm8 & 0x03) as usize;        // bits [1:0] -> word[0]
+                let sel0 = (imm8 & 0x03) as usize; // bits [1:0] -> word[0]
                 let sel1 = ((imm8 >> 2) & 0x03) as usize; // bits [3:2] -> word[1]
                 let sel2 = ((imm8 >> 4) & 0x03) as usize; // bits [5:4] -> word[2]
                 let sel3 = ((imm8 >> 6) & 0x03) as usize; // bits [7:6] -> word[3]
@@ -1806,7 +1806,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
 
                 // Preserve high 64 bits
                 let high_64 = src_value & 0xFFFFFFFF_FFFFFFFF_00000000_00000000u128;
-                
+
                 // Combine low and high parts
                 let result = low_result | high_64;
 
@@ -1835,7 +1835,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
                 ];
 
                 // Extract 2-bit selectors from immediate
-                let sel0 = (imm8 & 0x03) as usize;        // bits [1:0] -> word[0]
+                let sel0 = (imm8 & 0x03) as usize; // bits [1:0] -> word[0]
                 let sel1 = ((imm8 >> 2) & 0x03) as usize; // bits [3:2] -> word[1]
                 let sel2 = ((imm8 >> 4) & 0x03) as usize; // bits [5:4] -> word[2]
                 let sel3 = ((imm8 >> 6) & 0x03) as usize; // bits [7:6] -> word[3]
@@ -1848,7 +1848,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
 
                 // Preserve high 64 bits
                 let high_64 = src_value & 0xFFFFFFFF_FFFFFFFF_00000000_00000000u128;
-                
+
                 // Combine low and high parts
                 let result = low_result | high_64;
 
@@ -1902,7 +1902,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
 
                 // Extract 2-bit selectors from immediate
                 // Note: selectors index into the 4-word array (0-3), not the absolute word positions
-                let sel0 = (imm8 & 0x03) as usize;        // bits [1:0] -> word[4]
+                let sel0 = (imm8 & 0x03) as usize; // bits [1:0] -> word[4]
                 let sel1 = ((imm8 >> 2) & 0x03) as usize; // bits [3:2] -> word[5]
                 let sel2 = ((imm8 >> 4) & 0x03) as usize; // bits [5:4] -> word[6]
                 let sel3 = ((imm8 >> 6) & 0x03) as usize; // bits [7:6] -> word[7]
@@ -1915,7 +1915,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
 
                 // Preserve low 64 bits
                 let low_64 = src_value & 0xFFFFFFFF_FFFFFFFFu128;
-                
+
                 // Combine low and high parts
                 let result = low_64 | high_result;
 
@@ -1945,7 +1945,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
                 ];
 
                 // Extract 2-bit selectors from immediate
-                let sel0 = (imm8 & 0x03) as usize;        // bits [1:0] -> word[4]
+                let sel0 = (imm8 & 0x03) as usize; // bits [1:0] -> word[4]
                 let sel1 = ((imm8 >> 2) & 0x03) as usize; // bits [3:2] -> word[5]
                 let sel2 = ((imm8 >> 4) & 0x03) as usize; // bits [5:4] -> word[6]
                 let sel3 = ((imm8 >> 6) & 0x03) as usize; // bits [7:6] -> word[7]
@@ -1958,7 +1958,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
 
                 // Preserve low 64 bits
                 let low_64 = src_value & 0xFFFFFFFF_FFFFFFFFu128;
-                
+
                 // Combine low and high parts
                 let result = low_64 | high_result;
 
@@ -3063,11 +3063,11 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         // Extract two single-precision floats
         let float1 = f32::from_bits(src_value as u32);
         let float2 = f32::from_bits((src_value >> 32) as u32);
-        
+
         // Convert to double-precision
         let double1 = float1 as f64;
         let double2 = float2 as f64;
-        
+
         // Pack the two doubles into the XMM register
         let result = double1.to_bits() as u128 | ((double2.to_bits() as u128) << 64);
         self.engine.cpu.write_xmm(dst_reg, result);
@@ -3095,11 +3095,11 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         // Extract two double-precision floats
         let double1 = f64::from_bits(src_value as u64);
         let double2 = f64::from_bits((src_value >> 64) as u64);
-        
+
         // Convert to single-precision
         let float1 = double1 as f32;
         let float2 = double2 as f32;
-        
+
         // Pack the two floats into the lower 64 bits, upper 64 bits are zeroed
         let result = float1.to_bits() as u128 | ((float2.to_bits() as u128) << 32);
         self.engine.cpu.write_xmm(dst_reg, result);
@@ -3124,13 +3124,13 @@ impl<H: HookManager> ExecutionContext<'_, H> {
 
         // Extract the single-precision float
         let float = f32::from_bits(src_value as u32);
-        
+
         // Convert to double-precision
         let double = float as f64;
-        
+
         // Get current destination value to preserve upper bits
         let dst_value = self.engine.cpu.read_xmm(dst_reg);
-        
+
         // Replace lower 64 bits with the converted double, preserve upper 64 bits
         let result = double.to_bits() as u128 | (dst_value & 0xFFFFFFFFFFFFFFFF0000000000000000);
         self.engine.cpu.write_xmm(dst_reg, result);
@@ -3155,13 +3155,13 @@ impl<H: HookManager> ExecutionContext<'_, H> {
 
         // Extract the double-precision float
         let double = f64::from_bits(src_value as u64);
-        
+
         // Convert to single-precision
         let float = double as f32;
-        
+
         // Get current destination value to preserve upper bits
         let dst_value = self.engine.cpu.read_xmm(dst_reg);
-        
+
         // Replace lower 32 bits with the converted float, preserve upper 96 bits
         let result = float.to_bits() as u128 | (dst_value & 0xFFFFFFFFFFFFFFFFFFFFFFFF00000000);
         self.engine.cpu.write_xmm(dst_reg, result);
@@ -3193,7 +3193,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             f32::from_bits((src_value >> 64) as u32),
             f32::from_bits((src_value >> 96) as u32),
         ];
-        
+
         // Convert to signed integers with rounding
         let mut result = 0u128;
         for i in 0..4 {
@@ -3208,7 +3208,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             };
             result |= (int_val as u32 as u128) << (i * 32);
         }
-        
+
         self.engine.cpu.write_xmm(dst_reg, result);
         Ok(())
     }
@@ -3238,7 +3238,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             f32::from_bits((src_value >> 64) as u32),
             f32::from_bits((src_value >> 96) as u32),
         ];
-        
+
         // Convert to signed integers with truncation
         let mut result = 0u128;
         for i in 0..4 {
@@ -3253,7 +3253,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             };
             result |= (int_val as u32 as u128) << (i * 32);
         }
-        
+
         self.engine.cpu.write_xmm(dst_reg, result);
         Ok(())
     }
@@ -3283,14 +3283,14 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             (src_value >> 64) as u32 as i32,
             (src_value >> 96) as u32 as i32,
         ];
-        
+
         // Convert to single-precision floats
         let mut result = 0u128;
         for i in 0..4 {
             let float_val = ints[i] as f32;
             result |= (float_val.to_bits() as u128) << (i * 32);
         }
-        
+
         self.engine.cpu.write_xmm(dst_reg, result);
         Ok(())
     }
@@ -3299,7 +3299,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         // Convert Signed Integer to Scalar Single-Precision FP
         // Converts a 32/64-bit signed integer to single-precision float in lower 32 bits
         let dst_reg = self.convert_register(inst.op_register(0))?;
-        
+
         let int_value = match inst.op_kind(1) {
             OpKind::Register => {
                 let src = self.convert_register(inst.op_register(1))?;
@@ -3319,10 +3319,10 @@ impl<H: HookManager> ExecutionContext<'_, H> {
 
         // Convert to single-precision float
         let float_val = int_value as f32;
-        
+
         // Get current destination value to preserve upper bits
         let dst_value = self.engine.cpu.read_xmm(dst_reg);
-        
+
         // Replace lower 32 bits with the converted float, preserve upper 96 bits
         let result = float_val.to_bits() as u128 | (dst_value & 0xFFFFFFFFFFFFFFFFFFFFFFFF00000000);
         self.engine.cpu.write_xmm(dst_reg, result);
@@ -3333,7 +3333,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         // Convert Signed Integer to Scalar Double-Precision FP
         // Converts a 32/64-bit signed integer to double-precision float in lower 64 bits
         let dst_reg = self.convert_register(inst.op_register(0))?;
-        
+
         let int_value = match inst.op_kind(1) {
             OpKind::Register => {
                 let src = self.convert_register(inst.op_register(1))?;
@@ -3353,12 +3353,13 @@ impl<H: HookManager> ExecutionContext<'_, H> {
 
         // Convert to double-precision float
         let double_val = int_value as f64;
-        
+
         // Get current destination value to preserve upper bits
         let dst_value = self.engine.cpu.read_xmm(dst_reg);
-        
+
         // Replace lower 64 bits with the converted double, preserve upper 64 bits
-        let result = double_val.to_bits() as u128 | (dst_value & 0xFFFFFFFFFFFFFFFF0000000000000000);
+        let result =
+            double_val.to_bits() as u128 | (dst_value & 0xFFFFFFFFFFFFFFFF0000000000000000);
         self.engine.cpu.write_xmm(dst_reg, result);
         Ok(())
     }
@@ -3367,7 +3368,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         // Convert Scalar Single-Precision FP to Signed Integer
         // Converts the lower single-precision float to a 32/64-bit signed integer with rounding
         let dst_reg = self.convert_register(inst.op_register(0))?;
-        
+
         let float_value = match inst.op_kind(1) {
             OpKind::Register => {
                 let src = self.convert_register(inst.op_register(1))?;
@@ -3404,7 +3405,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
                 float_value.round() as i32 as i64
             }
         };
-        
+
         self.engine.cpu.write_reg(dst_reg, int_val as u64);
         Ok(())
     }
@@ -3413,7 +3414,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         // Convert Scalar Double-Precision FP to Signed Integer
         // Converts the lower double-precision float to a 32/64-bit signed integer with rounding
         let dst_reg = self.convert_register(inst.op_register(0))?;
-        
+
         let double_value = match inst.op_kind(1) {
             OpKind::Register => {
                 let src = self.convert_register(inst.op_register(1))?;
@@ -3450,7 +3451,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
                 double_value.round() as i32 as i64
             }
         };
-        
+
         self.engine.cpu.write_reg(dst_reg, int_val as u64);
         Ok(())
     }
@@ -3459,7 +3460,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         // Convert Scalar Single-Precision FP to Signed Integer with Truncation
         // Converts the lower single-precision float to a 32/64-bit signed integer with truncation
         let dst_reg = self.convert_register(inst.op_register(0))?;
-        
+
         let float_value = match inst.op_kind(1) {
             OpKind::Register => {
                 let src = self.convert_register(inst.op_register(1))?;
@@ -3496,7 +3497,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
                 float_value.trunc() as i32 as i64
             }
         };
-        
+
         self.engine.cpu.write_reg(dst_reg, int_val as u64);
         Ok(())
     }
@@ -3505,7 +3506,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         // Convert Scalar Double-Precision FP to Signed Integer with Truncation
         // Converts the lower double-precision float to a 32/64-bit signed integer with truncation
         let dst_reg = self.convert_register(inst.op_register(0))?;
-        
+
         let double_value = match inst.op_kind(1) {
             OpKind::Register => {
                 let src = self.convert_register(inst.op_register(1))?;
@@ -3542,7 +3543,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
                 double_value.trunc() as i32 as i64
             }
         };
-        
+
         self.engine.cpu.write_reg(dst_reg, int_val as u64);
         Ok(())
     }
@@ -3573,9 +3574,10 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         let dst_double = f64::from_bits(dst_value as u64);
         let src_double = f64::from_bits(src_value);
         let result_double = dst_double + src_double;
-        
+
         // Replace lower 64 bits with result, preserve upper 64 bits
-        let result = (result_double.to_bits() as u128) | (dst_value & 0xFFFFFFFFFFFFFFFF0000000000000000);
+        let result =
+            (result_double.to_bits() as u128) | (dst_value & 0xFFFFFFFFFFFFFFFF0000000000000000);
         self.engine.cpu.write_xmm(dst_reg, result);
         Ok(())
     }
@@ -3603,8 +3605,9 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         let dst_double = f64::from_bits(dst_value as u64);
         let src_double = f64::from_bits(src_value);
         let result_double = dst_double - src_double;
-        
-        let result = (result_double.to_bits() as u128) | (dst_value & 0xFFFFFFFFFFFFFFFF0000000000000000);
+
+        let result =
+            (result_double.to_bits() as u128) | (dst_value & 0xFFFFFFFFFFFFFFFF0000000000000000);
         self.engine.cpu.write_xmm(dst_reg, result);
         Ok(())
     }
@@ -3632,8 +3635,9 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         let dst_double = f64::from_bits(dst_value as u64);
         let src_double = f64::from_bits(src_value);
         let result_double = dst_double * src_double;
-        
-        let result = (result_double.to_bits() as u128) | (dst_value & 0xFFFFFFFFFFFFFFFF0000000000000000);
+
+        let result =
+            (result_double.to_bits() as u128) | (dst_value & 0xFFFFFFFFFFFFFFFF0000000000000000);
         self.engine.cpu.write_xmm(dst_reg, result);
         Ok(())
     }
@@ -3661,8 +3665,9 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         let dst_double = f64::from_bits(dst_value as u64);
         let src_double = f64::from_bits(src_value);
         let result_double = dst_double / src_double;
-        
-        let result = (result_double.to_bits() as u128) | (dst_value & 0xFFFFFFFFFFFFFFFF0000000000000000);
+
+        let result =
+            (result_double.to_bits() as u128) | (dst_value & 0xFFFFFFFFFFFFFFFF0000000000000000);
         self.engine.cpu.write_xmm(dst_reg, result);
         Ok(())
     }
@@ -3693,9 +3698,10 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         let dst_float = f32::from_bits(dst_value as u32);
         let src_float = f32::from_bits(src_value);
         let result_float = dst_float + src_float;
-        
+
         // Replace lower 32 bits with result, preserve upper 96 bits
-        let result = (result_float.to_bits() as u128) | (dst_value & 0xFFFFFFFFFFFFFFFFFFFFFFFF00000000);
+        let result =
+            (result_float.to_bits() as u128) | (dst_value & 0xFFFFFFFFFFFFFFFFFFFFFFFF00000000);
         self.engine.cpu.write_xmm(dst_reg, result);
         Ok(())
     }
@@ -3723,8 +3729,9 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         let dst_float = f32::from_bits(dst_value as u32);
         let src_float = f32::from_bits(src_value);
         let result_float = dst_float - src_float;
-        
-        let result = (result_float.to_bits() as u128) | (dst_value & 0xFFFFFFFFFFFFFFFFFFFFFFFF00000000);
+
+        let result =
+            (result_float.to_bits() as u128) | (dst_value & 0xFFFFFFFFFFFFFFFFFFFFFFFF00000000);
         self.engine.cpu.write_xmm(dst_reg, result);
         Ok(())
     }
@@ -3752,8 +3759,9 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         let dst_float = f32::from_bits(dst_value as u32);
         let src_float = f32::from_bits(src_value);
         let result_float = dst_float * src_float;
-        
-        let result = (result_float.to_bits() as u128) | (dst_value & 0xFFFFFFFFFFFFFFFFFFFFFFFF00000000);
+
+        let result =
+            (result_float.to_bits() as u128) | (dst_value & 0xFFFFFFFFFFFFFFFFFFFFFFFF00000000);
         self.engine.cpu.write_xmm(dst_reg, result);
         Ok(())
     }
@@ -3781,8 +3789,9 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         let dst_float = f32::from_bits(dst_value as u32);
         let src_float = f32::from_bits(src_value);
         let result_float = dst_float / src_float;
-        
-        let result = (result_float.to_bits() as u128) | (dst_value & 0xFFFFFFFFFFFFFFFFFFFFFFFF00000000);
+
+        let result =
+            (result_float.to_bits() as u128) | (dst_value & 0xFFFFFFFFFFFFFFFFFFFFFFFF00000000);
         self.engine.cpu.write_xmm(dst_reg, result);
         Ok(())
     }
@@ -3802,11 +3811,11 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             }
             _ => return Err(EmulatorError::UnsupportedOperandType),
         };
-        
+
         // Get the immediate control byte
         let imm8 = inst.immediate8();
         let dst_value = self.engine.cpu.read_xmm(dst_reg);
-        
+
         // Extract four 32-bit floats from each operand
         let dst_floats = [
             (dst_value as u32),
@@ -3820,7 +3829,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             ((src_value >> 64) as u32),
             ((src_value >> 96) as u32),
         ];
-        
+
         // Shuffle according to immediate bits
         // Bits 0-1 select from dst for result[0]
         // Bits 2-3 select from dst for result[1]
@@ -3830,13 +3839,13 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         let result1 = dst_floats[((imm8 >> 2) & 0x03) as usize];
         let result2 = src_floats[((imm8 >> 4) & 0x03) as usize];
         let result3 = src_floats[((imm8 >> 6) & 0x03) as usize];
-        
+
         // Pack results into u128
         let result = (result0 as u128)
             | ((result1 as u128) << 32)
             | ((result2 as u128) << 64)
             | ((result3 as u128) << 96);
-            
+
         self.engine.cpu.write_xmm(dst_reg, result);
         Ok(())
     }
@@ -3856,21 +3865,21 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             }
             _ => return Err(EmulatorError::UnsupportedOperandType),
         };
-        
+
         let dst_value = self.engine.cpu.read_xmm(dst_reg);
-        
+
         // Extract the low quadword (first 2 floats) from each operand
         let dst_float0 = dst_value as u32;
         let dst_float1 = (dst_value >> 32) as u32;
         let src_float0 = src_value as u32;
         let src_float1 = (src_value >> 32) as u32;
-        
+
         // Interleave: dst[0], src[0], dst[1], src[1]
         let result = (dst_float0 as u128)
             | ((src_float0 as u128) << 32)
             | ((dst_float1 as u128) << 64)
             | ((src_float1 as u128) << 96);
-            
+
         self.engine.cpu.write_xmm(dst_reg, result);
         Ok(())
     }
@@ -3890,21 +3899,21 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             }
             _ => return Err(EmulatorError::UnsupportedOperandType),
         };
-        
+
         let dst_value = self.engine.cpu.read_xmm(dst_reg);
-        
+
         // Extract the high quadword (last 2 floats) from each operand
         let dst_float2 = (dst_value >> 64) as u32;
         let dst_float3 = (dst_value >> 96) as u32;
         let src_float2 = (src_value >> 64) as u32;
         let src_float3 = (src_value >> 96) as u32;
-        
+
         // Interleave: dst[2], src[2], dst[3], src[3]
         let result = (dst_float2 as u128)
             | ((src_float2 as u128) << 32)
             | ((dst_float3 as u128) << 64)
             | ((src_float3 as u128) << 96);
-            
+
         self.engine.cpu.write_xmm(dst_reg, result);
         Ok(())
     }
@@ -3924,30 +3933,24 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             }
             _ => return Err(EmulatorError::UnsupportedOperandType),
         };
-        
+
         // Get the immediate control byte
         let imm8 = inst.immediate8();
         let dst_value = self.engine.cpu.read_xmm(dst_reg);
-        
+
         // Extract two 64-bit doubles from each operand
-        let dst_doubles = [
-            (dst_value as u64),
-            ((dst_value >> 64) as u64),
-        ];
-        let src_doubles = [
-            (src_value as u64),
-            ((src_value >> 64) as u64),
-        ];
-        
+        let dst_doubles = [(dst_value as u64), ((dst_value >> 64) as u64)];
+        let src_doubles = [(src_value as u64), ((src_value >> 64) as u64)];
+
         // Shuffle according to immediate bits
         // Bit 0 selects from dst for result[0]
         // Bit 1 selects from src for result[1]
         let result0 = dst_doubles[(imm8 & 0x01) as usize];
         let result1 = src_doubles[((imm8 >> 1) & 0x01) as usize];
-        
+
         // Pack results into u128
         let result = (result0 as u128) | ((result1 as u128) << 64);
-            
+
         self.engine.cpu.write_xmm(dst_reg, result);
         Ok(())
     }
@@ -3967,16 +3970,16 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             }
             _ => return Err(EmulatorError::UnsupportedOperandType),
         };
-        
+
         let dst_value = self.engine.cpu.read_xmm(dst_reg);
-        
+
         // Extract the low double from each operand
         let dst_low = dst_value as u64;
         let src_low = src_value as u64;
-        
+
         // Result is: dst[0], src[0]
         let result = (dst_low as u128) | ((src_low as u128) << 64);
-            
+
         self.engine.cpu.write_xmm(dst_reg, result);
         Ok(())
     }
@@ -3996,16 +3999,16 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             }
             _ => return Err(EmulatorError::UnsupportedOperandType),
         };
-        
+
         let dst_value = self.engine.cpu.read_xmm(dst_reg);
-        
+
         // Extract the high double from each operand
         let dst_high = (dst_value >> 64) as u64;
         let src_high = (src_value >> 64) as u64;
-        
+
         // Result is: dst[1], src[1]
         let result = (dst_high as u128) | ((src_high as u128) << 64);
-            
+
         self.engine.cpu.write_xmm(dst_reg, result);
         Ok(())
     }
@@ -4031,7 +4034,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
 
         let dst_value = self.engine.cpu.read_xmm(dst_reg);
         let mut result = 0u128;
-        
+
         // Add 16 bytes
         for i in 0..16 {
             let dst_byte = ((dst_value >> (i * 8)) & 0xFF) as u8;
@@ -4039,7 +4042,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             let sum = dst_byte.wrapping_add(src_byte);
             result |= (sum as u128) << (i * 8);
         }
-        
+
         self.engine.cpu.write_xmm(dst_reg, result);
         Ok(())
     }
@@ -4065,7 +4068,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
 
         let dst_value = self.engine.cpu.read_xmm(dst_reg);
         let mut result = 0u128;
-        
+
         // Add 8 words (16-bit values)
         for i in 0..8 {
             let dst_word = ((dst_value >> (i * 16)) & 0xFFFF) as u16;
@@ -4073,7 +4076,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             let sum = dst_word.wrapping_add(src_word);
             result |= (sum as u128) << (i * 16);
         }
-        
+
         self.engine.cpu.write_xmm(dst_reg, result);
         Ok(())
     }
@@ -4099,7 +4102,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
 
         let dst_value = self.engine.cpu.read_xmm(dst_reg);
         let mut result = 0u128;
-        
+
         // Add 4 doublewords (32-bit values)
         for i in 0..4 {
             let dst_dword = ((dst_value >> (i * 32)) & 0xFFFFFFFF) as u32;
@@ -4107,7 +4110,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             let sum = dst_dword.wrapping_add(src_dword);
             result |= (sum as u128) << (i * 32);
         }
-        
+
         self.engine.cpu.write_xmm(dst_reg, result);
         Ok(())
     }
@@ -4132,18 +4135,18 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         };
 
         let dst_value = self.engine.cpu.read_xmm(dst_reg);
-        
+
         // Add 2 quadwords (64-bit values)
         let dst_low = dst_value as u64;
         let dst_high = (dst_value >> 64) as u64;
         let src_low = src_value as u64;
         let src_high = (src_value >> 64) as u64;
-        
+
         let sum_low = dst_low.wrapping_add(src_low);
         let sum_high = dst_high.wrapping_add(src_high);
-        
+
         let result = (sum_low as u128) | ((sum_high as u128) << 64);
-        
+
         self.engine.cpu.write_xmm(dst_reg, result);
         Ok(())
     }
@@ -4169,7 +4172,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
 
         let dst_value = self.engine.cpu.read_xmm(dst_reg);
         let mut result = 0u128;
-        
+
         // Subtract 16 bytes
         for i in 0..16 {
             let dst_byte = ((dst_value >> (i * 8)) & 0xFF) as u8;
@@ -4177,7 +4180,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             let diff = dst_byte.wrapping_sub(src_byte);
             result |= (diff as u128) << (i * 8);
         }
-        
+
         self.engine.cpu.write_xmm(dst_reg, result);
         Ok(())
     }
@@ -4203,7 +4206,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
 
         let dst_value = self.engine.cpu.read_xmm(dst_reg);
         let mut result = 0u128;
-        
+
         // Subtract 8 words (16-bit values)
         for i in 0..8 {
             let dst_word = ((dst_value >> (i * 16)) & 0xFFFF) as u16;
@@ -4211,7 +4214,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             let diff = dst_word.wrapping_sub(src_word);
             result |= (diff as u128) << (i * 16);
         }
-        
+
         self.engine.cpu.write_xmm(dst_reg, result);
         Ok(())
     }
@@ -4237,7 +4240,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
 
         let dst_value = self.engine.cpu.read_xmm(dst_reg);
         let mut result = 0u128;
-        
+
         // Subtract 4 doublewords (32-bit values)
         for i in 0..4 {
             let dst_dword = ((dst_value >> (i * 32)) & 0xFFFFFFFF) as u32;
@@ -4245,7 +4248,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             let diff = dst_dword.wrapping_sub(src_dword);
             result |= (diff as u128) << (i * 32);
         }
-        
+
         self.engine.cpu.write_xmm(dst_reg, result);
         Ok(())
     }
@@ -4270,18 +4273,18 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         };
 
         let dst_value = self.engine.cpu.read_xmm(dst_reg);
-        
+
         // Subtract 2 quadwords (64-bit values)
         let dst_low = dst_value as u64;
         let dst_high = (dst_value >> 64) as u64;
         let src_low = src_value as u64;
         let src_high = (src_value >> 64) as u64;
-        
+
         let diff_low = dst_low.wrapping_sub(src_low);
         let diff_high = dst_high.wrapping_sub(src_high);
-        
+
         let result = (diff_low as u128) | ((diff_high as u128) << 64);
-        
+
         self.engine.cpu.write_xmm(dst_reg, result);
         Ok(())
     }
@@ -4304,10 +4307,10 @@ impl<H: HookManager> ExecutionContext<'_, H> {
                 ))
             }
         };
-        
+
         let dst_value = self.engine.cpu.read_xmm(dst_reg);
         let mut result = 0u128;
-        
+
         // Multiply each pair of 16-bit signed integers and store low 16 bits
         for i in 0..8 {
             let dst_word = ((dst_value >> (i * 16)) & 0xFFFF) as i16;
@@ -4315,7 +4318,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             let product = (dst_word as i32) * (src_word as i32);
             result |= ((product & 0xFFFF) as u128) << (i * 16);
         }
-        
+
         self.engine.cpu.write_xmm(dst_reg, result);
         Ok(())
     }
@@ -4338,10 +4341,10 @@ impl<H: HookManager> ExecutionContext<'_, H> {
                 ))
             }
         };
-        
+
         let dst_value = self.engine.cpu.read_xmm(dst_reg);
         let mut result = 0u128;
-        
+
         // Multiply each pair of 16-bit signed integers and store high 16 bits
         for i in 0..8 {
             let dst_word = ((dst_value >> (i * 16)) & 0xFFFF) as i16;
@@ -4349,7 +4352,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             let product = (dst_word as i32) * (src_word as i32);
             result |= (((product >> 16) & 0xFFFF) as u128) << (i * 16);
         }
-        
+
         self.engine.cpu.write_xmm(dst_reg, result);
         Ok(())
     }
@@ -4372,10 +4375,10 @@ impl<H: HookManager> ExecutionContext<'_, H> {
                 ))
             }
         };
-        
+
         let dst_value = self.engine.cpu.read_xmm(dst_reg);
         let mut result = 0u128;
-        
+
         // Multiply each pair of 16-bit unsigned integers and store high 16 bits
         for i in 0..8 {
             let dst_word = ((dst_value >> (i * 16)) & 0xFFFF) as u16;
@@ -4383,7 +4386,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             let product = (dst_word as u32) * (src_word as u32);
             result |= (((product >> 16) & 0xFFFF) as u128) << (i * 16);
         }
-        
+
         self.engine.cpu.write_xmm(dst_reg, result);
         Ok(())
     }
@@ -4406,20 +4409,20 @@ impl<H: HookManager> ExecutionContext<'_, H> {
                 ))
             }
         };
-        
+
         let dst_value = self.engine.cpu.read_xmm(dst_reg);
-        
+
         // Multiply low dwords of each 64-bit element, store 64-bit results
         let dst_low_dword = (dst_value & 0xFFFFFFFF) as u32;
         let src_low_dword = (src_value & 0xFFFFFFFF) as u32;
         let product_low = (dst_low_dword as u64) * (src_low_dword as u64);
-        
+
         let dst_high_dword = ((dst_value >> 64) & 0xFFFFFFFF) as u32;
         let src_high_dword = ((src_value >> 64) & 0xFFFFFFFF) as u32;
         let product_high = (dst_high_dword as u64) * (src_high_dword as u64);
-        
+
         let result = (product_low as u128) | ((product_high as u128) << 64);
-        
+
         self.engine.cpu.write_xmm(dst_reg, result);
         Ok(())
     }
@@ -4443,10 +4446,10 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             }
         };
         let dst_value = self.engine.cpu.read_xmm(dst_reg);
-        
+
         // Perform bitwise AND on the entire 128-bit value
         let result = dst_value & src_value;
-        
+
         self.engine.cpu.write_xmm(dst_reg, result);
         Ok(())
     }
@@ -4470,10 +4473,10 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             }
         };
         let dst_value = self.engine.cpu.read_xmm(dst_reg);
-        
+
         // Perform bitwise AND NOT: (~dst) & src
         let result = (!dst_value) & src_value;
-        
+
         self.engine.cpu.write_xmm(dst_reg, result);
         Ok(())
     }
@@ -4497,10 +4500,10 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             }
         };
         let dst_value = self.engine.cpu.read_xmm(dst_reg);
-        
+
         // Perform bitwise OR on the entire 128-bit value
         let result = dst_value | src_value;
-        
+
         self.engine.cpu.write_xmm(dst_reg, result);
         Ok(())
     }
@@ -4524,10 +4527,10 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             }
         };
         let dst_value = self.engine.cpu.read_xmm(dst_reg);
-        
+
         // Perform bitwise XOR on the entire 128-bit value
         let result = dst_value ^ src_value;
-        
+
         self.engine.cpu.write_xmm(dst_reg, result);
         Ok(())
     }
@@ -4551,7 +4554,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             }
         };
         let dst_value = self.engine.cpu.read_xmm(dst_reg);
-        
+
         // Compare each byte
         let mut result = 0u128;
         for i in 0..16 {
@@ -4561,7 +4564,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
                 result |= 0xFFu128 << (i * 8);
             }
         }
-        
+
         self.engine.cpu.write_xmm(dst_reg, result);
         Ok(())
     }
@@ -4585,7 +4588,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             }
         };
         let dst_value = self.engine.cpu.read_xmm(dst_reg);
-        
+
         // Compare each 16-bit word
         let mut result = 0u128;
         for i in 0..8 {
@@ -4595,7 +4598,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
                 result |= 0xFFFFu128 << (i * 16);
             }
         }
-        
+
         self.engine.cpu.write_xmm(dst_reg, result);
         Ok(())
     }
@@ -4619,7 +4622,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             }
         };
         let dst_value = self.engine.cpu.read_xmm(dst_reg);
-        
+
         // Compare each 32-bit doubleword
         let mut result = 0u128;
         for i in 0..4 {
@@ -4629,7 +4632,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
                 result |= 0xFFFFFFFFu128 << (i * 32);
             }
         }
-        
+
         self.engine.cpu.write_xmm(dst_reg, result);
         Ok(())
     }
@@ -4653,7 +4656,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             }
         };
         let dst_value = self.engine.cpu.read_xmm(dst_reg);
-        
+
         // Compare each signed byte
         let mut result = 0u128;
         for i in 0..16 {
@@ -4663,7 +4666,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
                 result |= 0xFFu128 << (i * 8);
             }
         }
-        
+
         self.engine.cpu.write_xmm(dst_reg, result);
         Ok(())
     }
@@ -4687,7 +4690,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             }
         };
         let dst_value = self.engine.cpu.read_xmm(dst_reg);
-        
+
         // Compare each signed 16-bit word
         let mut result = 0u128;
         for i in 0..8 {
@@ -4697,7 +4700,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
                 result |= 0xFFFFu128 << (i * 16);
             }
         }
-        
+
         self.engine.cpu.write_xmm(dst_reg, result);
         Ok(())
     }
@@ -4721,7 +4724,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             }
         };
         let dst_value = self.engine.cpu.read_xmm(dst_reg);
-        
+
         // Compare each signed 32-bit doubleword
         let mut result = 0u128;
         for i in 0..4 {
@@ -4731,7 +4734,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
                 result |= 0xFFFFFFFFu128 << (i * 32);
             }
         }
-        
+
         self.engine.cpu.write_xmm(dst_reg, result);
         Ok(())
     }
@@ -5319,21 +5322,21 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         // BT: Bit Test - Test bit in first operand by second operand, set CF accordingly
         let bit_base = self.read_operand(inst, 0)?;
         let bit_offset = self.read_operand(inst, 1)?;
-        
+
         // Calculate effective bit position (modulo based on operand size)
         let size = self.get_operand_size_from_instruction(inst, 0)?;
         let bit_pos = (bit_offset & ((size * 8 - 1) as u64)) as u32;
-        
+
         // Test the bit
         let bit_value = (bit_base >> bit_pos) & 1;
-        
+
         // Set CF to the bit value
         if bit_value != 0 {
             self.engine.cpu.rflags.insert(Flags::CF);
         } else {
             self.engine.cpu.rflags.remove(Flags::CF);
         }
-        
+
         Ok(())
     }
 
@@ -5341,11 +5344,11 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         // BTS: Bit Test and Set - Test bit and set it to 1
         let bit_base = self.read_operand(inst, 0)?;
         let bit_offset = self.read_operand(inst, 1)?;
-        
+
         // Calculate effective bit position
         let size = self.get_operand_size_from_instruction(inst, 0)?;
         let bit_pos = (bit_offset & ((size * 8 - 1) as u64)) as u32;
-        
+
         // Test the bit (set CF)
         let bit_value = (bit_base >> bit_pos) & 1;
         if bit_value != 0 {
@@ -5353,11 +5356,11 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         } else {
             self.engine.cpu.rflags.remove(Flags::CF);
         }
-        
+
         // Set the bit to 1
         let new_value = bit_base | (1u64 << bit_pos);
         self.write_operand(inst, 0, new_value)?;
-        
+
         Ok(())
     }
 
@@ -5365,11 +5368,11 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         // BTR: Bit Test and Reset - Test bit and set it to 0
         let bit_base = self.read_operand(inst, 0)?;
         let bit_offset = self.read_operand(inst, 1)?;
-        
+
         // Calculate effective bit position
         let size = self.get_operand_size_from_instruction(inst, 0)?;
         let bit_pos = (bit_offset & ((size * 8 - 1) as u64)) as u32;
-        
+
         // Test the bit (set CF)
         let bit_value = (bit_base >> bit_pos) & 1;
         if bit_value != 0 {
@@ -5377,11 +5380,11 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         } else {
             self.engine.cpu.rflags.remove(Flags::CF);
         }
-        
+
         // Reset the bit to 0
         let new_value = bit_base & !(1u64 << bit_pos);
         self.write_operand(inst, 0, new_value)?;
-        
+
         Ok(())
     }
 
@@ -5389,11 +5392,11 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         // BTC: Bit Test and Complement - Test bit and flip it
         let bit_base = self.read_operand(inst, 0)?;
         let bit_offset = self.read_operand(inst, 1)?;
-        
+
         // Calculate effective bit position
         let size = self.get_operand_size_from_instruction(inst, 0)?;
         let bit_pos = (bit_offset & ((size * 8 - 1) as u64)) as u32;
-        
+
         // Test the bit (set CF)
         let bit_value = (bit_base >> bit_pos) & 1;
         if bit_value != 0 {
@@ -5401,18 +5404,18 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         } else {
             self.engine.cpu.rflags.remove(Flags::CF);
         }
-        
+
         // Complement the bit
         let new_value = bit_base ^ (1u64 << bit_pos);
         self.write_operand(inst, 0, new_value)?;
-        
+
         Ok(())
     }
 
     fn execute_bsf(&mut self, inst: &Instruction) -> Result<()> {
         // BSF: Bit Scan Forward - Find first set bit (from LSB)
         let source = self.read_operand(inst, 1)?;
-        
+
         if source == 0 {
             // If source is 0, set ZF and destination is undefined
             self.engine.cpu.rflags.insert(Flags::ZF);
@@ -5420,18 +5423,18 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             // Find the position of the first set bit
             let bit_pos = source.trailing_zeros() as u64;
             self.engine.cpu.rflags.remove(Flags::ZF);
-            
+
             // Write result to destination
             self.write_operand(inst, 0, bit_pos)?;
         }
-        
+
         Ok(())
     }
 
     fn execute_bsr(&mut self, inst: &Instruction) -> Result<()> {
         // BSR: Bit Scan Reverse - Find first set bit (from MSB)
         let source = self.read_operand(inst, 1)?;
-        
+
         if source == 0 {
             // If source is 0, set ZF and destination is undefined
             self.engine.cpu.rflags.insert(Flags::ZF);
@@ -5443,18 +5446,20 @@ impl<H: HookManager> ExecutionContext<'_, H> {
                 2 => 15 - (source as u16).leading_zeros() as u64,
                 4 => 31 - (source as u32).leading_zeros() as u64,
                 8 => 63 - source.leading_zeros() as u64,
-                _ => return Err(EmulatorError::UnsupportedInstruction(format!(
-                    "Unsupported BSR operand size: {}",
-                    size
-                ))),
+                _ => {
+                    return Err(EmulatorError::UnsupportedInstruction(format!(
+                        "Unsupported BSR operand size: {}",
+                        size
+                    )))
+                }
             };
-            
+
             self.engine.cpu.rflags.remove(Flags::ZF);
-            
+
             // Write result to destination
             self.write_operand(inst, 0, bit_pos)?;
         }
-        
+
         Ok(())
     }
 
@@ -5462,21 +5467,22 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         // ENTER: Create stack frame for procedure
         // Enter imm16, imm8
         // imm16 = size of stack frame, imm8 = nesting level (we'll only implement level 0)
-        
+
         // Get operands - for ENTER, operands are immediates
         let frame_size = inst.immediate(0) as u64;
         let nesting_level = inst.immediate(1) as u8;
-        
+
         if nesting_level != 0 {
-            return Err(EmulatorError::UnsupportedInstruction(
-                format!("ENTER with nesting level {} not supported", nesting_level)
-            ));
+            return Err(EmulatorError::UnsupportedInstruction(format!(
+                "ENTER with nesting level {} not supported",
+                nesting_level
+            )));
         }
-        
+
         // Push RBP
         let rbp_value = self.engine.cpu.read_reg(Register::RBP);
         let rsp_value = self.engine.cpu.read_reg(Register::RSP);
-        
+
         // Decrement RSP and store RBP
         let new_rsp = rsp_value.wrapping_sub(8);
         // Write 64-bit value to memory
@@ -5484,60 +5490,63 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         bytes.copy_from_slice(&rbp_value.to_le_bytes());
         self.engine.memory.write(new_rsp, &bytes)?;
         self.engine.cpu.write_reg(Register::RSP, new_rsp);
-        
+
         // Set RBP to current RSP
         self.engine.cpu.write_reg(Register::RBP, new_rsp);
-        
+
         // Allocate space for local variables (subtract frame_size from RSP)
         let final_rsp = new_rsp.wrapping_sub(frame_size);
         self.engine.cpu.write_reg(Register::RSP, final_rsp);
-        
+
         Ok(())
     }
 
     fn execute_leave(&mut self, _inst: &Instruction) -> Result<()> {
         // LEAVE: Destroy stack frame before returning
         // Equivalent to: MOV RSP, RBP; POP RBP
-        
+
         // Set RSP to RBP
         let rbp_value = self.engine.cpu.read_reg(Register::RBP);
         self.engine.cpu.write_reg(Register::RSP, rbp_value);
-        
+
         // Pop RBP
         // Read 64-bit value from memory
         let mut bytes = [0u8; 8];
         self.engine.memory.read(rbp_value, &mut bytes)?;
         let old_rbp = u64::from_le_bytes(bytes);
         self.engine.cpu.write_reg(Register::RBP, old_rbp);
-        
+
         // Increment RSP
         let new_rsp = rbp_value.wrapping_add(8);
         self.engine.cpu.write_reg(Register::RSP, new_rsp);
-        
+
         Ok(())
     }
 
     fn execute_popcnt(&mut self, inst: &Instruction) -> Result<()> {
         // POPCNT: Count the number of set bits
         let source = self.read_operand(inst, 1)?;
-        
+
         // Count the number of 1 bits
         let count = source.count_ones() as u64;
-        
+
         // Write result to destination
         self.write_operand(inst, 0, count)?;
-        
+
         // Update flags
         // POPCNT clears all flags except CF and ZF
-        self.engine.cpu.rflags.remove(Flags::SF | Flags::OF | Flags::AF | Flags::PF);
+        self.engine
+            .cpu
+            .rflags
+            .remove(Flags::SF | Flags::OF | Flags::AF | Flags::PF);
         self.engine.cpu.rflags.remove(Flags::CF); // CF is always cleared
-        
+
         if count == 0 {
             self.engine.cpu.rflags.insert(Flags::ZF);
         } else {
             self.engine.cpu.rflags.remove(Flags::ZF);
         }
-        
+
         Ok(())
     }
 
@@ -5545,16 +5554,16 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         // CQO: Convert Quadword to Octoword
         // Sign-extend RAX to RDX:RAX
         let rax_value = self.engine.cpu.read_reg(Register::RAX);
-        
+
         // Sign extend RAX to RDX
         let sign_extended = if rax_value & 0x8000000000000000 != 0 {
-            0xFFFFFFFFFFFFFFFF  // Negative, fill RDX with 1s
+            0xFFFFFFFFFFFFFFFF // Negative, fill RDX with 1s
         } else {
-            0x0000000000000000  // Positive, fill RDX with 0s
+            0x0000000000000000 // Positive, fill RDX with 0s
         };
-        
+
         self.engine.cpu.write_reg(Register::RDX, sign_extended);
-        
+
         Ok(())
     }
 
@@ -5562,21 +5571,21 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         // XADD: Exchange and Add
         // Exchanges the first operand (destination) with the second operand (source),
         // then adds the original destination value to the source and stores in destination
-        
+
         let dest_value = self.read_operand(inst, 0)?;
         let src_value = self.read_operand(inst, 1)?;
-        
+
         // Add dest + src and store in destination
         let sum = dest_value.wrapping_add(src_value);
         self.write_operand(inst, 0, sum)?;
-        
+
         // Store original destination value in source
         self.write_operand(inst, 1, dest_value)?;
-        
+
         // Update flags based on the addition
         // Update flags for addition
         self.update_flags_arithmetic_iced(dest_value, src_value, sum, true, inst)?;
-        
+
         Ok(())
     }
 
@@ -5584,10 +5593,10 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         // CPUID: CPU Identification
         // Input: EAX = function number, ECX = sub-function (for some functions)
         // Output: EAX, EBX, ECX, EDX with CPU information
-        
+
         let function = self.engine.cpu.read_reg(Register::RAX) as u32;
         let sub_function = self.engine.cpu.read_reg(Register::RCX) as u32;
-        
+
         let (eax, ebx, ecx, edx) = match function {
             // Basic CPUID Information
             0x00 => {
@@ -5595,10 +5604,10 @@ impl<H: HookManager> ExecutionContext<'_, H> {
                 // Vendor ID string: "GenuineIntel" or "AuthenticAMD"
                 // For emulation, we'll use a custom vendor "AMDEmu64Rust"
                 (
-                    0x16,  // Maximum supported standard level
-                    0x444d4165,  // "eAMD"
-                    0x52343665,  // "e64R"
-                    0x74737565,  // "eust"
+                    0x16,       // Maximum supported standard level
+                    0x444d4165, // "eAMD"
+                    0x52343665, // "e64R"
+                    0x74737565, // "eust"
                 )
             }
             // Processor Info and Feature Bits
@@ -5608,10 +5617,10 @@ impl<H: HookManager> ExecutionContext<'_, H> {
                 // ECX: Feature flags
                 // EDX: Feature flags
                 (
-                    0x000906EA,  // Version info
-                    0x00040800,  // Brand/Cache info
-                    0x7FFAFBBF,  // Feature flags ECX
-                    0xBFEBFBFFu32,  // Feature flags EDX
+                    0x000906EA,    // Version info
+                    0x00040800,    // Brand/Cache info
+                    0x7FFAFBBF,    // Feature flags ECX
+                    0xBFEBFBFFu32, // Feature flags EDX
                 )
             }
             // Cache and TLB Information
@@ -5624,10 +5633,10 @@ impl<H: HookManager> ExecutionContext<'_, H> {
                 // EAX: Maximum sub-leaves
                 // EBX, ECX, EDX: Extended feature flags
                 (
-                    0,           // Max sub-leaves
-                    0x029C6FBB,  // Extended features EBX
-                    0x00000000,  // Extended features ECX  
-                    0x00000000,  // Extended features EDX
+                    0,          // Max sub-leaves
+                    0x029C6FBB, // Extended features EBX
+                    0x00000000, // Extended features ECX
+                    0x00000000, // Extended features EDX
                 )
             }
             // Extended CPUID Information
@@ -5639,10 +5648,10 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             0x80000001 => {
                 // Extended feature flags
                 (
-                    0,           // Reserved
-                    0,           // Reserved
-                    0x00000121,  // Extended feature flags ECX
-                    0x2C100800,  // Extended feature flags EDX
+                    0,          // Reserved
+                    0,          // Reserved
+                    0x00000121, // Extended feature flags ECX
+                    0x2C100800, // Extended feature flags EDX
                 )
             }
             // Processor Brand String (Part 1)
@@ -5665,59 +5674,59 @@ impl<H: HookManager> ExecutionContext<'_, H> {
                 (0, 0, 0, 0)
             }
         };
-        
+
         // Write results to registers (preserving upper 32 bits)
         let rax = (self.engine.cpu.read_reg(Register::RAX) & 0xFFFFFFFF00000000) | eax as u64;
         let rbx = (self.engine.cpu.read_reg(Register::RBX) & 0xFFFFFFFF00000000) | ebx as u64;
         let rcx = (self.engine.cpu.read_reg(Register::RCX) & 0xFFFFFFFF00000000) | ecx as u64;
         let rdx = (self.engine.cpu.read_reg(Register::RDX) & 0xFFFFFFFF00000000) | edx as u64;
-        
+
         self.engine.cpu.write_reg(Register::RAX, rax);
         self.engine.cpu.write_reg(Register::RBX, rbx);
         self.engine.cpu.write_reg(Register::RCX, rcx);
         self.engine.cpu.write_reg(Register::RDX, rdx);
-        
+
         Ok(())
     }
 
     fn execute_rdtsc(&mut self, _inst: &Instruction) -> Result<()> {
         // RDTSC: Read Time-Stamp Counter
         // Returns the current value of the processor's time-stamp counter in EDX:EAX
-        
+
         // For emulation purposes, we'll use a simple counter or system time
         // In a real implementation, this would read the actual TSC
         use std::time::{SystemTime, UNIX_EPOCH};
-        
+
         let tsc = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_nanos() as u64;
-        
+
         // Split into EDX:EAX (high:low 32-bit parts)
         let eax = tsc as u32 as u64;
         let edx = (tsc >> 32) as u32 as u64;
-        
+
         // Write to registers (preserving upper 32 bits)
         let rax = (self.engine.cpu.read_reg(Register::RAX) & 0xFFFFFFFF00000000) | eax;
         let rdx = (self.engine.cpu.read_reg(Register::RDX) & 0xFFFFFFFF00000000) | edx;
-        
+
         self.engine.cpu.write_reg(Register::RAX, rax);
         self.engine.cpu.write_reg(Register::RDX, rdx);
-        
+
         Ok(())
     }
 
     fn execute_rdtscp(&mut self, _inst: &Instruction) -> Result<()> {
         // RDTSCP: Read Time-Stamp Counter and Processor ID
         // Like RDTSC but also returns processor ID in ECX
-        
+
         // First do the same as RDTSC
         self.execute_rdtsc(_inst)?;
-        
+
         // Additionally, set ECX to processor ID (we'll use 0 for simplicity)
         let rcx = self.engine.cpu.read_reg(Register::RCX) & 0xFFFFFFFF00000000;
         self.engine.cpu.write_reg(Register::RCX, rcx);
-        
+
         Ok(())
     }
 
@@ -6063,7 +6072,20 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         use Register::*;
         matches!(
             reg,
-            RAX | RBX | RCX | RDX | RSI | RDI | RBP | RSP | R8 | R9 | R10 | R11 | R12 | R13 | R14
+            RAX | RBX
+                | RCX
+                | RDX
+                | RSI
+                | RDI
+                | RBP
+                | RSP
+                | R8
+                | R9
+                | R10
+                | R11
+                | R12
+                | R13
+                | R14
                 | R15
         )
     }
@@ -6299,7 +6321,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
 
         let dst_value = self.engine.cpu.read_xmm(dst_reg);
         let mut result = 0u128;
-        
+
         if shift_amount < 16 {
             // Shift each 16-bit word left
             for i in 0..8 {
@@ -6309,7 +6331,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             }
         }
         // If shift_amount >= 16, all bits are shifted out, result is 0
-        
+
         self.engine.cpu.write_xmm(dst_reg, result);
         Ok(())
     }
@@ -6338,7 +6360,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
 
         let dst_value = self.engine.cpu.read_xmm(dst_reg);
         let mut result = 0u128;
-        
+
         if shift_amount < 32 {
             // Shift each 32-bit doubleword left
             for i in 0..4 {
@@ -6348,7 +6370,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             }
         }
         // If shift_amount >= 32, all bits are shifted out, result is 0
-        
+
         self.engine.cpu.write_xmm(dst_reg, result);
         Ok(())
     }
@@ -6377,17 +6399,17 @@ impl<H: HookManager> ExecutionContext<'_, H> {
 
         let dst_value = self.engine.cpu.read_xmm(dst_reg);
         let mut result = 0u128;
-        
+
         if shift_amount < 64 {
             // Shift each 64-bit quadword left
             let low_qword = (dst_value & 0xFFFFFFFFFFFFFFFF) as u64;
             let high_qword = ((dst_value >> 64) & 0xFFFFFFFFFFFFFFFF) as u64;
-            
+
             result |= ((low_qword << shift_amount) as u128) & 0xFFFFFFFFFFFFFFFF;
             result |= ((high_qword << shift_amount) as u128) << 64;
         }
         // If shift_amount >= 64, all bits are shifted out, result is 0
-        
+
         self.engine.cpu.write_xmm(dst_reg, result);
         Ok(())
     }
@@ -6416,7 +6438,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
 
         let dst_value = self.engine.cpu.read_xmm(dst_reg);
         let mut result = 0u128;
-        
+
         if shift_amount < 16 {
             // Shift each 16-bit word right
             for i in 0..8 {
@@ -6426,7 +6448,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             }
         }
         // If shift_amount >= 16, all bits are shifted out, result is 0
-        
+
         self.engine.cpu.write_xmm(dst_reg, result);
         Ok(())
     }
@@ -6455,7 +6477,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
 
         let dst_value = self.engine.cpu.read_xmm(dst_reg);
         let mut result = 0u128;
-        
+
         if shift_amount < 32 {
             // Shift each 32-bit doubleword right
             for i in 0..4 {
@@ -6465,7 +6487,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             }
         }
         // If shift_amount >= 32, all bits are shifted out, result is 0
-        
+
         self.engine.cpu.write_xmm(dst_reg, result);
         Ok(())
     }
@@ -6494,17 +6516,17 @@ impl<H: HookManager> ExecutionContext<'_, H> {
 
         let dst_value = self.engine.cpu.read_xmm(dst_reg);
         let mut result = 0u128;
-        
+
         if shift_amount < 64 {
             // Shift each 64-bit quadword right
             let low_qword = (dst_value & 0xFFFFFFFFFFFFFFFF) as u64;
             let high_qword = ((dst_value >> 64) & 0xFFFFFFFFFFFFFFFF) as u64;
-            
+
             result |= (low_qword >> shift_amount) as u128;
             result |= ((high_qword >> shift_amount) as u128) << 64;
         }
         // If shift_amount >= 64, all bits are shifted out, result is 0
-        
+
         self.engine.cpu.write_xmm(dst_reg, result);
         Ok(())
     }
@@ -6533,16 +6555,16 @@ impl<H: HookManager> ExecutionContext<'_, H> {
 
         let dst_value = self.engine.cpu.read_xmm(dst_reg);
         let mut result = 0u128;
-        
+
         // Arithmetic shift preserves sign bit
         let shift = if shift_amount > 15 { 15 } else { shift_amount };
-        
+
         for i in 0..8 {
             let word = ((dst_value >> (i * 16)) & 0xFFFF) as u16 as i16;
             let shifted = (word >> shift) as u16;
             result |= (shifted as u128) << (i * 16);
         }
-        
+
         self.engine.cpu.write_xmm(dst_reg, result);
         Ok(())
     }
@@ -6571,16 +6593,16 @@ impl<H: HookManager> ExecutionContext<'_, H> {
 
         let dst_value = self.engine.cpu.read_xmm(dst_reg);
         let mut result = 0u128;
-        
+
         // Arithmetic shift preserves sign bit
         let shift = if shift_amount > 31 { 31 } else { shift_amount };
-        
+
         for i in 0..4 {
             let dword = ((dst_value >> (i * 32)) & 0xFFFFFFFF) as u32 as i32;
             let shifted = (dword >> shift) as u32;
             result |= (shifted as u128) << (i * 32);
         }
-        
+
         self.engine.cpu.write_xmm(dst_reg, result);
         Ok(())
     }
@@ -6606,7 +6628,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
 
         let dst_value = self.engine.cpu.read_xmm(dst_reg);
         let mut result = 0u128;
-        
+
         // Process destination words (low 8 bytes of result)
         for i in 0..8 {
             let word = ((dst_value >> (i * 16)) & 0xFFFF) as i16;
@@ -6619,7 +6641,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             };
             result |= ((byte as u8) as u128) << (i * 8);
         }
-        
+
         // Process source words (high 8 bytes of result)
         for i in 0..8 {
             let word = ((src_value >> (i * 16)) & 0xFFFF) as i16;
@@ -6632,7 +6654,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             };
             result |= ((byte as u8) as u128) << ((i + 8) * 8);
         }
-        
+
         self.engine.cpu.write_xmm(dst_reg, result);
         Ok(())
     }
@@ -6658,7 +6680,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
 
         let dst_value = self.engine.cpu.read_xmm(dst_reg);
         let mut result = 0u128;
-        
+
         // Process destination words (low 8 bytes of result)
         for i in 0..8 {
             let word = ((dst_value >> (i * 16)) & 0xFFFF) as i16;
@@ -6671,7 +6693,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             };
             result |= (byte as u128) << (i * 8);
         }
-        
+
         // Process source words (high 8 bytes of result)
         for i in 0..8 {
             let word = ((src_value >> (i * 16)) & 0xFFFF) as i16;
@@ -6684,7 +6706,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             };
             result |= (byte as u128) << ((i + 8) * 8);
         }
-        
+
         self.engine.cpu.write_xmm(dst_reg, result);
         Ok(())
     }
@@ -6711,7 +6733,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
 
         let dst_value = self.engine.cpu.read_xmm(dst_reg);
         let mut result = 0u128;
-        
+
         // Process 4 pairs of words to produce 4 dwords
         for i in 0..4 {
             // Get two consecutive words from each operand
@@ -6719,16 +6741,16 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             let dst_word2 = ((dst_value >> (i * 32 + 16)) & 0xFFFF) as i16;
             let src_word1 = ((src_value >> (i * 32)) & 0xFFFF) as i16;
             let src_word2 = ((src_value >> (i * 32 + 16)) & 0xFFFF) as i16;
-            
+
             // Multiply and add the products
             let product1 = (dst_word1 as i32) * (src_word1 as i32);
             let product2 = (dst_word2 as i32) * (src_word2 as i32);
             let sum = product1.wrapping_add(product2);
-            
+
             // Store the 32-bit result
             result |= ((sum as u32) as u128) << (i * 32);
         }
-        
+
         self.engine.cpu.write_xmm(dst_reg, result);
         Ok(())
     }
@@ -6754,7 +6776,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
 
         let dst_value = self.engine.cpu.read_xmm(dst_reg);
         let mut result = 0u128;
-        
+
         // Process destination dwords (low 4 words of result)
         for i in 0..4 {
             let dword = ((dst_value >> (i * 32)) & 0xFFFFFFFF) as i32;
@@ -6767,7 +6789,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             };
             result |= ((word as u16) as u128) << (i * 16);
         }
-        
+
         // Process source dwords (high 4 words of result)
         for i in 0..4 {
             let dword = ((src_value >> (i * 32)) & 0xFFFFFFFF) as i32;
@@ -6780,7 +6802,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             };
             result |= ((word as u16) as u128) << ((i + 4) * 16);
         }
-        
+
         self.engine.cpu.write_xmm(dst_reg, result);
         Ok(())
     }
@@ -6806,17 +6828,17 @@ impl<H: HookManager> ExecutionContext<'_, H> {
 
         let dst_value = self.engine.cpu.read_xmm(dst_reg);
         let mut result = 0u128;
-        
+
         // Interleave the low 8 bytes from dst and src
         for i in 0..8 {
             let dst_byte = ((dst_value >> (i * 8)) & 0xFF) as u8;
             let src_byte = ((src_value >> (i * 8)) & 0xFF) as u8;
-            
+
             // Place dst byte in even position, src byte in odd position
             result |= (dst_byte as u128) << (i * 16);
             result |= (src_byte as u128) << (i * 16 + 8);
         }
-        
+
         self.engine.cpu.write_xmm(dst_reg, result);
         Ok(())
     }
@@ -6842,17 +6864,17 @@ impl<H: HookManager> ExecutionContext<'_, H> {
 
         let dst_value = self.engine.cpu.read_xmm(dst_reg);
         let mut result = 0u128;
-        
+
         // Interleave the high 8 bytes from dst and src
         for i in 0..8 {
             let dst_byte = ((dst_value >> ((i + 8) * 8)) & 0xFF) as u8;
             let src_byte = ((src_value >> ((i + 8) * 8)) & 0xFF) as u8;
-            
+
             // Place dst byte in even position, src byte in odd position
             result |= (dst_byte as u128) << (i * 16);
             result |= (src_byte as u128) << (i * 16 + 8);
         }
-        
+
         self.engine.cpu.write_xmm(dst_reg, result);
         Ok(())
     }
@@ -6878,17 +6900,17 @@ impl<H: HookManager> ExecutionContext<'_, H> {
 
         let dst_value = self.engine.cpu.read_xmm(dst_reg);
         let mut result = 0u128;
-        
+
         // Interleave the high 4 words from dst and src
         for i in 0..4 {
             let dst_word = ((dst_value >> ((i + 4) * 16)) & 0xFFFF) as u16;
             let src_word = ((src_value >> ((i + 4) * 16)) & 0xFFFF) as u16;
-            
+
             // Place dst word in even position, src word in odd position
             result |= (dst_word as u128) << (i * 32);
             result |= (src_word as u128) << (i * 32 + 16);
         }
-        
+
         self.engine.cpu.write_xmm(dst_reg, result);
         Ok(())
     }
@@ -6914,18 +6936,18 @@ impl<H: HookManager> ExecutionContext<'_, H> {
 
         let dst_value = self.engine.cpu.read_xmm(dst_reg);
         let mut result = 0u128;
-        
+
         // Interleave the low 2 doublewords from dst and src
         let dst_dw0 = (dst_value & 0xFFFFFFFF) as u32;
         let dst_dw1 = ((dst_value >> 32) & 0xFFFFFFFF) as u32;
         let src_dw0 = (src_value & 0xFFFFFFFF) as u32;
         let src_dw1 = ((src_value >> 32) & 0xFFFFFFFF) as u32;
-        
+
         result |= dst_dw0 as u128;
         result |= (src_dw0 as u128) << 32;
         result |= (dst_dw1 as u128) << 64;
         result |= (src_dw1 as u128) << 96;
-        
+
         self.engine.cpu.write_xmm(dst_reg, result);
         Ok(())
     }
@@ -6951,18 +6973,18 @@ impl<H: HookManager> ExecutionContext<'_, H> {
 
         let dst_value = self.engine.cpu.read_xmm(dst_reg);
         let mut result = 0u128;
-        
+
         // Interleave the high 2 doublewords from dst and src
         let dst_dw2 = ((dst_value >> 64) & 0xFFFFFFFF) as u32;
         let dst_dw3 = ((dst_value >> 96) & 0xFFFFFFFF) as u32;
         let src_dw2 = ((src_value >> 64) & 0xFFFFFFFF) as u32;
         let src_dw3 = ((src_value >> 96) & 0xFFFFFFFF) as u32;
-        
+
         result |= dst_dw2 as u128;
         result |= (src_dw2 as u128) << 32;
         result |= (dst_dw3 as u128) << 64;
         result |= (src_dw3 as u128) << 96;
-        
+
         self.engine.cpu.write_xmm(dst_reg, result);
         Ok(())
     }
@@ -6987,10 +7009,10 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         };
 
         let dst_value = self.engine.cpu.read_xmm(dst_reg);
-        
+
         // Result contains low quadword from dst and low quadword from src
         let result = (dst_value & 0xFFFFFFFFFFFFFFFF) | ((src_value & 0xFFFFFFFFFFFFFFFF) << 64);
-        
+
         self.engine.cpu.write_xmm(dst_reg, result);
         Ok(())
     }
@@ -7015,21 +7037,21 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         };
 
         let dst_value = self.engine.cpu.read_xmm(dst_reg);
-        
+
         // Result contains high quadword from dst and high quadword from src
         let result = (dst_value >> 64) | ((src_value >> 64) << 64);
-        
+
         self.engine.cpu.write_xmm(dst_reg, result);
         Ok(())
     }
-    
+
     fn execute_pmovsxbw(&mut self, inst: &Instruction) -> Result<()> {
         // PMOVSXBW: Sign extend 8 bytes to 8 words
         let dst_reg = self.convert_register(inst.op_register(0))?;
         let src_value = match inst.op_kind(1) {
             OpKind::Register => {
                 let src_reg = self.convert_register(inst.op_register(1))?;
-                self.engine.cpu.read_xmm(src_reg) & 0xFFFFFFFFFFFFFFFF  // Take lower 64 bits (8 bytes)
+                self.engine.cpu.read_xmm(src_reg) & 0xFFFFFFFFFFFFFFFF // Take lower 64 bits (8 bytes)
             }
             OpKind::Memory => {
                 let addr = self.calculate_memory_address(inst, 1)?;
@@ -7041,25 +7063,25 @@ impl<H: HookManager> ExecutionContext<'_, H> {
                 ))
             }
         };
-        
+
         let mut result = 0u128;
         for i in 0..8 {
             let byte = ((src_value >> (i * 8)) & 0xFF) as i8;
             let word = byte as i16 as u16;
             result |= (word as u128) << (i * 16);
         }
-        
+
         self.engine.cpu.write_xmm(dst_reg, result);
         Ok(())
     }
-    
+
     fn execute_pmovsxbd(&mut self, inst: &Instruction) -> Result<()> {
         // PMOVSXBD: Sign extend 4 bytes to 4 doublewords
         let dst_reg = self.convert_register(inst.op_register(0))?;
         let src_value = match inst.op_kind(1) {
             OpKind::Register => {
                 let src_reg = self.convert_register(inst.op_register(1))?;
-                self.engine.cpu.read_xmm(src_reg) & 0xFFFFFFFF  // Take lower 32 bits (4 bytes)
+                self.engine.cpu.read_xmm(src_reg) & 0xFFFFFFFF // Take lower 32 bits (4 bytes)
             }
             OpKind::Memory => {
                 let addr = self.calculate_memory_address(inst, 1)?;
@@ -7071,25 +7093,25 @@ impl<H: HookManager> ExecutionContext<'_, H> {
                 ))
             }
         };
-        
+
         let mut result = 0u128;
         for i in 0..4 {
             let byte = ((src_value >> (i * 8)) & 0xFF) as i8;
             let dword = byte as i32 as u32;
             result |= (dword as u128) << (i * 32);
         }
-        
+
         self.engine.cpu.write_xmm(dst_reg, result);
         Ok(())
     }
-    
+
     fn execute_pmovsxbq(&mut self, inst: &Instruction) -> Result<()> {
         // PMOVSXBQ: Sign extend 2 bytes to 2 quadwords
         let dst_reg = self.convert_register(inst.op_register(0))?;
         let src_value = match inst.op_kind(1) {
             OpKind::Register => {
                 let src_reg = self.convert_register(inst.op_register(1))?;
-                self.engine.cpu.read_xmm(src_reg) & 0xFFFF  // Take lower 16 bits (2 bytes)
+                self.engine.cpu.read_xmm(src_reg) & 0xFFFF // Take lower 16 bits (2 bytes)
             }
             OpKind::Memory => {
                 let addr = self.calculate_memory_address(inst, 1)?;
@@ -7102,25 +7124,25 @@ impl<H: HookManager> ExecutionContext<'_, H> {
                 ))
             }
         };
-        
+
         let mut result = 0u128;
         for i in 0..2 {
             let byte = ((src_value >> (i * 8)) & 0xFF) as i8;
             let qword = byte as i64 as u64;
             result |= (qword as u128) << (i * 64);
         }
-        
+
         self.engine.cpu.write_xmm(dst_reg, result);
         Ok(())
     }
-    
+
     fn execute_pmovsxwd(&mut self, inst: &Instruction) -> Result<()> {
         // PMOVSXWD: Sign extend 4 words to 4 doublewords
         let dst_reg = self.convert_register(inst.op_register(0))?;
         let src_value = match inst.op_kind(1) {
             OpKind::Register => {
                 let src_reg = self.convert_register(inst.op_register(1))?;
-                self.engine.cpu.read_xmm(src_reg) & 0xFFFFFFFFFFFFFFFF  // Take lower 64 bits (4 words)
+                self.engine.cpu.read_xmm(src_reg) & 0xFFFFFFFFFFFFFFFF // Take lower 64 bits (4 words)
             }
             OpKind::Memory => {
                 let addr = self.calculate_memory_address(inst, 1)?;
@@ -7132,25 +7154,25 @@ impl<H: HookManager> ExecutionContext<'_, H> {
                 ))
             }
         };
-        
+
         let mut result = 0u128;
         for i in 0..4 {
             let word = ((src_value >> (i * 16)) & 0xFFFF) as i16;
             let dword = word as i32 as u32;
             result |= (dword as u128) << (i * 32);
         }
-        
+
         self.engine.cpu.write_xmm(dst_reg, result);
         Ok(())
     }
-    
+
     fn execute_pmovsxwq(&mut self, inst: &Instruction) -> Result<()> {
         // PMOVSXWQ: Sign extend 2 words to 2 quadwords
         let dst_reg = self.convert_register(inst.op_register(0))?;
         let src_value = match inst.op_kind(1) {
             OpKind::Register => {
                 let src_reg = self.convert_register(inst.op_register(1))?;
-                self.engine.cpu.read_xmm(src_reg) & 0xFFFFFFFF  // Take lower 32 bits (2 words)
+                self.engine.cpu.read_xmm(src_reg) & 0xFFFFFFFF // Take lower 32 bits (2 words)
             }
             OpKind::Memory => {
                 let addr = self.calculate_memory_address(inst, 1)?;
@@ -7162,25 +7184,25 @@ impl<H: HookManager> ExecutionContext<'_, H> {
                 ))
             }
         };
-        
+
         let mut result = 0u128;
         for i in 0..2 {
             let word = ((src_value >> (i * 16)) & 0xFFFF) as i16;
             let qword = word as i64 as u64;
             result |= (qword as u128) << (i * 64);
         }
-        
+
         self.engine.cpu.write_xmm(dst_reg, result);
         Ok(())
     }
-    
+
     fn execute_pmovsxdq(&mut self, inst: &Instruction) -> Result<()> {
         // PMOVSXDQ: Sign extend 2 doublewords to 2 quadwords
         let dst_reg = self.convert_register(inst.op_register(0))?;
         let src_value = match inst.op_kind(1) {
             OpKind::Register => {
                 let src_reg = self.convert_register(inst.op_register(1))?;
-                self.engine.cpu.read_xmm(src_reg) & 0xFFFFFFFFFFFFFFFF  // Take lower 64 bits (2 dwords)
+                self.engine.cpu.read_xmm(src_reg) & 0xFFFFFFFFFFFFFFFF // Take lower 64 bits (2 dwords)
             }
             OpKind::Memory => {
                 let addr = self.calculate_memory_address(inst, 1)?;
@@ -7192,25 +7214,25 @@ impl<H: HookManager> ExecutionContext<'_, H> {
                 ))
             }
         };
-        
+
         let mut result = 0u128;
         for i in 0..2 {
             let dword = ((src_value >> (i * 32)) & 0xFFFFFFFF) as i32;
             let qword = dword as i64 as u64;
             result |= (qword as u128) << (i * 64);
         }
-        
+
         self.engine.cpu.write_xmm(dst_reg, result);
         Ok(())
     }
-    
+
     fn execute_pmovzxbw(&mut self, inst: &Instruction) -> Result<()> {
         // PMOVZXBW: Zero extend 8 bytes to 8 words
         let dst_reg = self.convert_register(inst.op_register(0))?;
         let src_value = match inst.op_kind(1) {
             OpKind::Register => {
                 let src_reg = self.convert_register(inst.op_register(1))?;
-                self.engine.cpu.read_xmm(src_reg) & 0xFFFFFFFFFFFFFFFF  // Take lower 64 bits (8 bytes)
+                self.engine.cpu.read_xmm(src_reg) & 0xFFFFFFFFFFFFFFFF // Take lower 64 bits (8 bytes)
             }
             OpKind::Memory => {
                 let addr = self.calculate_memory_address(inst, 1)?;
@@ -7222,24 +7244,24 @@ impl<H: HookManager> ExecutionContext<'_, H> {
                 ))
             }
         };
-        
+
         let mut result = 0u128;
         for i in 0..8 {
             let byte = ((src_value >> (i * 8)) & 0xFF) as u16;
             result |= (byte as u128) << (i * 16);
         }
-        
+
         self.engine.cpu.write_xmm(dst_reg, result);
         Ok(())
     }
-    
+
     fn execute_pmovzxbd(&mut self, inst: &Instruction) -> Result<()> {
         // PMOVZXBD: Zero extend 4 bytes to 4 doublewords
         let dst_reg = self.convert_register(inst.op_register(0))?;
         let src_value = match inst.op_kind(1) {
             OpKind::Register => {
                 let src_reg = self.convert_register(inst.op_register(1))?;
-                self.engine.cpu.read_xmm(src_reg) & 0xFFFFFFFF  // Take lower 32 bits (4 bytes)
+                self.engine.cpu.read_xmm(src_reg) & 0xFFFFFFFF // Take lower 32 bits (4 bytes)
             }
             OpKind::Memory => {
                 let addr = self.calculate_memory_address(inst, 1)?;
@@ -7251,24 +7273,24 @@ impl<H: HookManager> ExecutionContext<'_, H> {
                 ))
             }
         };
-        
+
         let mut result = 0u128;
         for i in 0..4 {
             let byte = ((src_value >> (i * 8)) & 0xFF) as u32;
             result |= (byte as u128) << (i * 32);
         }
-        
+
         self.engine.cpu.write_xmm(dst_reg, result);
         Ok(())
     }
-    
+
     fn execute_pmovzxbq(&mut self, inst: &Instruction) -> Result<()> {
         // PMOVZXBQ: Zero extend 2 bytes to 2 quadwords
         let dst_reg = self.convert_register(inst.op_register(0))?;
         let src_value = match inst.op_kind(1) {
             OpKind::Register => {
                 let src_reg = self.convert_register(inst.op_register(1))?;
-                self.engine.cpu.read_xmm(src_reg) & 0xFFFF  // Take lower 16 bits (2 bytes)
+                self.engine.cpu.read_xmm(src_reg) & 0xFFFF // Take lower 16 bits (2 bytes)
             }
             OpKind::Memory => {
                 let addr = self.calculate_memory_address(inst, 1)?;
@@ -7281,24 +7303,24 @@ impl<H: HookManager> ExecutionContext<'_, H> {
                 ))
             }
         };
-        
+
         let mut result = 0u128;
         for i in 0..2 {
             let byte = ((src_value >> (i * 8)) & 0xFF) as u64;
             result |= (byte as u128) << (i * 64);
         }
-        
+
         self.engine.cpu.write_xmm(dst_reg, result);
         Ok(())
     }
-    
+
     fn execute_pmovzxwd(&mut self, inst: &Instruction) -> Result<()> {
         // PMOVZXWD: Zero extend 4 words to 4 doublewords
         let dst_reg = self.convert_register(inst.op_register(0))?;
         let src_value = match inst.op_kind(1) {
             OpKind::Register => {
                 let src_reg = self.convert_register(inst.op_register(1))?;
-                self.engine.cpu.read_xmm(src_reg) & 0xFFFFFFFFFFFFFFFF  // Take lower 64 bits (4 words)
+                self.engine.cpu.read_xmm(src_reg) & 0xFFFFFFFFFFFFFFFF // Take lower 64 bits (4 words)
             }
             OpKind::Memory => {
                 let addr = self.calculate_memory_address(inst, 1)?;
@@ -7310,24 +7332,24 @@ impl<H: HookManager> ExecutionContext<'_, H> {
                 ))
             }
         };
-        
+
         let mut result = 0u128;
         for i in 0..4 {
             let word = ((src_value >> (i * 16)) & 0xFFFF) as u32;
             result |= (word as u128) << (i * 32);
         }
-        
+
         self.engine.cpu.write_xmm(dst_reg, result);
         Ok(())
     }
-    
+
     fn execute_pmovzxwq(&mut self, inst: &Instruction) -> Result<()> {
         // PMOVZXWQ: Zero extend 2 words to 2 quadwords
         let dst_reg = self.convert_register(inst.op_register(0))?;
         let src_value = match inst.op_kind(1) {
             OpKind::Register => {
                 let src_reg = self.convert_register(inst.op_register(1))?;
-                self.engine.cpu.read_xmm(src_reg) & 0xFFFFFFFF  // Take lower 32 bits (2 words)
+                self.engine.cpu.read_xmm(src_reg) & 0xFFFFFFFF // Take lower 32 bits (2 words)
             }
             OpKind::Memory => {
                 let addr = self.calculate_memory_address(inst, 1)?;
@@ -7339,24 +7361,24 @@ impl<H: HookManager> ExecutionContext<'_, H> {
                 ))
             }
         };
-        
+
         let mut result = 0u128;
         for i in 0..2 {
             let word = ((src_value >> (i * 16)) & 0xFFFF) as u64;
             result |= (word as u128) << (i * 64);
         }
-        
+
         self.engine.cpu.write_xmm(dst_reg, result);
         Ok(())
     }
-    
+
     fn execute_pmovzxdq(&mut self, inst: &Instruction) -> Result<()> {
         // PMOVZXDQ: Zero extend 2 doublewords to 2 quadwords
         let dst_reg = self.convert_register(inst.op_register(0))?;
         let src_value = match inst.op_kind(1) {
             OpKind::Register => {
                 let src_reg = self.convert_register(inst.op_register(1))?;
-                self.engine.cpu.read_xmm(src_reg) & 0xFFFFFFFFFFFFFFFF  // Take lower 64 bits (2 dwords)
+                self.engine.cpu.read_xmm(src_reg) & 0xFFFFFFFFFFFFFFFF // Take lower 64 bits (2 dwords)
             }
             OpKind::Memory => {
                 let addr = self.calculate_memory_address(inst, 1)?;
@@ -7368,13 +7390,13 @@ impl<H: HookManager> ExecutionContext<'_, H> {
                 ))
             }
         };
-        
+
         let mut result = 0u128;
         for i in 0..2 {
             let dword = ((src_value >> (i * 32)) & 0xFFFFFFFF) as u64;
             result |= (dword as u128) << (i * 64);
         }
-        
+
         self.engine.cpu.write_xmm(dst_reg, result);
         Ok(())
     }
