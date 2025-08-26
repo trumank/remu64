@@ -1,4 +1,4 @@
-use crate::fastcall::{ArgumentType, CallingConvention};
+use crate::fastcall::{ArgumentType, CallingConvention, FString};
 use crate::memory_manager::MemoryManager;
 use crate::minidump_loader::MinidumpLoader;
 use crate::tracer::InstructionTracer;
@@ -127,6 +127,7 @@ pub struct FunctionExecutor {
     memory_manager: MemoryManager,
     stack_base: u64,
     tracer: InstructionTracer,
+    fstring_addresses: Vec<u64>,
 }
 
 impl FunctionExecutor {
@@ -155,6 +156,7 @@ impl FunctionExecutor {
             memory_manager,
             stack_base,
             tracer,
+            fstring_addresses: Vec::new(),
         };
 
         Ok(executor)
@@ -169,12 +171,15 @@ impl FunctionExecutor {
         let return_address = 0xDEADBEEFCAFEBABE_u64;
 
         // Setup calling convention with shadow space
-        CallingConvention::setup_fastcall(
+        let (_struct_addresses, fstring_addresses) = CallingConvention::setup_fastcall(
             &mut self.engine,
             args.clone(),
             self.stack_base,
             return_address,
         )?;
+
+        // Store FString addresses for later output reading
+        self.fstring_addresses = fstring_addresses;
 
         // Set RIP to function start
         self.engine.reg_write(Register::RIP, function_address);
@@ -376,5 +381,16 @@ impl FunctionExecutor {
             instruction_len,
             e
         )
+    }
+
+    pub fn read_fstring_outputs(&mut self) -> Result<Vec<FString>> {
+        let mut outputs = Vec::new();
+        for &addr in &self.fstring_addresses {
+            outputs.push(CallingConvention::read_fstring_output(
+                &mut self.engine,
+                addr,
+            )?);
+        }
+        Ok(outputs)
     }
 }

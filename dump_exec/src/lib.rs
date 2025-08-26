@@ -5,7 +5,7 @@ pub mod minidump_loader;
 pub mod tracer;
 
 pub use executor::FunctionExecutor;
-pub use fastcall::{ArgumentType, CallingConvention};
+pub use fastcall::{ArgumentType, CallingConvention, FName, FString};
 pub use memory_manager::MemoryManager;
 pub use minidump_loader::MinidumpLoader;
 
