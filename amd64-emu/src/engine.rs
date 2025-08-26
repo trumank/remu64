@@ -714,9 +714,12 @@ impl<H: HookManager> ExecutionContext<'_, H> {
 
         let dst = self.read_operand(&inst.operands[0], inst)?;
         let src = self.read_operand(&inst.operands[1], inst)?;
+
+        // Determine the operand size for proper flag calculation
+        let operand_size = self.get_operand_size(&inst.operands[0]);
         let result = dst.wrapping_sub(src);
 
-        self.update_flags_arithmetic(dst, src, result, true);
+        self.update_flags_arithmetic_sized(dst, src, result, true, operand_size);
         Ok(())
     }
 

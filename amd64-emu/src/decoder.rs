@@ -811,15 +811,18 @@ impl Decoder {
                 }
                 let modrm = bytes[offset];
                 let reg_bits = (modrm >> 3) & 0x07;
-                let (rm_op, _, consumed) = self.decode_modrm_operands(&bytes[offset..], prefix)?;
+                let (rm_op, _, consumed) = self.decode_modrm_operands_with_size(
+                    &bytes[offset..],
+                    prefix,
+                    OperandSize::Byte,
+                )?;
                 offset += consumed;
 
-                // Get the 8-bit immediate value
+                // Get the 8-bit immediate value (unsigned)
                 let imm = bytes
                     .get(offset)
                     .copied()
-                    .ok_or(EmulatorError::InvalidInstruction(0))? as i8
-                    as i64;
+                    .ok_or(EmulatorError::InvalidInstruction(0))? as i64;
                 offset += 1;
 
                 let opcode = match reg_bits {
@@ -1808,7 +1811,7 @@ impl Decoder {
         let rm_operand = match mod_bits {
             0x03 => {
                 // Source register uses the fixed source size
-                let rm_reg = self.decode_register(rm_bits, prefix, source_size);
+                let rm_reg = self.decode_rm_register(rm_bits, prefix, source_size);
                 Operand::Register(rm_reg)
             }
             _ => {
