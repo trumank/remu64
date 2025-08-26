@@ -1985,7 +1985,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
                 let extracted_word = ((src_value >> shift_amount) & 0xFFFF) as u64;
 
                 // Zero-extend to destination size and write to general-purpose register
-                self.write_register(dst_reg, extracted_word)?;
+                self.engine.cpu.write_reg(dst_reg, extracted_word);
                 Ok(())
             }
             _ => Err(EmulatorError::UnsupportedInstruction(format!(
@@ -2022,7 +2022,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
                 }
 
                 // Read source value from general-purpose register
-                let src_value = self.read_register(src_reg)? & 0xFFFF; // Only low 16 bits
+                let src_value = self.engine.cpu.read_reg(src_reg) & 0xFFFF; // Only low 16 bits
 
                 // Read current XMM value
                 let mut xmm_value = self.engine.cpu.read_xmm(dst_reg);
@@ -2114,7 +2114,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
                 }
 
                 // Zero-extend and write to general-purpose register
-                self.write_register(dst_reg, mask)?;
+                self.engine.cpu.write_reg(dst_reg, mask);
                 Ok(())
             }
             _ => Err(EmulatorError::UnsupportedInstruction(format!(
