@@ -2,12 +2,14 @@ pub mod executor;
 pub mod fastcall;
 pub mod memory_manager;
 pub mod minidump_loader;
+pub mod minidump_memory;
 pub mod tracer;
 
 pub use executor::FunctionExecutor;
 pub use fastcall::{ArgumentType, CallingConvention, FName, FString};
 pub use memory_manager::MemoryManager;
 pub use minidump_loader::MinidumpLoader;
+pub use minidump_memory::MinidumpMemory;
 
 use anyhow::Result;
 
@@ -18,7 +20,7 @@ impl DumpExec {
         MinidumpLoader::load(path)
     }
 
-    pub fn create_executor(loader: MinidumpLoader) -> Result<FunctionExecutor> {
+    pub fn create_executor<'a>(loader: &'a MinidumpLoader) -> Result<FunctionExecutor<'a>> {
         FunctionExecutor::new(loader)
     }
 }

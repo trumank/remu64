@@ -392,26 +392,20 @@ impl<T: MemoryTrait> CowMemory<T> {
     }
 }
 
-impl<T: MemoryTrait<MemoryRegion = MemoryRegion>> MemoryTrait for CowMemory<T> {
+impl<T: MemoryTrait> MemoryTrait for CowMemory<T> {
     type MemoryRegion = MemoryRegion;
 
     fn find_region(&self, addr: u64) -> Option<&Self::MemoryRegion> {
-        if let Some(overlay_region) =
-            self.overlay
-                .range(..=addr)
-                .next_back()
-                .and_then(|(_, region)| {
-                    if region.contains(addr) {
-                        Some(region)
-                    } else {
-                        None
-                    }
-                })
-        {
-            Some(overlay_region)
-        } else {
-            self.base.find_region(addr)
-        }
+        self.overlay
+            .range(..=addr)
+            .next_back()
+            .and_then(|(_, region)| {
+                if region.contains(addr) {
+                    Some(region)
+                } else {
+                    None
+                }
+            })
     }
 
     fn find_region_mut(&mut self, addr: u64) -> Option<&mut Self::MemoryRegion> {
@@ -433,6 +427,49 @@ impl<T: MemoryTrait<MemoryRegion = MemoryRegion>> MemoryTrait for CowMemory<T> {
         }
     }
 
+    fn read(&self, addr: u64, buf: &mut [u8]) -> Result<()> {
+        let mut offset = 0;
+        let mut current_addr = addr;
+
+        while offset < buf.len() {
+            // First check overlay
+            if let Some(overlay_region) = self.find_region(current_addr) {
+                let region_offset = overlay_region.offset(current_addr).unwrap();
+                let available = overlay_region.size() - region_offset;
+                let to_copy = std::cmp::min(available, buf.len() - offset);
+
+                buf[offset..offset + to_copy].copy_from_slice(
+                    &overlay_region.data()[region_offset..region_offset + to_copy],
+                );
+
+                offset += to_copy;
+                current_addr += to_copy as u64;
+            } else {
+                // Fall back to base memory
+                let base_region = self
+                    .base
+                    .find_region(current_addr)
+                    .ok_or(EmulatorError::UnmappedMemory(current_addr))?;
+
+                if !base_region.perms().contains(Permission::READ) {
+                    return Err(EmulatorError::PermissionDenied(current_addr));
+                }
+
+                let region_offset = base_region.offset(current_addr).unwrap();
+                let available = base_region.size() - region_offset;
+                let to_copy = std::cmp::min(available, buf.len() - offset);
+
+                buf[offset..offset + to_copy]
+                    .copy_from_slice(&base_region.data()[region_offset..region_offset + to_copy]);
+
+                offset += to_copy;
+                current_addr += to_copy as u64;
+            }
+        }
+
+        Ok(())
+    }
+
     fn write(&mut self, addr: u64, data: &[u8]) -> Result<()> {
         let mut offset = 0;
         let mut current_addr = addr;
@@ -440,7 +477,14 @@ impl<T: MemoryTrait<MemoryRegion = MemoryRegion>> MemoryTrait for CowMemory<T> {
         while offset < data.len() {
             let page_addr = current_addr & !(self.page_size as u64 - 1);
 
-            if !self.overlay.contains_key(&page_addr) {
+            // Check if page_addr is already covered by an existing overlay region
+            let page_already_in_overlay = self
+                .overlay
+                .range(..=page_addr)
+                .next_back()
+                .is_some_and(|(_, region)| region.contains(page_addr));
+
+            if !page_already_in_overlay {
                 self.copy_page(current_addr)?;
             }
 
@@ -473,7 +517,14 @@ impl<T: MemoryTrait<MemoryRegion = MemoryRegion>> MemoryTrait for CowMemory<T> {
         while offset < data.len() {
             let page_addr = current_addr & !(self.page_size as u64 - 1);
 
-            if !self.overlay.contains_key(&page_addr) {
+            // Check if page_addr is already covered by an existing overlay region
+            let page_already_in_overlay = self
+                .overlay
+                .range(..=page_addr)
+                .next_back()
+                .is_some_and(|(_, region)| region.contains(page_addr));
+
+            if !page_already_in_overlay {
                 self.copy_page(current_addr)?;
             }
 
@@ -583,6 +634,19 @@ impl<T: MemoryTrait<MemoryRegion = MemoryRegion>> MemoryTrait for CowMemory<T> {
         }
 
         Ok(())
+    }
+
+    fn check_exec(&self, addr: u64) -> Result<()> {
+        // First check overlay regions
+        if let Some(region) = self.find_region(addr) {
+            if !region.perms().contains(Permission::EXEC) {
+                return Err(EmulatorError::PermissionDenied(addr));
+            }
+            return Ok(());
+        }
+
+        // Fall back to base memory
+        self.base.check_exec(addr)
     }
 
     fn total_size(&self) -> usize {
@@ -871,5 +935,204 @@ mod tests {
         // Note: overlapping pages are counted in both base and overlay
         let expected_size = base_size + 4096 + 4096; // original + cow page + new region
         assert_eq!(cow.total_size(), expected_size);
+    }
+
+    // Mock memory type to test CowMemory flexibility with different MemoryRegion types
+    struct MockMemoryRegion {
+        start: u64,
+        end: u64,
+        data: Vec<u8>,
+    }
+
+    impl MemoryRegionTrait for MockMemoryRegion {
+        fn range(&self) -> std::ops::Range<u64> {
+            self.start..self.end
+        }
+
+        fn data(&self) -> &[u8] {
+            &self.data
+        }
+
+        fn data_mut(&mut self) -> &mut [u8] {
+            &mut self.data
+        }
+
+        fn perms(&self) -> Permission {
+            Permission::READ | Permission::WRITE
+        }
+    }
+
+    struct MockMemory {
+        regions: BTreeMap<u64, MockMemoryRegion>,
+    }
+
+    impl MockMemory {
+        fn new() -> Self {
+            let mut regions = BTreeMap::new();
+            regions.insert(
+                0x1000,
+                MockMemoryRegion {
+                    start: 0x1000,
+                    end: 0x2000,
+                    data: (0..4096).map(|i| (i % 256) as u8).collect(),
+                },
+            );
+            MockMemory { regions }
+        }
+    }
+
+    impl MemoryTrait for MockMemory {
+        type MemoryRegion = MockMemoryRegion;
+
+        fn find_region(&self, addr: u64) -> Option<&Self::MemoryRegion> {
+            self.regions
+                .range(..=addr)
+                .next_back()
+                .and_then(|(_, region)| {
+                    if region.contains(addr) {
+                        Some(region)
+                    } else {
+                        None
+                    }
+                })
+        }
+
+        fn find_region_mut(&mut self, addr: u64) -> Option<&mut Self::MemoryRegion> {
+            self.regions
+                .range_mut(..=addr)
+                .next_back()
+                .and_then(|(_, region)| {
+                    if region.contains(addr) {
+                        Some(region)
+                    } else {
+                        None
+                    }
+                })
+        }
+
+        fn map(&mut self, _addr: u64, _size: usize, _perms: Permission) -> Result<()> {
+            Err(EmulatorError::InvalidArgument(
+                "Mock memory doesn't support mapping".into(),
+            ))
+        }
+
+        fn unmap(&mut self, _addr: u64, _size: usize) -> Result<()> {
+            Err(EmulatorError::InvalidArgument(
+                "Mock memory doesn't support unmapping".into(),
+            ))
+        }
+
+        fn protect(&mut self, _addr: u64, _size: usize, _perms: Permission) -> Result<()> {
+            Ok(())
+        }
+
+        fn total_size(&self) -> usize {
+            self.regions.values().map(|r| r.size()).sum()
+        }
+    }
+
+    #[test]
+    fn test_cow_memory_with_different_region_types() {
+        // Test that CowMemory works with different underlying MemoryRegion types
+        let base = MockMemory::new();
+        let mut cow = CowMemory::new(base);
+
+        // Should be able to read from the mock memory
+        assert_eq!(cow.read_u8(0x1000).unwrap(), 0);
+        assert_eq!(cow.read_u8(0x1001).unwrap(), 1);
+
+        // Should be able to write (triggering CoW)
+        cow.write_u8(0x1000, 42).unwrap();
+
+        // Should read modified value from overlay
+        assert_eq!(cow.read_u8(0x1000).unwrap(), 42);
+        // Should read original value from base for unmodified addresses
+        assert_eq!(cow.read_u8(0x1001).unwrap(), 1);
+
+        // Should have created overlay region
+        assert_eq!(cow.overlay_regions().count(), 1);
+
+        // Base should still have original value
+        assert_eq!(cow.base().read_u8(0x1000).unwrap(), 0);
+    }
+
+    #[test]
+    fn test_cow_memory_write_to_mapped_region() {
+        // Test the specific case that was failing: write to address within a mapped overlay region
+        let base = create_base_memory();
+        let mut cow = CowMemory::new(base);
+
+        // Map a large region (like a stack)
+        let stack_base = 0x7fff_f000_0000u64;
+        let stack_size = 0x100000; // 1MB
+        cow.map(
+            stack_base - stack_size,
+            stack_size as usize,
+            Permission::READ | Permission::WRITE | Permission::EXEC,
+        )
+        .unwrap();
+
+        // Should have one overlay region
+        assert_eq!(cow.overlay_regions().count(), 1);
+
+        // Test writing to various addresses within the mapped region
+        let test_addresses = [
+            stack_base - stack_size,          // Start of region
+            stack_base - stack_size + 0x1000, // One page in
+            stack_base - 0x1000,              // Near end of region
+            stack_base - 8,                   // Very end of region (typical stack pointer)
+        ];
+
+        for &addr in &test_addresses {
+            // Write should succeed
+            cow.write_u8(addr, 0x42).unwrap();
+
+            // Read back should work
+            assert_eq!(cow.read_u8(addr).unwrap(), 0x42);
+        }
+
+        // Test the specific failing case from the bug report
+        let failing_addr = 0x7fffeffff000; // Page-aligned address within stack
+        cow.write_u8(failing_addr, 0x55).unwrap();
+        assert_eq!(cow.read_u8(failing_addr).unwrap(), 0x55);
+
+        // Should still have only one overlay region (the original mapped region)
+        assert_eq!(cow.overlay_regions().count(), 1);
+    }
+
+    #[test]
+    fn test_cow_memory_check_exec_fallback() {
+        // Test that check_exec properly falls back to base memory
+        let mut base = create_base_memory();
+
+        // Map an executable region in base
+        base.map(0x10000, 0x1000, Permission::READ | Permission::EXEC)
+            .unwrap();
+
+        let mut cow = CowMemory::new(base);
+
+        // Map a stack region in overlay (without EXEC)
+        cow.map(0x7fff0000, 0x1000, Permission::READ | Permission::WRITE)
+            .unwrap();
+
+        // check_exec should succeed for base memory executable region
+        cow.check_exec(0x10000).unwrap();
+
+        // check_exec should fail for overlay region without EXEC permission
+        assert!(cow.check_exec(0x7fff0000).is_err());
+
+        // Map an executable region in overlay
+        cow.map(
+            0x20000,
+            0x1000,
+            Permission::READ | Permission::WRITE | Permission::EXEC,
+        )
+        .unwrap();
+
+        // check_exec should succeed for overlay executable region
+        cow.check_exec(0x20000).unwrap();
+
+        // Test addresses not in either overlay or base
+        assert!(cow.check_exec(0x50000).is_err());
     }
 }

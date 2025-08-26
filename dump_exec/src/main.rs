@@ -121,7 +121,7 @@ fn main() -> Result<()> {
     }
 
     println!("Creating function executor...");
-    let mut executor = DumpExec::create_executor(loader)?;
+    let mut executor = DumpExec::create_executor(&loader)?;
 
     if cli.trace {
         println!("Enabling instruction tracing...");

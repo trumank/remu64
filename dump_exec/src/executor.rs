@@ -1,15 +1,15 @@
 use crate::fastcall::{ArgumentType, CallingConvention, FString};
-use crate::memory_manager::MemoryManager;
 use crate::minidump_loader::MinidumpLoader;
+use crate::minidump_memory::MinidumpMemory;
 use crate::tracer::InstructionTracer;
-use amd64_emu::memory::MemoryTrait;
-use amd64_emu::{EmulatorError, Engine, EngineMode, HookManager, OwnedMemory, Permission, Register};
-use anyhow::{Context, Result};
+use amd64_emu::memory::{CowMemory, MemoryTrait};
+use amd64_emu::{EmulatorError, Engine, EngineMode, HookManager, Permission, Register};
+use anyhow::Result;
 use iced_x86::Formatter;
 
 // Hook implementation that contains the context
 struct ExecutionHooks<'a> {
-    memory_manager: &'a mut MemoryManager,
+    minidump_loader: &'a MinidumpLoader,
     tracer: &'a mut InstructionTracer,
     instruction_count: u64,
 }
@@ -17,71 +17,18 @@ struct ExecutionHooks<'a> {
 impl<'a, M: MemoryTrait> HookManager<M> for ExecutionHooks<'a> {
     fn on_mem_fault(
         &mut self,
-        engine: &mut Engine<M>,
+        _engine: &mut Engine<M>,
         address: u64,
         size: usize,
     ) -> amd64_emu::Result<bool> {
-        // Calculate all pages that need to be mapped for this memory access
-        let start_page = address & !0xfff;
-        let end_address = address + size as u64 - 1;
-        let end_page = end_address & !0xfff;
-
-        let mut success = true;
-        let mut current_page = start_page;
-
-        // Map all pages that are touched by this memory access
-        while current_page <= end_page {
-            // NEVER map the null page (address 0)
-            if current_page == 0 {
-                println!("Refusing to map null page");
-                success = false;
-                break;
-            }
-
-            // Try to read from minidump and map this page in the engine
-            if let Ok(page_data) = self.memory_manager.read_memory(current_page, 4096) {
-                // Map the page in the engine
-                match engine.memory.map(current_page, 4096, Permission::ALL) {
-                    Ok(()) => {
-                        // Write the data to the mapped page
-                        match engine.memory.write(current_page, &page_data) {
-                            Ok(()) => {
-                                // Successfully mapped this page
-                            }
-                            Err(_) => {
-                                println!(
-                                    "Failed to write data to mapped page at 0x{:x}",
-                                    current_page
-                                );
-                                success = false;
-                                break;
-                            }
-                        }
-                    }
-                    Err(_) => {
-                        // Page might already be mapped, try to write anyway
-                        match engine.memory.write(current_page, &page_data) {
-                            Ok(()) => {
-                                println!("Page already mapped, wrote data at 0x{:x}", current_page);
-                            }
-                            Err(_) => {
-                                println!("Failed to map or write page at 0x{:x}", current_page);
-                                success = false;
-                                break;
-                            }
-                        }
-                    }
-                }
-            } else {
-                println!("No data in minidump for page at 0x{:x}", current_page);
-                success = false;
-                break;
-            }
-
-            current_page += 4096; // Move to next page
-        }
-
-        Ok(success)
+        // With CowMemory on top of MinidumpMemory, we should not get memory faults
+        // for valid minidump addresses as they are accessible through the read implementation.
+        // If we get here, it's likely an invalid memory access.
+        println!(
+            "Memory fault at address 0x{:x}, size {} - invalid access",
+            address, size
+        );
+        Ok(false)
     }
 
     fn on_code(
@@ -102,7 +49,7 @@ impl<'a, M: MemoryTrait> HookManager<M> for ExecutionHooks<'a> {
                     address,
                     &instruction_bytes,
                     engine,
-                    Some(self.memory_manager.get_loader()),
+                    Some(self.minidump_loader),
                 )
                 .unwrap();
         }
@@ -151,39 +98,43 @@ impl<'a, M: MemoryTrait> HookManager<M> for ExecutionHooks<'a> {
     // }
 }
 
-pub struct FunctionExecutor {
-    engine: Engine<OwnedMemory>,
-    memory_manager: MemoryManager,
+pub struct FunctionExecutor<'a> {
+    engine: Engine<CowMemory<MinidumpMemory<'a>>>,
+    minidump_loader: &'a MinidumpLoader,
     stack_base: u64,
     tracer: InstructionTracer,
     fstring_addresses: Vec<u64>,
 }
 
-impl FunctionExecutor {
-    pub fn new(minidump_loader: MinidumpLoader) -> Result<Self> {
-        let mut engine = Engine::new(EngineMode::Mode64);
-        let mut memory_manager = MemoryManager::with_minidump(minidump_loader);
+impl<'a> FunctionExecutor<'a> {
+    pub fn new(minidump_loader: &'a MinidumpLoader) -> Result<FunctionExecutor<'a>> {
+        // Create MinidumpMemory from the loader
+        let minidump_memory = MinidumpMemory::new(minidump_loader.get_dump())?;
 
+        // Wrap with CowMemory for writability
+        let cow_memory = CowMemory::new(minidump_memory);
+
+        // Create engine with the CoW memory
+        let mut engine = Engine::new_memory(EngineMode::Mode64, cow_memory);
+
+        // Set up stack - use a standard location
+        let stack_base = 0x7fff_f000_0000u64;
         let stack_size = 0x10000;
-        let stack_base = memory_manager
-            .allocate_stack(stack_size)
-            .context("Failed to allocate stack")?;
 
-        // Map stack memory in engine
-        engine
-            .memory
-            .map(
-                stack_base - stack_size,
-                stack_size as usize,
-                Permission::ALL,
-            )
-            .context("Failed to map stack memory")?;
+        engine.memory.map(
+            stack_base - stack_size,
+            stack_size as usize,
+            Permission::READ | Permission::WRITE,
+        )?;
+
+        // Initialize stack pointer
+        engine.reg_write(Register::RSP, stack_base - 8);
 
         let tracer = InstructionTracer::new(false);
 
         let executor = FunctionExecutor {
             engine,
-            memory_manager,
+            minidump_loader,
             stack_base,
             tracer,
             fstring_addresses: Vec::new(),
@@ -215,11 +166,11 @@ impl FunctionExecutor {
         self.engine.reg_write(Register::RIP, function_address);
 
         // Get TEB address from minidump thread stream
-        let teb_address = self.memory_manager.get_loader().get_teb_address()?;
+        let teb_address = self.minidump_loader.get_teb_address()?;
         self.engine.set_gs_base(teb_address);
 
         let mut hooks = ExecutionHooks {
-            memory_manager: &mut self.memory_manager,
+            minidump_loader: self.minidump_loader,
             tracer: &mut self.tracer,
             instruction_count: 0,
         };
@@ -276,7 +227,7 @@ impl FunctionExecutor {
     fn ensure_memory_mapped(&mut self, address: u64) -> Result<()> {
         let page_base = address & !0xfff;
 
-        // NEVER map the null page (address 0) - this should always be unmapped
+        // NEVER access the null page (address 0) - this should always be unmapped
         if page_base == 0 {
             anyhow::bail!(
                 "Attempt to access null page at address 0x{:x} - this should never be mapped",
@@ -284,18 +235,8 @@ impl FunctionExecutor {
             );
         }
 
-        // Try to read from minidump and map it
-        if let Ok(page_data) = self.memory_manager.read_memory(page_base, 4096) {
-            // Map the page if not already mapped
-            if self
-                .engine
-                .memory
-                .map(page_base, 4096, Permission::ALL)
-                .is_ok()
-            {
-                self.engine.memory.write(page_base, &page_data)?;
-            }
-        }
+        // With CowMemory on top of MinidumpMemory, all minidump memory is already accessible
+        // No manual mapping required
         Ok(())
     }
 
@@ -303,20 +244,23 @@ impl FunctionExecutor {
         self.engine.reg_read(Register::RAX)
     }
 
-    pub fn get_engine(&self) -> &Engine<OwnedMemory> {
+    pub fn get_engine(&self) -> &Engine<CowMemory<MinidumpMemory<'a>>> {
         &self.engine
     }
 
-    pub fn get_engine_mut(&mut self) -> &mut Engine<OwnedMemory> {
+    pub fn get_engine_mut(&mut self) -> &mut Engine<CowMemory<MinidumpMemory<'a>>> {
         &mut self.engine
     }
 
     pub fn read_memory(&mut self, address: u64, size: usize) -> Result<Vec<u8>> {
-        self.memory_manager.read_memory(address, size)
+        let mut buf = vec![0u8; size];
+        self.engine.memory.read(address, &mut buf)?;
+        Ok(buf)
     }
 
     pub fn write_memory(&mut self, address: u64, data: &[u8]) -> Result<()> {
-        self.memory_manager.write_memory(address, data)
+        self.engine.memory.write(address, data)?;
+        Ok(())
     }
 
     pub fn set_register(&mut self, register: Register, value: u64) {
@@ -393,10 +337,7 @@ impl FunctionExecutor {
         };
 
         // Check if RIP is in a known module
-        let module_info = self
-            .memory_manager
-            .get_loader()
-            .find_module_for_address(rip);
+        let module_info = self.minidump_loader.find_module_for_address(rip);
         let address_str = match module_info {
             Some((module_name, _base, offset)) => {
                 format!("0x{:016x} ({}+0x{:x})", rip, module_name, offset)
