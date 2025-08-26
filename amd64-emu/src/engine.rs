@@ -304,6 +304,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             Mnemonic::Pop => self.execute_pop(inst),
             Mnemonic::Ret => self.execute_ret(inst),
             Mnemonic::Cdq => self.execute_cdq(inst),
+            Mnemonic::Cdqe => self.execute_cdqe(inst),
             Mnemonic::And => self.execute_and(inst),
             Mnemonic::Sar => self.execute_sar(inst),
             Mnemonic::Movsxd => self.execute_movsxd(inst),
@@ -314,13 +315,18 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             Mnemonic::Setbe => self.execute_setbe(inst),
             Mnemonic::Sete => self.execute_sete(inst),
             Mnemonic::Setne => self.execute_setne(inst),
+            Mnemonic::Setle => self.execute_setle(inst),
             Mnemonic::Shr => self.execute_shr(inst),
             Mnemonic::Shl => self.execute_shl(inst),
             Mnemonic::Cmovb => self.execute_cmovb(inst),
             Mnemonic::Cmovg => self.execute_cmovg(inst),
             Mnemonic::Cmovbe => self.execute_cmovbe(inst),
             Mnemonic::Cmovns => self.execute_cmovns(inst),
+            Mnemonic::Cmova => self.execute_cmova(inst),
+            Mnemonic::Cmovle => self.execute_cmovle(inst),
             Mnemonic::Vmovdqu => self.execute_vmovdqu(inst),
+            Mnemonic::Vmovdqa => self.execute_vmovdqa(inst),
+            Mnemonic::Movdqu => self.execute_movdqu(inst),
             Mnemonic::Vzeroupper => self.execute_vzeroupper(inst),
             Mnemonic::Imul => self.execute_imul(inst),
             Mnemonic::Nop => self.execute_nop(inst),
@@ -538,6 +544,14 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         Ok(())
     }
 
+    fn execute_cdqe(&mut self, _inst: &Instruction) -> Result<()> {
+        // CDQE: Sign-extend EAX to RAX (convert dword to qword)
+        let eax = self.engine.cpu.read_reg(Register::RAX) as u32;
+        let rax = eax as i32 as i64 as u64; // Sign extend 32-bit to 64-bit
+        self.engine.cpu.write_reg(Register::RAX, rax);
+        Ok(())
+    }
+
     fn execute_and(&mut self, inst: &Instruction) -> Result<()> {
         let dst_value = self.read_operand(inst, 0)?;
         let src_value = self.read_operand(inst, 1)?;
@@ -698,6 +712,18 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         Ok(())
     }
 
+    fn execute_setle(&mut self, inst: &Instruction) -> Result<()> {
+        // SETLE: Set if less than or equal (ZF=1 or SF!=OF)
+        let zf = self.engine.cpu.rflags.contains(Flags::ZF);
+        let sf = self.engine.cpu.rflags.contains(Flags::SF);
+        let of = self.engine.cpu.rflags.contains(Flags::OF);
+        let result = if zf || (sf != of) { 1u64 } else { 0u64 };
+
+        // Write 1 byte result to destination
+        self.write_operand(inst, 0, result)?;
+        Ok(())
+    }
+
     fn execute_shr(&mut self, inst: &Instruction) -> Result<()> {
         let dst_value = self.read_operand(inst, 0)?;
         let shift_count = self.read_operand(inst, 1)? & 0x3F; // Only use bottom 6 bits for 64-bit
@@ -805,6 +831,35 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         Ok(())
     }
 
+    fn execute_cmova(&mut self, inst: &Instruction) -> Result<()> {
+        // CMOVA: Conditional move if above (CF=0 and ZF=0)
+        let cf = self.engine.cpu.rflags.contains(Flags::CF);
+        let zf = self.engine.cpu.rflags.contains(Flags::ZF);
+
+        if !cf && !zf {
+            let src_value = self.read_operand(inst, 1)?;
+            self.write_operand(inst, 0, src_value)?;
+        }
+        // If condition is false, no move occurs
+
+        Ok(())
+    }
+
+    fn execute_cmovle(&mut self, inst: &Instruction) -> Result<()> {
+        // CMOVLE: Conditional move if less than or equal (ZF=1 or SF!=OF)
+        let zf = self.engine.cpu.rflags.contains(Flags::ZF);
+        let sf = self.engine.cpu.rflags.contains(Flags::SF);
+        let of = self.engine.cpu.rflags.contains(Flags::OF);
+
+        if zf || (sf != of) {
+            let src_value = self.read_operand(inst, 1)?;
+            self.write_operand(inst, 0, src_value)?;
+        }
+        // If condition is false, no move occurs
+
+        Ok(())
+    }
+
     fn execute_vmovdqu(&mut self, inst: &Instruction) -> Result<()> {
         // VMOVDQU: Vector Move Unaligned Packed Integer Values (256-bit)
         // Can move from YMM to memory, memory to YMM, or YMM to YMM
@@ -834,6 +889,75 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             }
             _ => Err(EmulatorError::UnsupportedInstruction(format!(
                 "Unsupported VMOVDQU operand types: {:?}, {:?}",
+                inst.op_kind(0),
+                inst.op_kind(1)
+            ))),
+        }
+    }
+
+    fn execute_vmovdqa(&mut self, inst: &Instruction) -> Result<()> {
+        // VMOVDQA: Vector Move Aligned Packed Integer Values (256-bit)
+        // Same as VMOVDQU but requires 32-byte alignment (we'll ignore alignment for now)
+        match (inst.op_kind(0), inst.op_kind(1)) {
+            (OpKind::Register, OpKind::Memory) => {
+                // ymm, [mem] - load from memory to YMM register
+                let src_data = self.read_ymm_memory(inst, 1)?;
+                let dst_reg = self.convert_register(inst.op_register(0))?;
+                self.engine.cpu.write_ymm(dst_reg, src_data);
+                Ok(())
+            }
+            (OpKind::Memory, OpKind::Register) => {
+                // [mem], ymm - store from YMM register to memory
+                let src_reg = self.convert_register(inst.op_register(1))?;
+                let src_data = self.engine.cpu.read_ymm(src_reg);
+                self.write_ymm_memory(inst, 0, src_data)?;
+                Ok(())
+            }
+            (OpKind::Register, OpKind::Register) => {
+                // ymm, ymm - move YMM register to YMM register
+                let src_reg = self.convert_register(inst.op_register(1))?;
+                let dst_reg = self.convert_register(inst.op_register(0))?;
+                let src_data = self.engine.cpu.read_ymm(src_reg);
+                self.engine.cpu.write_ymm(dst_reg, src_data);
+                Ok(())
+            }
+            _ => Err(EmulatorError::UnsupportedInstruction(format!(
+                "Unsupported VMOVDQA operand types: {:?}, {:?}",
+                inst.op_kind(0),
+                inst.op_kind(1)
+            ))),
+        }
+    }
+
+    fn execute_movdqu(&mut self, inst: &Instruction) -> Result<()> {
+        // MOVDQU: Move Unaligned Packed Integer Values (128-bit SSE)
+        match (inst.op_kind(0), inst.op_kind(1)) {
+            (OpKind::Register, OpKind::Memory) => {
+                // xmm, [mem] - load from memory to XMM register
+                let addr = self.calculate_memory_address(inst, 1)?;
+                let src_data = self.read_memory_128(addr)?;
+                let dst_reg = self.convert_register(inst.op_register(0))?;
+                self.engine.cpu.write_xmm(dst_reg, src_data);
+                Ok(())
+            }
+            (OpKind::Memory, OpKind::Register) => {
+                // [mem], xmm - store from XMM register to memory
+                let addr = self.calculate_memory_address(inst, 0)?;
+                let src_reg = self.convert_register(inst.op_register(1))?;
+                let src_data = self.engine.cpu.read_xmm(src_reg);
+                self.write_memory_128(addr, src_data)?;
+                Ok(())
+            }
+            (OpKind::Register, OpKind::Register) => {
+                // xmm, xmm - move XMM register to XMM register
+                let src_reg = self.convert_register(inst.op_register(1))?;
+                let dst_reg = self.convert_register(inst.op_register(0))?;
+                let src_data = self.engine.cpu.read_xmm(src_reg);
+                self.engine.cpu.write_xmm(dst_reg, src_data);
+                Ok(())
+            }
+            _ => Err(EmulatorError::UnsupportedInstruction(format!(
+                "Unsupported MOVDQU operand types: {:?}, {:?}",
                 inst.op_kind(0),
                 inst.op_kind(1)
             ))),
