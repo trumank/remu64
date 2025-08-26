@@ -8,9 +8,9 @@ fn test_pshuflw() {
     let code_addr = 0x1000;
     emu.mem_map(code_addr, 0x1000, Permission::READ | Permission::WRITE | Permission::EXEC).unwrap();
     
-    // PSHUFLW XMM1, XMM0, 0xE4 (11 10 01 00) - reverse order of low words
+    // PSHUFLW XMM1, XMM0, 0x1B (00 01 10 11) - reverse order of low words
     let code = vec![
-        0xF2, 0x0F, 0x70, 0xC8, 0xE4,  // pshuflw xmm1, xmm0, 0xE4
+        0xF2, 0x0F, 0x70, 0xC8, 0x1B,  // pshuflw xmm1, xmm0, 0x1B
     ];
     
     emu.mem_write(code_addr, &code).unwrap();
@@ -39,9 +39,9 @@ fn test_pshufhw() {
     let code_addr = 0x1000;
     emu.mem_map(code_addr, 0x1000, Permission::READ | Permission::WRITE | Permission::EXEC).unwrap();
     
-    // PSHUFHW XMM1, XMM0, 0xE4 (11 10 01 00) - reverse order of high words
+    // PSHUFHW XMM1, XMM0, 0x1B (00 01 10 11) - reverse order of high words
     let code = vec![
-        0xF3, 0x0F, 0x70, 0xC8, 0xE4,  // pshufhw xmm1, xmm0, 0xE4
+        0xF3, 0x0F, 0x70, 0xC8, 0x1B,  // pshufhw xmm1, xmm0, 0x1B
     ];
     
     emu.mem_write(code_addr, &code).unwrap();
@@ -203,7 +203,7 @@ fn test_pmaxub() {
     
     // Check result - should have maximum of each byte pair
     let result = emu.xmm_read(Register::XMM0);
-    assert_eq!(result, 0x10283840_50687880_98A8B8C8_D8E8F8F8, 
+    assert_eq!(result, 0x10203040_50607080_90A0B0C0_D0E0F0F8, 
                "PMAXUB should store maximum unsigned bytes");
 }
 
