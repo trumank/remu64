@@ -239,9 +239,9 @@ fn test_pcmpgtb() {
     assert_eq!(result[2], 0x00);  // 0 < 1
     assert_eq!(result[3], 0xFF);  // -1 > -2
     assert_eq!(result[4], 0xFF);  // 127 > 126
-    assert_eq!(result[5], 0xFF);  // -128 > -127
-    assert_eq!(result[6], 0x00);  // -127 < -128
-    assert_eq!(result[7], 0xFF);  // -2 > -1
+    assert_eq!(result[5], 0x00);  // -128 < -127
+    assert_eq!(result[6], 0xFF);  // -127 > -128
+    assert_eq!(result[7], 0x00);  // -2 < -1
     assert_eq!(result[8], 0xFF);  // 16 > 15
     assert_eq!(result[9], 0xFF);  // 32 > 31
     assert_eq!(result[10], 0xFF); // 48 > 47
