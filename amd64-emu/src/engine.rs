@@ -434,6 +434,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             Mnemonic::Packssdw => self.execute_packssdw(inst),
             Mnemonic::Punpcklbw => self.execute_punpcklbw(inst),
             Mnemonic::Punpckhbw => self.execute_punpckhbw(inst),
+            Mnemonic::Punpckhwd => self.execute_punpckhwd(inst),
             Mnemonic::Punpckldq => self.execute_punpckldq(inst),
             Mnemonic::Punpckhdq => self.execute_punpckhdq(inst),
             Mnemonic::Punpcklqdq => self.execute_punpcklqdq(inst),
@@ -5700,6 +5701,42 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             // Place dst byte in even position, src byte in odd position
             result |= (dst_byte as u128) << (i * 16);
             result |= (src_byte as u128) << (i * 16 + 8);
+        }
+        
+        self.engine.cpu.write_xmm(dst_reg, result);
+        Ok(())
+    }
+
+    fn execute_punpckhwd(&mut self, inst: &Instruction) -> Result<()> {
+        // PUNPCKHWD: Unpack and interleave high-order words
+        let dst_reg = self.convert_register(inst.op_register(0))?;
+        let src_value = match inst.op_kind(1) {
+            OpKind::Register => {
+                let src_reg = self.convert_register(inst.op_register(1))?;
+                self.engine.cpu.read_xmm(src_reg)
+            }
+            OpKind::Memory => {
+                let addr = self.calculate_memory_address(inst, 1)?;
+                self.read_memory_128(addr)?
+            }
+            _ => {
+                return Err(EmulatorError::UnsupportedInstruction(
+                    "Invalid PUNPCKHWD source".to_string(),
+                ))
+            }
+        };
+
+        let dst_value = self.engine.cpu.read_xmm(dst_reg);
+        let mut result = 0u128;
+        
+        // Interleave the high 4 words from dst and src
+        for i in 0..4 {
+            let dst_word = ((dst_value >> ((i + 4) * 16)) & 0xFFFF) as u16;
+            let src_word = ((src_value >> ((i + 4) * 16)) & 0xFFFF) as u16;
+            
+            // Place dst word in even position, src word in odd position
+            result |= (dst_word as u128) << (i * 32);
+            result |= (src_word as u128) << (i * 32 + 16);
         }
         
         self.engine.cpu.write_xmm(dst_reg, result);
