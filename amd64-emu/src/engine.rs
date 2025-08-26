@@ -359,6 +359,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             Mnemonic::Pshufhw => self.execute_pshufhw(inst),
             Mnemonic::Pextrw => self.execute_pextrw(inst),
             Mnemonic::Pinsrw => self.execute_pinsrw(inst),
+            Mnemonic::Pmovmskb => self.execute_pmovmskb(inst),
             Mnemonic::Xorps => self.execute_xorps(inst),
             Mnemonic::Cmpps => self.execute_cmpps(inst),
             Mnemonic::Cmpss => self.execute_cmpss(inst),
@@ -2068,6 +2069,51 @@ impl<H: HookManager> ExecutionContext<'_, H> {
                 inst.op_kind(0),
                 inst.op_kind(1),
                 inst.op_kind(2)
+            ))),
+        }
+    }
+
+    fn execute_pmovmskb(&mut self, inst: &Instruction) -> Result<()> {
+        // PMOVMSKB: Move Byte Mask
+        // Creates a 16-bit mask from the most significant bits of each byte in an XMM register
+        // Each bit in the result corresponds to the sign bit of each byte
+
+        if inst.op_count() != 2 {
+            return Err(EmulatorError::UnsupportedInstruction(
+                "PMOVMSKB requires exactly 2 operands".to_string(),
+            ));
+        }
+
+        match (inst.op_kind(0), inst.op_kind(1)) {
+            (OpKind::Register, OpKind::Register) => {
+                let dst_reg = self.convert_register(inst.op_register(0))?;
+                let src_reg = self.convert_register(inst.op_register(1))?;
+
+                // Check if source is XMM register
+                if !src_reg.is_xmm() {
+                    return Err(EmulatorError::UnsupportedInstruction(
+                        "PMOVMSKB requires XMM register as source".to_string(),
+                    ));
+                }
+
+                let src_value = self.engine.cpu.read_xmm(src_reg);
+
+                // Extract sign bit from each of 16 bytes
+                let mut mask = 0u64;
+                for i in 0..16 {
+                    let byte_shift = i * 8 + 7; // Position of sign bit for byte i
+                    let sign_bit = ((src_value >> byte_shift) & 1) as u64;
+                    mask |= sign_bit << i;
+                }
+
+                // Zero-extend and write to general-purpose register
+                self.write_register(dst_reg, mask)?;
+                Ok(())
+            }
+            _ => Err(EmulatorError::UnsupportedInstruction(format!(
+                "Unsupported PMOVMSKB operand types: {:?}, {:?}",
+                inst.op_kind(0),
+                inst.op_kind(1)
             ))),
         }
     }
