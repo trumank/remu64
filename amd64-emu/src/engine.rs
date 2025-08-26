@@ -416,6 +416,14 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             Mnemonic::Pcmpgtb => self.execute_pcmpgtb(inst),
             Mnemonic::Pcmpgtw => self.execute_pcmpgtw(inst),
             Mnemonic::Pcmpgtd => self.execute_pcmpgtd(inst),
+            Mnemonic::Psllw => self.execute_psllw(inst),
+            Mnemonic::Pslld => self.execute_pslld(inst),
+            Mnemonic::Psllq => self.execute_psllq(inst),
+            Mnemonic::Psrlw => self.execute_psrlw(inst),
+            Mnemonic::Psrld => self.execute_psrld(inst),
+            Mnemonic::Psrlq => self.execute_psrlq(inst),
+            Mnemonic::Psraw => self.execute_psraw(inst),
+            Mnemonic::Psrad => self.execute_psrad(inst),
             _ => {
                 println!(
                     "Unsupported instruction: {} ({:?}) at {:#x}",
@@ -4962,5 +4970,315 @@ impl<H: HookManager> ExecutionContext<'_, H> {
                 size
             ))),
         }
+    }
+
+    fn execute_psllw(&mut self, inst: &Instruction) -> Result<()> {
+        // PSLLW: Packed shift left logical words
+        let dst_reg = self.convert_register(inst.op_register(0))?;
+        let shift_amount = match inst.op_kind(1) {
+            OpKind::Register => {
+                let src_reg = self.convert_register(inst.op_register(1))?;
+                let xmm_value = self.engine.cpu.read_xmm(src_reg);
+                (xmm_value & 0xFFFF) as u8
+            }
+            OpKind::Memory => {
+                let addr = self.calculate_memory_address(inst, 1)?;
+                let value = self.read_memory_128(addr)?;
+                (value & 0xFFFF) as u8
+            }
+            OpKind::Immediate8 => inst.immediate8(),
+            _ => {
+                return Err(EmulatorError::UnsupportedInstruction(
+                    "Invalid PSLLW source".to_string(),
+                ))
+            }
+        };
+
+        let dst_value = self.engine.cpu.read_xmm(dst_reg);
+        let mut result = 0u128;
+        
+        if shift_amount < 16 {
+            // Shift each 16-bit word left
+            for i in 0..8 {
+                let word = ((dst_value >> (i * 16)) & 0xFFFF) as u16;
+                let shifted = (word << shift_amount) & 0xFFFF;
+                result |= (shifted as u128) << (i * 16);
+            }
+        }
+        // If shift_amount >= 16, all bits are shifted out, result is 0
+        
+        self.engine.cpu.write_xmm(dst_reg, result);
+        Ok(())
+    }
+
+    fn execute_pslld(&mut self, inst: &Instruction) -> Result<()> {
+        // PSLLD: Packed shift left logical doublewords
+        let dst_reg = self.convert_register(inst.op_register(0))?;
+        let shift_amount = match inst.op_kind(1) {
+            OpKind::Register => {
+                let src_reg = self.convert_register(inst.op_register(1))?;
+                let xmm_value = self.engine.cpu.read_xmm(src_reg);
+                (xmm_value & 0xFFFF) as u8
+            }
+            OpKind::Memory => {
+                let addr = self.calculate_memory_address(inst, 1)?;
+                let value = self.read_memory_128(addr)?;
+                (value & 0xFFFF) as u8
+            }
+            OpKind::Immediate8 => inst.immediate8(),
+            _ => {
+                return Err(EmulatorError::UnsupportedInstruction(
+                    "Invalid PSLLD source".to_string(),
+                ))
+            }
+        };
+
+        let dst_value = self.engine.cpu.read_xmm(dst_reg);
+        let mut result = 0u128;
+        
+        if shift_amount < 32 {
+            // Shift each 32-bit doubleword left
+            for i in 0..4 {
+                let dword = ((dst_value >> (i * 32)) & 0xFFFFFFFF) as u32;
+                let shifted = (dword << shift_amount) & 0xFFFFFFFF;
+                result |= (shifted as u128) << (i * 32);
+            }
+        }
+        // If shift_amount >= 32, all bits are shifted out, result is 0
+        
+        self.engine.cpu.write_xmm(dst_reg, result);
+        Ok(())
+    }
+
+    fn execute_psllq(&mut self, inst: &Instruction) -> Result<()> {
+        // PSLLQ: Packed shift left logical quadwords
+        let dst_reg = self.convert_register(inst.op_register(0))?;
+        let shift_amount = match inst.op_kind(1) {
+            OpKind::Register => {
+                let src_reg = self.convert_register(inst.op_register(1))?;
+                let xmm_value = self.engine.cpu.read_xmm(src_reg);
+                (xmm_value & 0xFFFF) as u8
+            }
+            OpKind::Memory => {
+                let addr = self.calculate_memory_address(inst, 1)?;
+                let value = self.read_memory_128(addr)?;
+                (value & 0xFFFF) as u8
+            }
+            OpKind::Immediate8 => inst.immediate8(),
+            _ => {
+                return Err(EmulatorError::UnsupportedInstruction(
+                    "Invalid PSLLQ source".to_string(),
+                ))
+            }
+        };
+
+        let dst_value = self.engine.cpu.read_xmm(dst_reg);
+        let mut result = 0u128;
+        
+        if shift_amount < 64 {
+            // Shift each 64-bit quadword left
+            let low_qword = (dst_value & 0xFFFFFFFFFFFFFFFF) as u64;
+            let high_qword = ((dst_value >> 64) & 0xFFFFFFFFFFFFFFFF) as u64;
+            
+            result |= ((low_qword << shift_amount) as u128) & 0xFFFFFFFFFFFFFFFF;
+            result |= ((high_qword << shift_amount) as u128) << 64;
+        }
+        // If shift_amount >= 64, all bits are shifted out, result is 0
+        
+        self.engine.cpu.write_xmm(dst_reg, result);
+        Ok(())
+    }
+
+    fn execute_psrlw(&mut self, inst: &Instruction) -> Result<()> {
+        // PSRLW: Packed shift right logical words
+        let dst_reg = self.convert_register(inst.op_register(0))?;
+        let shift_amount = match inst.op_kind(1) {
+            OpKind::Register => {
+                let src_reg = self.convert_register(inst.op_register(1))?;
+                let xmm_value = self.engine.cpu.read_xmm(src_reg);
+                (xmm_value & 0xFFFF) as u8
+            }
+            OpKind::Memory => {
+                let addr = self.calculate_memory_address(inst, 1)?;
+                let value = self.read_memory_128(addr)?;
+                (value & 0xFFFF) as u8
+            }
+            OpKind::Immediate8 => inst.immediate8(),
+            _ => {
+                return Err(EmulatorError::UnsupportedInstruction(
+                    "Invalid PSRLW source".to_string(),
+                ))
+            }
+        };
+
+        let dst_value = self.engine.cpu.read_xmm(dst_reg);
+        let mut result = 0u128;
+        
+        if shift_amount < 16 {
+            // Shift each 16-bit word right
+            for i in 0..8 {
+                let word = ((dst_value >> (i * 16)) & 0xFFFF) as u16;
+                let shifted = word >> shift_amount;
+                result |= (shifted as u128) << (i * 16);
+            }
+        }
+        // If shift_amount >= 16, all bits are shifted out, result is 0
+        
+        self.engine.cpu.write_xmm(dst_reg, result);
+        Ok(())
+    }
+
+    fn execute_psrld(&mut self, inst: &Instruction) -> Result<()> {
+        // PSRLD: Packed shift right logical doublewords
+        let dst_reg = self.convert_register(inst.op_register(0))?;
+        let shift_amount = match inst.op_kind(1) {
+            OpKind::Register => {
+                let src_reg = self.convert_register(inst.op_register(1))?;
+                let xmm_value = self.engine.cpu.read_xmm(src_reg);
+                (xmm_value & 0xFFFF) as u8
+            }
+            OpKind::Memory => {
+                let addr = self.calculate_memory_address(inst, 1)?;
+                let value = self.read_memory_128(addr)?;
+                (value & 0xFFFF) as u8
+            }
+            OpKind::Immediate8 => inst.immediate8(),
+            _ => {
+                return Err(EmulatorError::UnsupportedInstruction(
+                    "Invalid PSRLD source".to_string(),
+                ))
+            }
+        };
+
+        let dst_value = self.engine.cpu.read_xmm(dst_reg);
+        let mut result = 0u128;
+        
+        if shift_amount < 32 {
+            // Shift each 32-bit doubleword right
+            for i in 0..4 {
+                let dword = ((dst_value >> (i * 32)) & 0xFFFFFFFF) as u32;
+                let shifted = dword >> shift_amount;
+                result |= (shifted as u128) << (i * 32);
+            }
+        }
+        // If shift_amount >= 32, all bits are shifted out, result is 0
+        
+        self.engine.cpu.write_xmm(dst_reg, result);
+        Ok(())
+    }
+
+    fn execute_psrlq(&mut self, inst: &Instruction) -> Result<()> {
+        // PSRLQ: Packed shift right logical quadwords
+        let dst_reg = self.convert_register(inst.op_register(0))?;
+        let shift_amount = match inst.op_kind(1) {
+            OpKind::Register => {
+                let src_reg = self.convert_register(inst.op_register(1))?;
+                let xmm_value = self.engine.cpu.read_xmm(src_reg);
+                (xmm_value & 0xFFFF) as u8
+            }
+            OpKind::Memory => {
+                let addr = self.calculate_memory_address(inst, 1)?;
+                let value = self.read_memory_128(addr)?;
+                (value & 0xFFFF) as u8
+            }
+            OpKind::Immediate8 => inst.immediate8(),
+            _ => {
+                return Err(EmulatorError::UnsupportedInstruction(
+                    "Invalid PSRLQ source".to_string(),
+                ))
+            }
+        };
+
+        let dst_value = self.engine.cpu.read_xmm(dst_reg);
+        let mut result = 0u128;
+        
+        if shift_amount < 64 {
+            // Shift each 64-bit quadword right
+            let low_qword = (dst_value & 0xFFFFFFFFFFFFFFFF) as u64;
+            let high_qword = ((dst_value >> 64) & 0xFFFFFFFFFFFFFFFF) as u64;
+            
+            result |= (low_qword >> shift_amount) as u128;
+            result |= ((high_qword >> shift_amount) as u128) << 64;
+        }
+        // If shift_amount >= 64, all bits are shifted out, result is 0
+        
+        self.engine.cpu.write_xmm(dst_reg, result);
+        Ok(())
+    }
+
+    fn execute_psraw(&mut self, inst: &Instruction) -> Result<()> {
+        // PSRAW: Packed shift right arithmetic words
+        let dst_reg = self.convert_register(inst.op_register(0))?;
+        let shift_amount = match inst.op_kind(1) {
+            OpKind::Register => {
+                let src_reg = self.convert_register(inst.op_register(1))?;
+                let xmm_value = self.engine.cpu.read_xmm(src_reg);
+                (xmm_value & 0xFFFF) as u8
+            }
+            OpKind::Memory => {
+                let addr = self.calculate_memory_address(inst, 1)?;
+                let value = self.read_memory_128(addr)?;
+                (value & 0xFFFF) as u8
+            }
+            OpKind::Immediate8 => inst.immediate8(),
+            _ => {
+                return Err(EmulatorError::UnsupportedInstruction(
+                    "Invalid PSRAW source".to_string(),
+                ))
+            }
+        };
+
+        let dst_value = self.engine.cpu.read_xmm(dst_reg);
+        let mut result = 0u128;
+        
+        // Arithmetic shift preserves sign bit
+        let shift = if shift_amount > 15 { 15 } else { shift_amount };
+        
+        for i in 0..8 {
+            let word = ((dst_value >> (i * 16)) & 0xFFFF) as u16 as i16;
+            let shifted = (word >> shift) as u16;
+            result |= (shifted as u128) << (i * 16);
+        }
+        
+        self.engine.cpu.write_xmm(dst_reg, result);
+        Ok(())
+    }
+
+    fn execute_psrad(&mut self, inst: &Instruction) -> Result<()> {
+        // PSRAD: Packed shift right arithmetic doublewords
+        let dst_reg = self.convert_register(inst.op_register(0))?;
+        let shift_amount = match inst.op_kind(1) {
+            OpKind::Register => {
+                let src_reg = self.convert_register(inst.op_register(1))?;
+                let xmm_value = self.engine.cpu.read_xmm(src_reg);
+                (xmm_value & 0xFFFF) as u8
+            }
+            OpKind::Memory => {
+                let addr = self.calculate_memory_address(inst, 1)?;
+                let value = self.read_memory_128(addr)?;
+                (value & 0xFFFF) as u8
+            }
+            OpKind::Immediate8 => inst.immediate8(),
+            _ => {
+                return Err(EmulatorError::UnsupportedInstruction(
+                    "Invalid PSRAD source".to_string(),
+                ))
+            }
+        };
+
+        let dst_value = self.engine.cpu.read_xmm(dst_reg);
+        let mut result = 0u128;
+        
+        // Arithmetic shift preserves sign bit
+        let shift = if shift_amount > 31 { 31 } else { shift_amount };
+        
+        for i in 0..4 {
+            let dword = ((dst_value >> (i * 32)) & 0xFFFFFFFF) as u32 as i32;
+            let shifted = (dword >> shift) as u32;
+            result |= (shifted as u128) << (i * 32);
+        }
+        
+        self.engine.cpu.write_xmm(dst_reg, result);
+        Ok(())
     }
 }
