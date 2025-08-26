@@ -1979,7 +1979,12 @@ impl Decoder {
     }
 
     fn decode_register(&self, reg: u8, prefix: &InstructionPrefix, size: OperandSize) -> Register {
-        let extended = prefix.rex.as_ref().is_some_and(|r| r.r);
+        // Check both REX and VEX prefixes for R extension
+        let extended = if let Some(vex) = &prefix.vex {
+            vex.r // VEX.R is already inverted when decoded
+        } else {
+            prefix.rex.as_ref().is_some_and(|r| r.r)
+        };
         let reg_num = if extended { reg + 8 } else { reg };
 
         self.decode_register_by_num(reg_num, size)
@@ -1991,7 +1996,12 @@ impl Decoder {
         prefix: &InstructionPrefix,
         size: OperandSize,
     ) -> Register {
-        let extended = prefix.rex.as_ref().is_some_and(|r| r.b);
+        // Check both REX and VEX prefixes for B extension
+        let extended = if let Some(vex) = &prefix.vex {
+            vex.b // VEX.B is already inverted when decoded
+        } else {
+            prefix.rex.as_ref().is_some_and(|r| r.b)
+        };
         let reg_num = if extended { reg + 8 } else { reg };
 
         self.decode_register_by_num(reg_num, size)
@@ -2003,7 +2013,12 @@ impl Decoder {
         prefix: &InstructionPrefix,
         size: OperandSize,
     ) -> Register {
-        let extended = prefix.rex.as_ref().is_some_and(|r| r.x);
+        // Check both REX and VEX prefixes for X extension
+        let extended = if let Some(vex) = &prefix.vex {
+            vex.x // VEX.X is already inverted when decoded
+        } else {
+            prefix.rex.as_ref().is_some_and(|r| r.x)
+        };
         let reg_num = if extended { reg + 8 } else { reg };
 
         self.decode_register_by_num(reg_num, size)

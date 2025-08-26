@@ -525,22 +525,70 @@ impl CpuState {
     pub fn write_xmm(&mut self, reg: Register, value: u128) {
         use Register::*;
         match reg {
-            XMM0 => { self.ymm_regs[0][0] = value; self.ymm_regs[0][1] = 0; },
-            XMM1 => { self.ymm_regs[1][0] = value; self.ymm_regs[1][1] = 0; },
-            XMM2 => { self.ymm_regs[2][0] = value; self.ymm_regs[2][1] = 0; },
-            XMM3 => { self.ymm_regs[3][0] = value; self.ymm_regs[3][1] = 0; },
-            XMM4 => { self.ymm_regs[4][0] = value; self.ymm_regs[4][1] = 0; },
-            XMM5 => { self.ymm_regs[5][0] = value; self.ymm_regs[5][1] = 0; },
-            XMM6 => { self.ymm_regs[6][0] = value; self.ymm_regs[6][1] = 0; },
-            XMM7 => { self.ymm_regs[7][0] = value; self.ymm_regs[7][1] = 0; },
-            XMM8 => { self.ymm_regs[8][0] = value; self.ymm_regs[8][1] = 0; },
-            XMM9 => { self.ymm_regs[9][0] = value; self.ymm_regs[9][1] = 0; },
-            XMM10 => { self.ymm_regs[10][0] = value; self.ymm_regs[10][1] = 0; },
-            XMM11 => { self.ymm_regs[11][0] = value; self.ymm_regs[11][1] = 0; },
-            XMM12 => { self.ymm_regs[12][0] = value; self.ymm_regs[12][1] = 0; },
-            XMM13 => { self.ymm_regs[13][0] = value; self.ymm_regs[13][1] = 0; },
-            XMM14 => { self.ymm_regs[14][0] = value; self.ymm_regs[14][1] = 0; },
-            XMM15 => { self.ymm_regs[15][0] = value; self.ymm_regs[15][1] = 0; },
+            XMM0 => {
+                self.ymm_regs[0][0] = value;
+                self.ymm_regs[0][1] = 0;
+            }
+            XMM1 => {
+                self.ymm_regs[1][0] = value;
+                self.ymm_regs[1][1] = 0;
+            }
+            XMM2 => {
+                self.ymm_regs[2][0] = value;
+                self.ymm_regs[2][1] = 0;
+            }
+            XMM3 => {
+                self.ymm_regs[3][0] = value;
+                self.ymm_regs[3][1] = 0;
+            }
+            XMM4 => {
+                self.ymm_regs[4][0] = value;
+                self.ymm_regs[4][1] = 0;
+            }
+            XMM5 => {
+                self.ymm_regs[5][0] = value;
+                self.ymm_regs[5][1] = 0;
+            }
+            XMM6 => {
+                self.ymm_regs[6][0] = value;
+                self.ymm_regs[6][1] = 0;
+            }
+            XMM7 => {
+                self.ymm_regs[7][0] = value;
+                self.ymm_regs[7][1] = 0;
+            }
+            XMM8 => {
+                self.ymm_regs[8][0] = value;
+                self.ymm_regs[8][1] = 0;
+            }
+            XMM9 => {
+                self.ymm_regs[9][0] = value;
+                self.ymm_regs[9][1] = 0;
+            }
+            XMM10 => {
+                self.ymm_regs[10][0] = value;
+                self.ymm_regs[10][1] = 0;
+            }
+            XMM11 => {
+                self.ymm_regs[11][0] = value;
+                self.ymm_regs[11][1] = 0;
+            }
+            XMM12 => {
+                self.ymm_regs[12][0] = value;
+                self.ymm_regs[12][1] = 0;
+            }
+            XMM13 => {
+                self.ymm_regs[13][0] = value;
+                self.ymm_regs[13][1] = 0;
+            }
+            XMM14 => {
+                self.ymm_regs[14][0] = value;
+                self.ymm_regs[14][1] = 0;
+            }
+            XMM15 => {
+                self.ymm_regs[15][0] = value;
+                self.ymm_regs[15][1] = 0;
+            }
             _ => panic!("Not an XMM register"),
         }
     }
