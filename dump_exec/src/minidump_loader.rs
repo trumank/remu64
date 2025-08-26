@@ -3,17 +3,21 @@ use minidump::*;
 use std::collections::HashMap;
 use std::path::Path;
 
-pub struct MinidumpLoader {
-    dump: MmapMinidump,
+pub struct MinidumpLoader<'a> {
+    dump: &'a MmapMinidump,
     modules: Vec<MinidumpModule>,
     memory_regions: HashMap<u64, (u64, usize)>, // (base_address, size)
 }
 
-impl MinidumpLoader {
-    pub fn load<P: AsRef<Path>>(path: P) -> Result<Self> {
-        let dump = MmapMinidump::read_path(&path)
-            .with_context(|| format!("Failed to read minidump file: {:?}", path.as_ref()))?;
+impl<'a> MinidumpLoader<'a> {
+    pub fn load<P: AsRef<Path>>(path: P) -> Result<MinidumpLoader<'static>> {
+        let dump = Box::leak(Box::new(MmapMinidump::read_path(&path).with_context(
+            || format!("Failed to read minidump file: {:?}", path.as_ref()),
+        )?));
+        MinidumpLoader::from_minidump(dump)
+    }
 
+    pub fn from_minidump(dump: &'a MmapMinidump) -> Result<MinidumpLoader<'a>> {
         let modules = if let Ok(module_list) = dump.get_stream::<MinidumpModuleList>() {
             module_list.iter().cloned().collect()
         } else {

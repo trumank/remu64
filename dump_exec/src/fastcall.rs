@@ -1,3 +1,4 @@
+use crate::stack_manager::StackManager;
 use amd64_emu::{memory::MemoryTrait, Engine, Register};
 use anyhow::Result;
 
@@ -26,130 +27,106 @@ pub enum ArgumentType {
 pub struct CallingConvention;
 
 impl CallingConvention {
+    pub const INTEGER_REGISTERS: [Register; 4] =
+        [Register::RCX, Register::RDX, Register::R8, Register::R9];
+
+    pub fn set_register_args<M: MemoryTrait>(engine: &mut Engine<M>, args: &[u64]) {
+        for (i, &value) in args.iter().enumerate() {
+            if i < Self::INTEGER_REGISTERS.len() {
+                engine.reg_write(Self::INTEGER_REGISTERS[i], value);
+            }
+        }
+    }
+
+    pub fn push_fname_to_stack<M: MemoryTrait>(
+        engine: &mut Engine<M>,
+        stack: &mut StackManager,
+        fname: &FName,
+    ) -> Result<u64> {
+        let addr = stack.allocate(8);
+        let comparison_bytes = fname.comparison_index.to_le_bytes();
+        let value_bytes = fname.value.to_le_bytes();
+        engine.memory.write(addr, &comparison_bytes)?;
+        engine.memory.write(addr + 4, &value_bytes)?;
+        Ok(addr)
+    }
+
+    pub fn push_fstring_to_stack<M: MemoryTrait>(
+        engine: &mut Engine<M>,
+        stack: &mut StackManager,
+        fstring: &FString,
+    ) -> Result<u64> {
+        let data_ptr = if let Some(ref data) = fstring.data {
+            let data_size = data.len() * 2;
+            let data_addr = stack.allocate(data_size as u64);
+            for (i, &wchar) in data.iter().enumerate() {
+                let wchar_bytes = wchar.to_le_bytes();
+                engine
+                    .memory
+                    .write(data_addr + (i * 2) as u64, &wchar_bytes)?;
+            }
+            data_addr
+        } else {
+            0u64
+        };
+
+        let struct_addr = stack.allocate(16);
+        let data_ptr_bytes = data_ptr.to_le_bytes();
+        let num_bytes = fstring.num.to_le_bytes();
+        let max_bytes = fstring.max.to_le_bytes();
+
+        engine.memory.write(struct_addr, &data_ptr_bytes)?;
+        engine.memory.write(struct_addr + 8, &num_bytes)?;
+        engine.memory.write(struct_addr + 12, &max_bytes)?;
+
+        Ok(struct_addr)
+    }
+
     pub fn setup_fastcall<M: MemoryTrait>(
         engine: &mut Engine<M>,
         args: Vec<ArgumentType>,
         stack_pointer: u64,
         return_address: u64,
     ) -> Result<(Vec<u64>, Vec<u64>)> {
-        // Return (struct_addresses, fstring_addresses)
-        let integer_registers = [Register::RCX, Register::RDX, Register::R8, Register::R9];
-
-        // Separate arguments into register and stack arguments
-        let mut integer_args = Vec::new();
+        let mut stack = StackManager::new(stack_pointer);
+        let mut register_args = Vec::new();
         let mut stack_args = Vec::new();
         let mut struct_addresses = Vec::new();
         let mut fstring_addresses = Vec::new();
 
-        let mut current_stack = stack_pointer;
-
-        // First, allocate space for structs on the stack
         for arg in args.into_iter() {
-            match arg {
-                ArgumentType::Integer(val) | ArgumentType::Pointer(val) => {
-                    if integer_args.len() < 4 {
-                        integer_args.push(val);
-                    } else {
-                        stack_args.push(val);
-                    }
-                }
-                ArgumentType::Float(val) => {
-                    // For simplicity, treat floats as integers for now
-                    let int_val = val.to_bits();
-                    if integer_args.len() < 4 {
-                        integer_args.push(int_val);
-                    } else {
-                        stack_args.push(int_val);
-                    }
-                }
+            let arg_value = match arg {
+                ArgumentType::Integer(val) | ArgumentType::Pointer(val) => val,
+                ArgumentType::Float(val) => val.to_bits(),
                 ArgumentType::FName(fname) => {
-                    // Allocate 8 bytes for FName struct (two i32s)
-                    current_stack -= 8;
-                    let struct_addr = current_stack;
-
-                    // Write FName data to stack
-                    let comparison_bytes = fname.comparison_index.to_le_bytes();
-                    let value_bytes = fname.value.to_le_bytes();
-                    engine.memory.write(struct_addr, &comparison_bytes)?;
-                    engine.memory.write(struct_addr + 4, &value_bytes)?;
-
-                    struct_addresses.push(struct_addr);
-
-                    // Pass pointer to struct as argument
-                    if integer_args.len() < 4 {
-                        integer_args.push(struct_addr);
-                    } else {
-                        stack_args.push(struct_addr);
-                    }
+                    let addr = Self::push_fname_to_stack(engine, &mut stack, &fname)?;
+                    struct_addresses.push(addr);
+                    addr
                 }
                 ArgumentType::FString(fstring) => {
-                    // Allocate space for FString struct (16 bytes: ptr + i32 + i32 + padding)
-                    current_stack -= 16;
-                    let struct_addr = current_stack;
-
-                    // Allocate space for the wide character data if provided
-                    let data_ptr = if let Some(ref data) = fstring.data {
-                        let data_size = data.len() * 2; // u16 = 2 bytes each
-                        current_stack -= data_size as u64;
-                        let data_addr = current_stack;
-
-                        // Write wide character data to stack
-                        for (i, &wchar) in data.iter().enumerate() {
-                            let wchar_bytes = wchar.to_le_bytes();
-                            engine
-                                .memory
-                                .write(data_addr + (i * 2) as u64, &wchar_bytes)?;
-                        }
-                        data_addr
-                    } else {
-                        0u64 // null pointer
-                    };
-
-                    // Write FString struct to stack
-                    let data_ptr_bytes = data_ptr.to_le_bytes();
-                    let num_bytes = fstring.num.to_le_bytes();
-                    let max_bytes = fstring.max.to_le_bytes();
-
-                    engine.memory.write(struct_addr, &data_ptr_bytes)?; // data pointer
-                    engine.memory.write(struct_addr + 8, &num_bytes)?; // num
-                    engine.memory.write(struct_addr + 12, &max_bytes)?; // max
-
-                    fstring_addresses.push(struct_addr);
-
-                    // Pass pointer to struct as argument
-                    if integer_args.len() < 4 {
-                        integer_args.push(struct_addr);
-                    } else {
-                        stack_args.push(struct_addr);
-                    }
+                    let addr = Self::push_fstring_to_stack(engine, &mut stack, &fstring)?;
+                    fstring_addresses.push(addr);
+                    addr
                 }
+            };
+
+            if register_args.len() < 4 {
+                register_args.push(arg_value);
+            } else {
+                stack_args.push(arg_value);
             }
         }
 
-        // Set up register arguments
-        for (i, &value) in integer_args.iter().enumerate() {
-            if i < integer_registers.len() {
-                engine.reg_write(integer_registers[i], value);
-            }
-        }
+        Self::set_register_args(engine, &register_args);
 
-        // Reserve shadow space (32 bytes) before placing return address
-        current_stack -= 32;
+        stack.reserve_shadow_space();
+        stack.push_u64(engine, return_address)?;
 
-        // Push the return address to the stack (simulating a CALL instruction)
-        current_stack -= 8;
-        let return_bytes = return_address.to_le_bytes();
-        engine.memory.write(current_stack, &return_bytes)?;
-
-        // Push any stack arguments
         for &arg in stack_args.iter().rev() {
-            current_stack -= 8;
-            let bytes = arg.to_le_bytes();
-            engine.memory.write(current_stack, &bytes)?;
+            stack.push_u64(engine, arg)?;
         }
 
-        // Set RSP to point to the return address location
-        engine.reg_write(Register::RSP, current_stack);
+        stack.set_stack_pointer(engine);
 
         Ok((struct_addresses, fstring_addresses))
     }
@@ -187,5 +164,23 @@ impl CallingConvention {
         };
 
         Ok(FString { data, num, max })
+    }
+
+    pub fn read_u64_from_stack<M: MemoryTrait>(
+        engine: &mut Engine<M>,
+        stack: &mut StackManager,
+    ) -> Result<u64> {
+        let mut bytes = [0u8; 8];
+        engine.memory.read(stack.current, &mut bytes)?;
+        stack.current += 8;
+        Ok(u64::from_le_bytes(bytes))
+    }
+
+    pub fn write_u64_to_stack<M: MemoryTrait>(
+        engine: &mut Engine<M>,
+        stack: &mut StackManager,
+        value: u64,
+    ) -> Result<()> {
+        stack.push_u64(engine, value)
     }
 }

@@ -47,18 +47,18 @@ impl MemoryPage {
     }
 }
 
-pub struct MemoryManager {
+pub struct MemoryManager<'a> {
     pages: HashMap<u64, MemoryPage>,
-    minidump_loader: Option<MinidumpLoader>,
+    minidump_loader: Option<MinidumpLoader<'a>>,
 }
 
-impl Default for MemoryManager {
+impl<'a> Default for MemoryManager<'a> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl MemoryManager {
+impl<'a> MemoryManager<'a> {
     pub fn new() -> Self {
         MemoryManager {
             pages: HashMap::new(),
@@ -66,7 +66,7 @@ impl MemoryManager {
         }
     }
 
-    pub fn with_minidump(minidump_loader: MinidumpLoader) -> Self {
+    pub fn with_minidump(minidump_loader: MinidumpLoader<'a>) -> Self {
         MemoryManager {
             pages: HashMap::new(),
             minidump_loader: Some(minidump_loader),
@@ -247,7 +247,7 @@ impl MemoryManager {
             .is_some_and(|page| page.executable)
     }
 
-    pub fn get_loader(&self) -> &MinidumpLoader {
+    pub fn get_loader(&self) -> &MinidumpLoader<'_> {
         self.minidump_loader
             .as_ref()
             .expect("MinidumpLoader not available")
