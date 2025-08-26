@@ -360,6 +360,8 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             Mnemonic::Pextrw => self.execute_pextrw(inst),
             Mnemonic::Pinsrw => self.execute_pinsrw(inst),
             Mnemonic::Pmovmskb => self.execute_pmovmskb(inst),
+            Mnemonic::Pavgb => self.execute_pavgb(inst),
+            Mnemonic::Pavgw => self.execute_pavgw(inst),
             Mnemonic::Xorps => self.execute_xorps(inst),
             Mnemonic::Cmpps => self.execute_cmpps(inst),
             Mnemonic::Cmpss => self.execute_cmpss(inst),
@@ -2112,6 +2114,140 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             }
             _ => Err(EmulatorError::UnsupportedInstruction(format!(
                 "Unsupported PMOVMSKB operand types: {:?}, {:?}",
+                inst.op_kind(0),
+                inst.op_kind(1)
+            ))),
+        }
+    }
+
+    fn execute_pavgb(&mut self, inst: &Instruction) -> Result<()> {
+        // PAVGB: Packed Average Unsigned Bytes
+        // Computes the average of unsigned bytes with rounding: (a + b + 1) >> 1
+
+        match (inst.op_kind(0), inst.op_kind(1)) {
+            (OpKind::Register, OpKind::Register) => {
+                let dst_reg = self.convert_register(inst.op_register(0))?;
+                let src_reg = self.convert_register(inst.op_register(1))?;
+
+                if !dst_reg.is_xmm() || !src_reg.is_xmm() {
+                    return Err(EmulatorError::UnsupportedInstruction(
+                        "PAVGB requires XMM registers".to_string(),
+                    ));
+                }
+
+                let dst_value = self.engine.cpu.read_xmm(dst_reg);
+                let src_value = self.engine.cpu.read_xmm(src_reg);
+                let mut result = 0u128;
+
+                // Process 16 bytes
+                for i in 0..16 {
+                    let shift = i * 8;
+                    let dst_byte = ((dst_value >> shift) & 0xFF) as u16;
+                    let src_byte = ((src_value >> shift) & 0xFF) as u16;
+                    // Average with rounding: (a + b + 1) >> 1
+                    let avg = ((dst_byte + src_byte + 1) >> 1) as u128;
+                    result |= avg << shift;
+                }
+
+                self.engine.cpu.write_xmm(dst_reg, result);
+                Ok(())
+            }
+            (OpKind::Register, OpKind::Memory) => {
+                let dst_reg = self.convert_register(inst.op_register(0))?;
+
+                if !dst_reg.is_xmm() {
+                    return Err(EmulatorError::UnsupportedInstruction(
+                        "PAVGB requires XMM register as destination".to_string(),
+                    ));
+                }
+
+                let addr = self.calculate_memory_address(inst, 1)?;
+                let src_value = self.read_memory_128(addr)?;
+                let dst_value = self.engine.cpu.read_xmm(dst_reg);
+                let mut result = 0u128;
+
+                // Process 16 bytes
+                for i in 0..16 {
+                    let shift = i * 8;
+                    let dst_byte = ((dst_value >> shift) & 0xFF) as u16;
+                    let src_byte = ((src_value >> shift) & 0xFF) as u16;
+                    // Average with rounding: (a + b + 1) >> 1
+                    let avg = ((dst_byte + src_byte + 1) >> 1) as u128;
+                    result |= avg << shift;
+                }
+
+                self.engine.cpu.write_xmm(dst_reg, result);
+                Ok(())
+            }
+            _ => Err(EmulatorError::UnsupportedInstruction(format!(
+                "Unsupported PAVGB operand types: {:?}, {:?}",
+                inst.op_kind(0),
+                inst.op_kind(1)
+            ))),
+        }
+    }
+
+    fn execute_pavgw(&mut self, inst: &Instruction) -> Result<()> {
+        // PAVGW: Packed Average Unsigned Words
+        // Computes the average of unsigned words with rounding: (a + b + 1) >> 1
+
+        match (inst.op_kind(0), inst.op_kind(1)) {
+            (OpKind::Register, OpKind::Register) => {
+                let dst_reg = self.convert_register(inst.op_register(0))?;
+                let src_reg = self.convert_register(inst.op_register(1))?;
+
+                if !dst_reg.is_xmm() || !src_reg.is_xmm() {
+                    return Err(EmulatorError::UnsupportedInstruction(
+                        "PAVGW requires XMM registers".to_string(),
+                    ));
+                }
+
+                let dst_value = self.engine.cpu.read_xmm(dst_reg);
+                let src_value = self.engine.cpu.read_xmm(src_reg);
+                let mut result = 0u128;
+
+                // Process 8 words
+                for i in 0..8 {
+                    let shift = i * 16;
+                    let dst_word = ((dst_value >> shift) & 0xFFFF) as u32;
+                    let src_word = ((src_value >> shift) & 0xFFFF) as u32;
+                    // Average with rounding: (a + b + 1) >> 1
+                    let avg = ((dst_word + src_word + 1) >> 1) as u128;
+                    result |= avg << shift;
+                }
+
+                self.engine.cpu.write_xmm(dst_reg, result);
+                Ok(())
+            }
+            (OpKind::Register, OpKind::Memory) => {
+                let dst_reg = self.convert_register(inst.op_register(0))?;
+
+                if !dst_reg.is_xmm() {
+                    return Err(EmulatorError::UnsupportedInstruction(
+                        "PAVGW requires XMM register as destination".to_string(),
+                    ));
+                }
+
+                let addr = self.calculate_memory_address(inst, 1)?;
+                let src_value = self.read_memory_128(addr)?;
+                let dst_value = self.engine.cpu.read_xmm(dst_reg);
+                let mut result = 0u128;
+
+                // Process 8 words
+                for i in 0..8 {
+                    let shift = i * 16;
+                    let dst_word = ((dst_value >> shift) & 0xFFFF) as u32;
+                    let src_word = ((src_value >> shift) & 0xFFFF) as u32;
+                    // Average with rounding: (a + b + 1) >> 1
+                    let avg = ((dst_word + src_word + 1) >> 1) as u128;
+                    result |= avg << shift;
+                }
+
+                self.engine.cpu.write_xmm(dst_reg, result);
+                Ok(())
+            }
+            _ => Err(EmulatorError::UnsupportedInstruction(format!(
+                "Unsupported PAVGW operand types: {:?}, {:?}",
                 inst.op_kind(0),
                 inst.op_kind(1)
             ))),
