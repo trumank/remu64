@@ -6783,7 +6783,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             }
             OpKind::Memory => {
                 let addr = self.calculate_memory_address(inst, 1)?;
-                self.read_memory_64(addr)?
+                self.read_memory_64(addr)? as u128
             }
             _ => {
                 return Err(EmulatorError::UnsupportedInstruction(
@@ -6843,7 +6843,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             }
             OpKind::Memory => {
                 let addr = self.calculate_memory_address(inst, 1)?;
-                self.read_memory_16(addr)? as u128
+                self.read_memory(addr, 2)? as u16 as u128
             }
             _ => {
                 return Err(EmulatorError::UnsupportedInstruction(
@@ -6873,7 +6873,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             }
             OpKind::Memory => {
                 let addr = self.calculate_memory_address(inst, 1)?;
-                self.read_memory_64(addr)?
+                self.read_memory_64(addr)? as u128
             }
             _ => {
                 return Err(EmulatorError::UnsupportedInstruction(
@@ -6933,7 +6933,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             }
             OpKind::Memory => {
                 let addr = self.calculate_memory_address(inst, 1)?;
-                self.read_memory_64(addr)?
+                self.read_memory_64(addr)? as u128
             }
             _ => {
                 return Err(EmulatorError::UnsupportedInstruction(
@@ -6963,7 +6963,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             }
             OpKind::Memory => {
                 let addr = self.calculate_memory_address(inst, 1)?;
-                self.read_memory_64(addr)?
+                self.read_memory_64(addr)? as u128
             }
             _ => {
                 return Err(EmulatorError::UnsupportedInstruction(
@@ -7021,7 +7021,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             }
             OpKind::Memory => {
                 let addr = self.calculate_memory_address(inst, 1)?;
-                self.read_memory_16(addr)? as u128
+                self.read_memory(addr, 2)? as u16 as u128
             }
             _ => {
                 return Err(EmulatorError::UnsupportedInstruction(
@@ -7050,7 +7050,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             }
             OpKind::Memory => {
                 let addr = self.calculate_memory_address(inst, 1)?;
-                self.read_memory_64(addr)?
+                self.read_memory_64(addr)? as u128
             }
             _ => {
                 return Err(EmulatorError::UnsupportedInstruction(
@@ -7108,7 +7108,7 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             }
             OpKind::Memory => {
                 let addr = self.calculate_memory_address(inst, 1)?;
-                self.read_memory_64(addr)?
+                self.read_memory_64(addr)? as u128
             }
             _ => {
                 return Err(EmulatorError::UnsupportedInstruction(
