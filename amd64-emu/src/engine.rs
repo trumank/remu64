@@ -1,7 +1,7 @@
 use crate::cpu::{CpuState, Flags, Register};
 use crate::error::{EmulatorError, Result};
 use crate::hooks::{HookManager, NoHooks};
-use crate::memory::MemoryTrait;
+use crate::memory::{MemoryTrait, Permission};
 use crate::OwnedMemory;
 use iced_x86::{
     Code, Decoder, DecoderOptions, Instruction, Mnemonic, OpKind, Register as IcedRegister,
@@ -137,8 +137,13 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         let rip = self.engine.cpu.rip;
 
         // Check if we can execute at this address, but allow memory fault hooks to handle unmapped memory
-        match self.engine.memory.check_exec(rip) {
-            Ok(()) => {} // Memory is mapped and executable, continue
+        match self.engine.memory.permissions(rip) {
+            Ok(perms) => {
+                // Memory is mapped, check if it's executable
+                if !perms.contains(Permission::EXEC) {
+                    return Err(EmulatorError::PermissionDenied(rip));
+                }
+            }
             Err(EmulatorError::UnmappedMemory(_)) => {
                 // Memory is unmapped, try to handle with memory fault hooks
                 // Try to let the memory fault hook handle this
@@ -147,10 +152,13 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
                     // Hook couldn't handle it, return the original error
                     return Err(EmulatorError::UnmappedMemory(rip));
                 }
-                // Hook handled it, try check_exec again
-                self.engine.memory.check_exec(rip)?;
+                // Hook handled it, check permissions again
+                let perms = self.engine.memory.permissions(rip)?;
+                if !perms.contains(Permission::EXEC) {
+                    return Err(EmulatorError::PermissionDenied(rip));
+                }
             }
-            Err(e) => return Err(e), // Other errors (like permission denied) are fatal
+            Err(e) => return Err(e), // Other errors are fatal
         }
 
         let mut inst_bytes = vec![0u8; 15];

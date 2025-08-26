@@ -112,6 +112,13 @@ impl<'a> MemoryTrait for MinidumpMemory<'a> {
             })
     }
 
+    fn permissions(&self, addr: u64) -> Result<Permission> {
+        let region = self
+            .find_region(addr)
+            .ok_or(EmulatorError::UnmappedMemory(addr))?;
+        Ok(region.perms())
+    }
+
     fn map(&mut self, _addr: u64, _size: usize, _perms: Permission) -> Result<()> {
         Err(EmulatorError::InvalidArgument(
             "Cannot map new memory regions in MinidumpMemory".into(),

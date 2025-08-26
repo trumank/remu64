@@ -34,8 +34,25 @@ pub trait MemoryRegionTrait {
 pub trait MemoryTrait {
     type MemoryRegion: MemoryRegionTrait;
 
+    /// Find a memory region containing the given address.
+    ///
+    /// **IMPORTANT: This method is for optimization purposes ONLY.**
+    /// It is NOT required to return a region even if the address is valid.
+    /// If this method returns `None`, callers should fall back to using
+    /// `read`/`write` methods instead.
     fn find_region(&self, addr: u64) -> Option<&Self::MemoryRegion>;
+
+    /// Find a mutable memory region containing the given address.
+    ///
+    /// **IMPORTANT: This method is for optimization purposes ONLY.**
+    /// It is NOT required to return a region even if the address is valid.
+    /// If this method returns `None`, callers should fall back to using
+    /// `read`/`write` methods instead.
     fn find_region_mut(&mut self, addr: u64) -> Option<&mut Self::MemoryRegion>;
+
+    /// Get the permissions for the memory at the given address.
+    /// Returns the permissions if the address is valid, or an error if unmapped.
+    fn permissions(&self, addr: u64) -> Result<Permission>;
 
     fn read(&self, addr: u64, buf: &mut [u8]) -> Result<()> {
         let mut offset = 0;
@@ -155,18 +172,6 @@ pub trait MemoryTrait {
         self.write(addr, &value.to_le_bytes())
     }
 
-    fn check_exec(&self, addr: u64) -> Result<()> {
-        let region = self
-            .find_region(addr)
-            .ok_or(EmulatorError::UnmappedMemory(addr))?;
-
-        if !region.perms().contains(Permission::EXEC) {
-            return Err(EmulatorError::PermissionDenied(addr));
-        }
-
-        Ok(())
-    }
-
     fn map(&mut self, addr: u64, size: usize, perms: Permission) -> Result<()>;
     fn unmap(&mut self, addr: u64, size: usize) -> Result<()>;
     fn protect(&mut self, addr: u64, size: usize, perms: Permission) -> Result<()>;
@@ -259,6 +264,13 @@ impl MemoryTrait for OwnedMemory {
                     None
                 }
             })
+    }
+
+    fn permissions(&self, addr: u64) -> Result<Permission> {
+        let region = self
+            .find_region(addr)
+            .ok_or(EmulatorError::UnmappedMemory(addr))?;
+        Ok(region.perms())
     }
 
     fn map(&mut self, addr: u64, size: usize, perms: Permission) -> Result<()> {
@@ -380,18 +392,31 @@ impl<T: MemoryTrait> CowMemory<T> {
             return Ok(());
         }
 
-        let base_region = self
-            .base
-            .find_region(page_addr)
-            .ok_or(EmulatorError::UnmappedMemory(page_addr))?;
+        // Try to read a full page from base memory to determine actual accessible size
+        let mut page_data = vec![0u8; self.page_size];
+        let mut actual_size = 0;
 
-        let page_offset = base_region.offset(page_addr).unwrap();
-        let copy_size = std::cmp::min(self.page_size, base_region.size() - page_offset);
+        // Read byte by byte to find the extent of readable memory
+        for offset in 0..self.page_size {
+            match self.base.read(page_addr + offset as u64, &mut [0u8; 1]) {
+                Ok(_) => actual_size += 1,
+                Err(_) => break, // Stop at first inaccessible byte
+            }
+        }
 
-        let mut cow_region = MemoryRegion::new(page_addr, copy_size, base_region.perms());
-        cow_region
-            .data_mut()
-            .copy_from_slice(&base_region.data()[page_offset..page_offset + copy_size]);
+        if actual_size == 0 {
+            return Err(EmulatorError::UnmappedMemory(page_addr));
+        }
+
+        // Read the actual accessible data
+        page_data.resize(actual_size, 0);
+        self.base.read(page_addr, &mut page_data)?;
+
+        // Get permissions from the base memory
+        let perms = self.base.permissions(page_addr)?;
+
+        let mut cow_region = MemoryRegion::new(page_addr, actual_size, perms);
+        cow_region.data_mut().copy_from_slice(&page_data);
 
         self.overlay.insert(page_addr, cow_region);
         Ok(())
@@ -401,6 +426,11 @@ impl<T: MemoryTrait> CowMemory<T> {
 impl<T: MemoryTrait> MemoryTrait for CowMemory<T> {
     type MemoryRegion = MemoryRegion;
 
+    /// Find a region in the CoW overlay only (optimization method).
+    ///
+    /// This only searches overlay regions for performance. If no overlay
+    /// region is found, this returns `None` even if the address exists
+    /// in the base memory. Callers must fall back to `read`/`write`.
     fn find_region(&self, addr: u64) -> Option<&Self::MemoryRegion> {
         self.overlay
             .range(..=addr)
@@ -414,6 +444,11 @@ impl<T: MemoryTrait> MemoryTrait for CowMemory<T> {
             })
     }
 
+    /// Find a mutable region in the CoW overlay only (optimization method).
+    ///
+    /// This only searches overlay regions for performance. If no overlay
+    /// region is found, this returns `None` even if the address exists
+    /// in the base memory. Callers must fall back to `read`/`write`.
     fn find_region_mut(&mut self, addr: u64) -> Option<&mut Self::MemoryRegion> {
         if let Some(overlay_region) =
             self.overlay
@@ -431,6 +466,16 @@ impl<T: MemoryTrait> MemoryTrait for CowMemory<T> {
         } else {
             None
         }
+    }
+
+    fn permissions(&self, addr: u64) -> Result<Permission> {
+        // First check overlay regions
+        if let Some(region) = self.find_region(addr) {
+            return Ok(region.perms());
+        }
+
+        // Fall back to base memory
+        self.base.permissions(addr)
     }
 
     fn read(&self, addr: u64, buf: &mut [u8]) -> Result<()> {
@@ -451,25 +496,14 @@ impl<T: MemoryTrait> MemoryTrait for CowMemory<T> {
                 offset += to_copy;
                 current_addr += to_copy as u64;
             } else {
-                // Fall back to base memory
-                let base_region = self
-                    .base
-                    .find_region(current_addr)
-                    .ok_or(EmulatorError::UnmappedMemory(current_addr))?;
+                // Fall back to base memory - use base.read() instead of find_region
+                // since find_region is optimization-only and may return None for valid addresses
+                let remaining = buf.len() - offset;
+                self.base
+                    .read(current_addr, &mut buf[offset..offset + remaining])?;
 
-                if !base_region.perms().contains(Permission::READ) {
-                    return Err(EmulatorError::PermissionDenied(current_addr));
-                }
-
-                let region_offset = base_region.offset(current_addr).unwrap();
-                let available = base_region.size() - region_offset;
-                let to_copy = std::cmp::min(available, buf.len() - offset);
-
-                buf[offset..offset + to_copy]
-                    .copy_from_slice(&base_region.data()[region_offset..region_offset + to_copy]);
-
-                offset += to_copy;
-                current_addr += to_copy as u64;
+                // If we got here, the entire remaining buffer was read successfully
+                break;
             }
         }
 
@@ -575,11 +609,16 @@ impl<T: MemoryTrait> MemoryTrait for CowMemory<T> {
             }
         }
 
-        if let Some(base_region) = self.base.find_region(aligned_addr) {
-            if (aligned_addr >= base_region.range().start && aligned_addr < base_region.range().end)
-                || (end > base_region.range().start && end <= base_region.range().end)
-                || (aligned_addr <= base_region.range().start && end >= base_region.range().end)
-            {
+        // Check for overlap with base memory by testing if any part of the range is readable
+        // We test a few key points: start, middle, and end of the range
+        let test_points = [
+            aligned_addr,
+            aligned_addr + aligned_size as u64 / 2,
+            end - 1,
+        ];
+
+        for &test_addr in &test_points {
+            if self.base.read(test_addr, &mut [0u8; 1]).is_ok() {
                 return Err(EmulatorError::InvalidArgument(format!(
                     "Memory overlap with base at {:#x}-{:#x}",
                     aligned_addr, end
@@ -640,19 +679,6 @@ impl<T: MemoryTrait> MemoryTrait for CowMemory<T> {
         }
 
         Ok(())
-    }
-
-    fn check_exec(&self, addr: u64) -> Result<()> {
-        // First check overlay regions
-        if let Some(region) = self.find_region(addr) {
-            if !region.perms().contains(Permission::EXEC) {
-                return Err(EmulatorError::PermissionDenied(addr));
-            }
-            return Ok(());
-        }
-
-        // Fall back to base memory
-        self.base.check_exec(addr)
     }
 
     fn total_size(&self) -> usize {
@@ -1016,6 +1042,13 @@ mod tests {
                 })
         }
 
+        fn permissions(&self, addr: u64) -> Result<Permission> {
+            let region = self
+                .find_region(addr)
+                .ok_or(EmulatorError::UnmappedMemory(addr))?;
+            Ok(region.perms())
+        }
+
         fn map(&mut self, _addr: u64, _size: usize, _perms: Permission) -> Result<()> {
             Err(EmulatorError::InvalidArgument(
                 "Mock memory doesn't support mapping".into(),
@@ -1107,8 +1140,8 @@ mod tests {
     }
 
     #[test]
-    fn test_cow_memory_check_exec_fallback() {
-        // Test that check_exec properly falls back to base memory
+    fn test_cow_memory_permissions_fallback() {
+        // Test that permissions properly falls back to base memory
         let mut base = create_base_memory();
 
         // Map an executable region in base
@@ -1121,11 +1154,14 @@ mod tests {
         cow.map(0x7fff0000, 0x1000, Permission::READ | Permission::WRITE)
             .unwrap();
 
-        // check_exec should succeed for base memory executable region
-        cow.check_exec(0x10000).unwrap();
+        // permissions should return EXEC for base memory executable region
+        let perms = cow.permissions(0x10000).unwrap();
+        assert!(perms.contains(Permission::EXEC));
 
-        // check_exec should fail for overlay region without EXEC permission
-        assert!(cow.check_exec(0x7fff0000).is_err());
+        // permissions should not return EXEC for overlay region without EXEC permission
+        let perms = cow.permissions(0x7fff0000).unwrap();
+        assert!(!perms.contains(Permission::EXEC));
+        assert!(perms.contains(Permission::READ | Permission::WRITE));
 
         // Map an executable region in overlay
         cow.map(
@@ -1135,10 +1171,11 @@ mod tests {
         )
         .unwrap();
 
-        // check_exec should succeed for overlay executable region
-        cow.check_exec(0x20000).unwrap();
+        // permissions should return EXEC for overlay executable region
+        let perms = cow.permissions(0x20000).unwrap();
+        assert!(perms.contains(Permission::EXEC));
 
         // Test addresses not in either overlay or base
-        assert!(cow.check_exec(0x50000).is_err());
+        assert!(cow.permissions(0x50000).is_err());
     }
 }
