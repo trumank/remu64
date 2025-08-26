@@ -398,6 +398,10 @@ impl<H: HookManager> ExecutionContext<'_, H> {
             Mnemonic::Shufpd => self.execute_shufpd(inst),
             Mnemonic::Unpcklpd => self.execute_unpcklpd(inst),
             Mnemonic::Unpckhpd => self.execute_unpckhpd(inst),
+            Mnemonic::Paddb => self.execute_paddb(inst),
+            Mnemonic::Paddw => self.execute_paddw(inst),
+            Mnemonic::Paddd => self.execute_paddd(inst),
+            Mnemonic::Paddq => self.execute_paddq(inst),
             _ => {
                 println!(
                     "Unsupported instruction: {} ({:?}) at {:#x}",
@@ -2815,6 +2819,144 @@ impl<H: HookManager> ExecutionContext<'_, H> {
         // Result is: dst[1], src[1]
         let result = (dst_high as u128) | ((src_high as u128) << 64);
             
+        self.engine.cpu.write_xmm(dst_reg, result);
+        Ok(())
+    }
+
+    fn execute_paddb(&mut self, inst: &Instruction) -> Result<()> {
+        // PADDB: Add packed byte integers
+        let dst_reg = self.convert_register(inst.op_register(0))?;
+        let src_value = match inst.op_kind(1) {
+            OpKind::Register => {
+                let src_reg = self.convert_register(inst.op_register(1))?;
+                self.engine.cpu.read_xmm(src_reg)
+            }
+            OpKind::Memory => {
+                let addr = self.calculate_memory_address(inst, 1)?;
+                self.read_memory_128(addr)?
+            }
+            _ => {
+                return Err(EmulatorError::UnsupportedInstruction(
+                    "Invalid PADDB source".to_string(),
+                ))
+            }
+        };
+
+        let dst_value = self.engine.cpu.read_xmm(dst_reg);
+        let mut result = 0u128;
+        
+        // Add 16 bytes
+        for i in 0..16 {
+            let dst_byte = ((dst_value >> (i * 8)) & 0xFF) as u8;
+            let src_byte = ((src_value >> (i * 8)) & 0xFF) as u8;
+            let sum = dst_byte.wrapping_add(src_byte);
+            result |= (sum as u128) << (i * 8);
+        }
+        
+        self.engine.cpu.write_xmm(dst_reg, result);
+        Ok(())
+    }
+
+    fn execute_paddw(&mut self, inst: &Instruction) -> Result<()> {
+        // PADDW: Add packed word integers
+        let dst_reg = self.convert_register(inst.op_register(0))?;
+        let src_value = match inst.op_kind(1) {
+            OpKind::Register => {
+                let src_reg = self.convert_register(inst.op_register(1))?;
+                self.engine.cpu.read_xmm(src_reg)
+            }
+            OpKind::Memory => {
+                let addr = self.calculate_memory_address(inst, 1)?;
+                self.read_memory_128(addr)?
+            }
+            _ => {
+                return Err(EmulatorError::UnsupportedInstruction(
+                    "Invalid PADDW source".to_string(),
+                ))
+            }
+        };
+
+        let dst_value = self.engine.cpu.read_xmm(dst_reg);
+        let mut result = 0u128;
+        
+        // Add 8 words (16-bit values)
+        for i in 0..8 {
+            let dst_word = ((dst_value >> (i * 16)) & 0xFFFF) as u16;
+            let src_word = ((src_value >> (i * 16)) & 0xFFFF) as u16;
+            let sum = dst_word.wrapping_add(src_word);
+            result |= (sum as u128) << (i * 16);
+        }
+        
+        self.engine.cpu.write_xmm(dst_reg, result);
+        Ok(())
+    }
+
+    fn execute_paddd(&mut self, inst: &Instruction) -> Result<()> {
+        // PADDD: Add packed doubleword integers
+        let dst_reg = self.convert_register(inst.op_register(0))?;
+        let src_value = match inst.op_kind(1) {
+            OpKind::Register => {
+                let src_reg = self.convert_register(inst.op_register(1))?;
+                self.engine.cpu.read_xmm(src_reg)
+            }
+            OpKind::Memory => {
+                let addr = self.calculate_memory_address(inst, 1)?;
+                self.read_memory_128(addr)?
+            }
+            _ => {
+                return Err(EmulatorError::UnsupportedInstruction(
+                    "Invalid PADDD source".to_string(),
+                ))
+            }
+        };
+
+        let dst_value = self.engine.cpu.read_xmm(dst_reg);
+        let mut result = 0u128;
+        
+        // Add 4 doublewords (32-bit values)
+        for i in 0..4 {
+            let dst_dword = ((dst_value >> (i * 32)) & 0xFFFFFFFF) as u32;
+            let src_dword = ((src_value >> (i * 32)) & 0xFFFFFFFF) as u32;
+            let sum = dst_dword.wrapping_add(src_dword);
+            result |= (sum as u128) << (i * 32);
+        }
+        
+        self.engine.cpu.write_xmm(dst_reg, result);
+        Ok(())
+    }
+
+    fn execute_paddq(&mut self, inst: &Instruction) -> Result<()> {
+        // PADDQ: Add packed quadword integers
+        let dst_reg = self.convert_register(inst.op_register(0))?;
+        let src_value = match inst.op_kind(1) {
+            OpKind::Register => {
+                let src_reg = self.convert_register(inst.op_register(1))?;
+                self.engine.cpu.read_xmm(src_reg)
+            }
+            OpKind::Memory => {
+                let addr = self.calculate_memory_address(inst, 1)?;
+                self.read_memory_128(addr)?
+            }
+            _ => {
+                return Err(EmulatorError::UnsupportedInstruction(
+                    "Invalid PADDQ source".to_string(),
+                ))
+            }
+        };
+
+        let dst_value = self.engine.cpu.read_xmm(dst_reg);
+        
+        // Add 2 quadwords (64-bit values)
+        let dst_low = dst_value as u64;
+        let dst_high = (dst_value >> 64) as u64;
+        let src_low = src_value as u64;
+        let src_high = (src_value >> 64) as u64;
+        
+        let sum_low = dst_low.wrapping_add(src_low);
+        let sum_high = dst_high.wrapping_add(src_high);
+        
+        let result = (sum_low as u128) | ((sum_high as u128) << 64);
+        
         self.engine.cpu.write_xmm(dst_reg, result);
         Ok(())
     }
