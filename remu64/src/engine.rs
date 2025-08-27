@@ -344,6 +344,10 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             Mnemonic::Vdivpd => self.execute_vdivpd(inst),
             Mnemonic::Vsqrtps => self.execute_vsqrtps(inst),
             Mnemonic::Vsqrtpd => self.execute_vsqrtpd(inst),
+            Mnemonic::Vmaxps => self.execute_vmaxps(inst),
+            Mnemonic::Vmaxpd => self.execute_vmaxpd(inst),
+            Mnemonic::Vminps => self.execute_vminps(inst),
+            Mnemonic::Vminpd => self.execute_vminpd(inst),
             Mnemonic::Imul => self.execute_imul(inst),
             Mnemonic::Mul => self.execute_mul(inst),
             Mnemonic::Div => self.execute_div(inst),
@@ -2804,6 +2808,438 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
                 let val = f64::from_bits(val_bits);
                 let sqrt_val = val.sqrt();
                 double_results[i] = sqrt_val.to_bits();
+            }
+            
+            let result = (double_results[0] as u128) |
+                        ((double_results[1] as u128) << 64);
+            
+            let dst_reg = self.convert_register(inst.op_register(0))?;
+            self.engine.cpu.write_xmm(dst_reg, result);
+        }
+        
+        Ok(())
+    }
+
+    fn execute_vmaxps(&mut self, inst: &Instruction) -> Result<()> {
+        // VMAXPS - Maximum of Packed Single-Precision Floating-Point Values
+        // VEX.256: VMAXPS ymm1, ymm2, ymm3/m256
+        // VEX.128: VMAXPS xmm1, xmm2, xmm3/m128
+        
+        let is_256bit = inst.op_register(0).is_ymm();
+        
+        if inst.op_count() != 3 {
+            return Err(EmulatorError::UnsupportedInstruction(
+                "VMAXPS requires exactly 3 operands".to_string(),
+            ));
+        }
+
+        if is_256bit {
+            // 256-bit YMM operation
+            let src1_reg = self.convert_register(inst.op_register(1))?;
+            let src1_data = self.engine.cpu.read_ymm(src1_reg);
+            
+            let src2_data = match inst.op_kind(2) {
+                OpKind::Register => {
+                    let src2_reg = self.convert_register(inst.op_register(2))?;
+                    self.engine.cpu.read_ymm(src2_reg)
+                }
+                OpKind::Memory => {
+                    self.read_ymm_memory(inst, 2)?
+                }
+                _ => {
+                    return Err(EmulatorError::UnsupportedInstruction(
+                        format!("Unsupported VMAXPS source operand type: {:?}", inst.op_kind(2))
+                    ));
+                }
+            };
+            
+            // Perform element-wise maximum
+            let mut result = [0u128; 2];
+            
+            for half in 0..2 {
+                let mut float_results = [0u32; 4];
+                for i in 0..4 {
+                    let offset = i * 32;
+                    let a_bits = ((src1_data[half] >> offset) & 0xFFFFFFFF) as u32;
+                    let b_bits = ((src2_data[half] >> offset) & 0xFFFFFFFF) as u32;
+                    
+                    let a = f32::from_bits(a_bits);
+                    let b = f32::from_bits(b_bits);
+                    // Handle NaN propagation: if either is NaN, result is second operand
+                    let max_val = if a.is_nan() || b.is_nan() {
+                        b
+                    } else {
+                        a.max(b)
+                    };
+                    float_results[i] = max_val.to_bits();
+                }
+                
+                result[half] = (float_results[0] as u128) |
+                              ((float_results[1] as u128) << 32) |
+                              ((float_results[2] as u128) << 64) |
+                              ((float_results[3] as u128) << 96);
+            }
+            
+            let dst_reg = self.convert_register(inst.op_register(0))?;
+            self.engine.cpu.write_ymm(dst_reg, result);
+        } else {
+            // 128-bit XMM operation
+            let src1_reg = self.convert_register(inst.op_register(1))?;
+            let src1_data = self.engine.cpu.read_xmm(src1_reg);
+            
+            let src2_data = match inst.op_kind(2) {
+                OpKind::Register => {
+                    let src2_reg = self.convert_register(inst.op_register(2))?;
+                    self.engine.cpu.read_xmm(src2_reg)
+                }
+                OpKind::Memory => {
+                    let addr = self.calculate_memory_address(inst, 2)?;
+                    self.read_memory_128(addr)?
+                }
+                _ => {
+                    return Err(EmulatorError::UnsupportedInstruction(
+                        format!("Unsupported VMAXPS source operand type: {:?}", inst.op_kind(2))
+                    ));
+                }
+            };
+            
+            let mut float_results = [0u32; 4];
+            for i in 0..4 {
+                let offset = i * 32;
+                let a_bits = ((src1_data >> offset) & 0xFFFFFFFF) as u32;
+                let b_bits = ((src2_data >> offset) & 0xFFFFFFFF) as u32;
+                
+                let a = f32::from_bits(a_bits);
+                let b = f32::from_bits(b_bits);
+                let max_val = if a.is_nan() || b.is_nan() {
+                    b
+                } else {
+                    a.max(b)
+                };
+                float_results[i] = max_val.to_bits();
+            }
+            
+            let result = (float_results[0] as u128) |
+                        ((float_results[1] as u128) << 32) |
+                        ((float_results[2] as u128) << 64) |
+                        ((float_results[3] as u128) << 96);
+            
+            let dst_reg = self.convert_register(inst.op_register(0))?;
+            self.engine.cpu.write_xmm(dst_reg, result);
+        }
+        
+        Ok(())
+    }
+
+    fn execute_vmaxpd(&mut self, inst: &Instruction) -> Result<()> {
+        // VMAXPD - Maximum of Packed Double-Precision Floating-Point Values
+        // VEX.256: VMAXPD ymm1, ymm2, ymm3/m256
+        // VEX.128: VMAXPD xmm1, xmm2, xmm3/m128
+        
+        let is_256bit = inst.op_register(0).is_ymm();
+        
+        if inst.op_count() != 3 {
+            return Err(EmulatorError::UnsupportedInstruction(
+                "VMAXPD requires exactly 3 operands".to_string(),
+            ));
+        }
+
+        if is_256bit {
+            // 256-bit YMM operation
+            let src1_reg = self.convert_register(inst.op_register(1))?;
+            let src1_data = self.engine.cpu.read_ymm(src1_reg);
+            
+            let src2_data = match inst.op_kind(2) {
+                OpKind::Register => {
+                    let src2_reg = self.convert_register(inst.op_register(2))?;
+                    self.engine.cpu.read_ymm(src2_reg)
+                }
+                OpKind::Memory => {
+                    self.read_ymm_memory(inst, 2)?
+                }
+                _ => {
+                    return Err(EmulatorError::UnsupportedInstruction(
+                        format!("Unsupported VMAXPD source operand type: {:?}", inst.op_kind(2))
+                    ));
+                }
+            };
+            
+            let mut result = [0u128; 2];
+            
+            for half in 0..2 {
+                let mut double_results = [0u64; 2];
+                for i in 0..2 {
+                    let offset = i * 64;
+                    let a_bits = ((src1_data[half] >> offset) & 0xFFFFFFFFFFFFFFFF) as u64;
+                    let b_bits = ((src2_data[half] >> offset) & 0xFFFFFFFFFFFFFFFF) as u64;
+                    
+                    let a = f64::from_bits(a_bits);
+                    let b = f64::from_bits(b_bits);
+                    let max_val = if a.is_nan() || b.is_nan() {
+                        b
+                    } else {
+                        a.max(b)
+                    };
+                    double_results[i] = max_val.to_bits();
+                }
+                
+                result[half] = (double_results[0] as u128) |
+                              ((double_results[1] as u128) << 64);
+            }
+            
+            let dst_reg = self.convert_register(inst.op_register(0))?;
+            self.engine.cpu.write_ymm(dst_reg, result);
+        } else {
+            // 128-bit XMM operation
+            let src1_reg = self.convert_register(inst.op_register(1))?;
+            let src1_data = self.engine.cpu.read_xmm(src1_reg);
+            
+            let src2_data = match inst.op_kind(2) {
+                OpKind::Register => {
+                    let src2_reg = self.convert_register(inst.op_register(2))?;
+                    self.engine.cpu.read_xmm(src2_reg)
+                }
+                OpKind::Memory => {
+                    let addr = self.calculate_memory_address(inst, 2)?;
+                    self.read_memory_128(addr)?
+                }
+                _ => {
+                    return Err(EmulatorError::UnsupportedInstruction(
+                        format!("Unsupported VMAXPD source operand type: {:?}", inst.op_kind(2))
+                    ));
+                }
+            };
+            
+            let mut double_results = [0u64; 2];
+            for i in 0..2 {
+                let offset = i * 64;
+                let a_bits = ((src1_data >> offset) & 0xFFFFFFFFFFFFFFFF) as u64;
+                let b_bits = ((src2_data >> offset) & 0xFFFFFFFFFFFFFFFF) as u64;
+                
+                let a = f64::from_bits(a_bits);
+                let b = f64::from_bits(b_bits);
+                let max_val = if a.is_nan() || b.is_nan() {
+                    b
+                } else {
+                    a.max(b)
+                };
+                double_results[i] = max_val.to_bits();
+            }
+            
+            let result = (double_results[0] as u128) |
+                        ((double_results[1] as u128) << 64);
+            
+            let dst_reg = self.convert_register(inst.op_register(0))?;
+            self.engine.cpu.write_xmm(dst_reg, result);
+        }
+        
+        Ok(())
+    }
+
+    fn execute_vminps(&mut self, inst: &Instruction) -> Result<()> {
+        // VMINPS - Minimum of Packed Single-Precision Floating-Point Values
+        // VEX.256: VMINPS ymm1, ymm2, ymm3/m256
+        // VEX.128: VMINPS xmm1, xmm2, xmm3/m128
+        
+        let is_256bit = inst.op_register(0).is_ymm();
+        
+        if inst.op_count() != 3 {
+            return Err(EmulatorError::UnsupportedInstruction(
+                "VMINPS requires exactly 3 operands".to_string(),
+            ));
+        }
+
+        if is_256bit {
+            // 256-bit YMM operation
+            let src1_reg = self.convert_register(inst.op_register(1))?;
+            let src1_data = self.engine.cpu.read_ymm(src1_reg);
+            
+            let src2_data = match inst.op_kind(2) {
+                OpKind::Register => {
+                    let src2_reg = self.convert_register(inst.op_register(2))?;
+                    self.engine.cpu.read_ymm(src2_reg)
+                }
+                OpKind::Memory => {
+                    self.read_ymm_memory(inst, 2)?
+                }
+                _ => {
+                    return Err(EmulatorError::UnsupportedInstruction(
+                        format!("Unsupported VMINPS source operand type: {:?}", inst.op_kind(2))
+                    ));
+                }
+            };
+            
+            // Perform element-wise minimum
+            let mut result = [0u128; 2];
+            
+            for half in 0..2 {
+                let mut float_results = [0u32; 4];
+                for i in 0..4 {
+                    let offset = i * 32;
+                    let a_bits = ((src1_data[half] >> offset) & 0xFFFFFFFF) as u32;
+                    let b_bits = ((src2_data[half] >> offset) & 0xFFFFFFFF) as u32;
+                    
+                    let a = f32::from_bits(a_bits);
+                    let b = f32::from_bits(b_bits);
+                    // Handle NaN propagation: if either is NaN, result is second operand
+                    let min_val = if a.is_nan() || b.is_nan() {
+                        b
+                    } else {
+                        a.min(b)
+                    };
+                    float_results[i] = min_val.to_bits();
+                }
+                
+                result[half] = (float_results[0] as u128) |
+                              ((float_results[1] as u128) << 32) |
+                              ((float_results[2] as u128) << 64) |
+                              ((float_results[3] as u128) << 96);
+            }
+            
+            let dst_reg = self.convert_register(inst.op_register(0))?;
+            self.engine.cpu.write_ymm(dst_reg, result);
+        } else {
+            // 128-bit XMM operation
+            let src1_reg = self.convert_register(inst.op_register(1))?;
+            let src1_data = self.engine.cpu.read_xmm(src1_reg);
+            
+            let src2_data = match inst.op_kind(2) {
+                OpKind::Register => {
+                    let src2_reg = self.convert_register(inst.op_register(2))?;
+                    self.engine.cpu.read_xmm(src2_reg)
+                }
+                OpKind::Memory => {
+                    let addr = self.calculate_memory_address(inst, 2)?;
+                    self.read_memory_128(addr)?
+                }
+                _ => {
+                    return Err(EmulatorError::UnsupportedInstruction(
+                        format!("Unsupported VMINPS source operand type: {:?}", inst.op_kind(2))
+                    ));
+                }
+            };
+            
+            let mut float_results = [0u32; 4];
+            for i in 0..4 {
+                let offset = i * 32;
+                let a_bits = ((src1_data >> offset) & 0xFFFFFFFF) as u32;
+                let b_bits = ((src2_data >> offset) & 0xFFFFFFFF) as u32;
+                
+                let a = f32::from_bits(a_bits);
+                let b = f32::from_bits(b_bits);
+                let min_val = if a.is_nan() || b.is_nan() {
+                    b
+                } else {
+                    a.min(b)
+                };
+                float_results[i] = min_val.to_bits();
+            }
+            
+            let result = (float_results[0] as u128) |
+                        ((float_results[1] as u128) << 32) |
+                        ((float_results[2] as u128) << 64) |
+                        ((float_results[3] as u128) << 96);
+            
+            let dst_reg = self.convert_register(inst.op_register(0))?;
+            self.engine.cpu.write_xmm(dst_reg, result);
+        }
+        
+        Ok(())
+    }
+
+    fn execute_vminpd(&mut self, inst: &Instruction) -> Result<()> {
+        // VMINPD - Minimum of Packed Double-Precision Floating-Point Values
+        // VEX.256: VMINPD ymm1, ymm2, ymm3/m256
+        // VEX.128: VMINPD xmm1, xmm2, xmm3/m128
+        
+        let is_256bit = inst.op_register(0).is_ymm();
+        
+        if inst.op_count() != 3 {
+            return Err(EmulatorError::UnsupportedInstruction(
+                "VMINPD requires exactly 3 operands".to_string(),
+            ));
+        }
+
+        if is_256bit {
+            // 256-bit YMM operation
+            let src1_reg = self.convert_register(inst.op_register(1))?;
+            let src1_data = self.engine.cpu.read_ymm(src1_reg);
+            
+            let src2_data = match inst.op_kind(2) {
+                OpKind::Register => {
+                    let src2_reg = self.convert_register(inst.op_register(2))?;
+                    self.engine.cpu.read_ymm(src2_reg)
+                }
+                OpKind::Memory => {
+                    self.read_ymm_memory(inst, 2)?
+                }
+                _ => {
+                    return Err(EmulatorError::UnsupportedInstruction(
+                        format!("Unsupported VMINPD source operand type: {:?}", inst.op_kind(2))
+                    ));
+                }
+            };
+            
+            let mut result = [0u128; 2];
+            
+            for half in 0..2 {
+                let mut double_results = [0u64; 2];
+                for i in 0..2 {
+                    let offset = i * 64;
+                    let a_bits = ((src1_data[half] >> offset) & 0xFFFFFFFFFFFFFFFF) as u64;
+                    let b_bits = ((src2_data[half] >> offset) & 0xFFFFFFFFFFFFFFFF) as u64;
+                    
+                    let a = f64::from_bits(a_bits);
+                    let b = f64::from_bits(b_bits);
+                    let min_val = if a.is_nan() || b.is_nan() {
+                        b
+                    } else {
+                        a.min(b)
+                    };
+                    double_results[i] = min_val.to_bits();
+                }
+                
+                result[half] = (double_results[0] as u128) |
+                              ((double_results[1] as u128) << 64);
+            }
+            
+            let dst_reg = self.convert_register(inst.op_register(0))?;
+            self.engine.cpu.write_ymm(dst_reg, result);
+        } else {
+            // 128-bit XMM operation
+            let src1_reg = self.convert_register(inst.op_register(1))?;
+            let src1_data = self.engine.cpu.read_xmm(src1_reg);
+            
+            let src2_data = match inst.op_kind(2) {
+                OpKind::Register => {
+                    let src2_reg = self.convert_register(inst.op_register(2))?;
+                    self.engine.cpu.read_xmm(src2_reg)
+                }
+                OpKind::Memory => {
+                    let addr = self.calculate_memory_address(inst, 2)?;
+                    self.read_memory_128(addr)?
+                }
+                _ => {
+                    return Err(EmulatorError::UnsupportedInstruction(
+                        format!("Unsupported VMINPD source operand type: {:?}", inst.op_kind(2))
+                    ));
+                }
+            };
+            
+            let mut double_results = [0u64; 2];
+            for i in 0..2 {
+                let offset = i * 64;
+                let a_bits = ((src1_data >> offset) & 0xFFFFFFFFFFFFFFFF) as u64;
+                let b_bits = ((src2_data >> offset) & 0xFFFFFFFFFFFFFFFF) as u64;
+                
+                let a = f64::from_bits(a_bits);
+                let b = f64::from_bits(b_bits);
+                let min_val = if a.is_nan() || b.is_nan() {
+                    b
+                } else {
+                    a.min(b)
+                };
+                double_results[i] = min_val.to_bits();
             }
             
             let result = (double_results[0] as u128) |
