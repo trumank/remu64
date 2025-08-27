@@ -347,6 +347,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             Mnemonic::Lzcnt => self.execute_lzcnt(inst),
             Mnemonic::Tzcnt => self.execute_tzcnt(inst),
             Mnemonic::Andn => self.execute_andn(inst),
+            Mnemonic::Bextr => self.execute_bextr(inst),
             Mnemonic::Cqo => self.execute_cqo(inst),
             Mnemonic::Xadd => self.execute_xadd(inst),
             Mnemonic::Cpuid => self.execute_cpuid(inst),
@@ -6421,6 +6422,90 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             self.engine.cpu.rflags.insert(Flags::ZF);
         } else {
             self.engine.cpu.rflags.remove(Flags::ZF);
+        }
+        
+        // Set PF based on low byte
+        let low_byte = (result & 0xFF) as u8;
+        if low_byte.count_ones() % 2 == 0 {
+            self.engine.cpu.rflags.insert(Flags::PF);
+        } else {
+            self.engine.cpu.rflags.remove(Flags::PF);
+        }
+        
+        Ok(())
+    }
+
+    fn execute_bextr(&mut self, inst: &Instruction) -> Result<()> {
+        // BEXTR: Bit Field Extract
+        // Extracts contiguous bits from the first source operand using index and length
+        // specified in the second source operand
+        
+        // BEXTR has 3 operands: dest, src1, src2
+        // src2 contains: bits[7:0] = starting bit index, bits[15:8] = length
+        let src1 = self.read_operand(inst, 1)?;
+        let src2 = self.read_operand(inst, 2)?;
+        
+        // Extract start position and length from src2
+        let start = (src2 & 0xFF) as u32;
+        let length = ((src2 >> 8) & 0xFF) as u32;
+        
+        // Get operand size for masking
+        let size = self.get_operand_size_from_instruction(inst, 0)?;
+        let max_bits = size * 8;
+        
+        // If start position is >= operand size in bits, result is 0
+        let result = if start >= max_bits as u32 {
+            0u64
+        } else if length == 0 {
+            0u64
+        } else {
+            // Calculate how many bits we can actually extract
+            let available_bits = (max_bits as u32).saturating_sub(start);
+            let actual_length = length.min(available_bits).min(64);
+            
+            // Shift right to move the desired bits to position 0
+            let shifted = src1 >> start;
+            
+            // Create a mask for the desired number of bits
+            let mask = if actual_length >= 64 {
+                !0u64
+            } else {
+                (1u64 << actual_length) - 1
+            };
+            
+            // Extract the bits
+            shifted & mask
+        };
+        
+        // Write result to destination
+        self.write_operand(inst, 0, result)?;
+        
+        // Update flags according to Intel manual
+        // BEXTR clears OF and CF
+        // Sets ZF based on result
+        // AF, SF, PF are undefined (we'll clear AF, set SF/PF based on result)
+        self.engine.cpu.rflags.remove(Flags::OF | Flags::CF | Flags::AF);
+        
+        // Set ZF if result is zero
+        if result == 0 {
+            self.engine.cpu.rflags.insert(Flags::ZF);
+        } else {
+            self.engine.cpu.rflags.remove(Flags::ZF);
+        }
+        
+        // Set SF based on sign bit of result (even though it's undefined)
+        let sign_bit = match size {
+            1 => (result & 0x80) != 0,
+            2 => (result & 0x8000) != 0,
+            4 => (result & 0x80000000) != 0,
+            8 => (result & 0x8000000000000000) != 0,
+            _ => false,
+        };
+        
+        if sign_bit {
+            self.engine.cpu.rflags.insert(Flags::SF);
+        } else {
+            self.engine.cpu.rflags.remove(Flags::SF);
         }
         
         // Set PF based on low byte
