@@ -12194,6 +12194,153 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         Ok(())
     }
     
+    fn execute_vshufps(&mut self, inst: &Instruction) -> Result<()> {
+        // VSHUFPS - Shuffle Packed Single-Precision Floating-Point Values
+        // VEX.256: VSHUFPS ymm1, ymm2, ymm3/m256, imm8
+        // VEX.128: VSHUFPS xmm1, xmm2, xmm3/m128, imm8
+        
+        if inst.op_count() != 4 {
+            return Err(Error::InvalidInstruction(
+                "VSHUFPS requires exactly 4 operands".to_string(),
+            ));
+        }
+
+        let imm8 = inst.immediate8() as usize;
+        
+        // Check if we're dealing with YMM (256-bit) or XMM (128-bit) registers
+        if inst.op_register(0).is_ymm() {
+            // YMM version (256-bit)
+            let src1 = self.read_ymm(inst.op_register(1))?;
+            let src2 = match inst.op_kind(2) {
+                OpKind::Register => self.read_ymm(inst.op_register(2))?,
+                OpKind::Memory => {
+                    let addr = self.calculate_effective_address(inst, 2)?;
+                    let mut result = [0u8; 32];
+                    self.engine.memory.read(addr, &mut result)?;
+                    result
+                }
+                _ => {
+                    return Err(Error::InvalidOperand(
+                        format!("Unsupported VSHUFPS source operand type: {:?}", inst.op_kind(2))
+                    ));
+                }
+            };
+
+            let mut result = [0u8; 32];
+            
+            // Process lower 128 bits
+            let src1_low = &src1[0..16];
+            let src2_low = &src2[0..16];
+            let mut result_low = [0u8; 16];
+            
+            // Extract the 4 floats from each source
+            let mut src1_floats = [0f32; 4];
+            let mut src2_floats = [0f32; 4];
+            for i in 0..4 {
+                src1_floats[i] = f32::from_le_bytes([
+                    src1_low[i*4], src1_low[i*4+1], src1_low[i*4+2], src1_low[i*4+3]
+                ]);
+                src2_floats[i] = f32::from_le_bytes([
+                    src2_low[i*4], src2_low[i*4+1], src2_low[i*4+2], src2_low[i*4+3]
+                ]);
+            }
+            
+            // Shuffle according to imm8
+            let mut result_floats = [0f32; 4];
+            result_floats[0] = src1_floats[(imm8 >> 0) & 0x3];
+            result_floats[1] = src1_floats[(imm8 >> 2) & 0x3];
+            result_floats[2] = src2_floats[(imm8 >> 4) & 0x3];
+            result_floats[3] = src2_floats[(imm8 >> 6) & 0x3];
+            
+            // Write result for lower 128 bits
+            for i in 0..4 {
+                let bytes = result_floats[i].to_le_bytes();
+                result_low[i*4..i*4+4].copy_from_slice(&bytes);
+            }
+            result[0..16].copy_from_slice(&result_low);
+            
+            // Process upper 128 bits
+            let src1_high = &src1[16..32];
+            let src2_high = &src2[16..32];
+            let mut result_high = [0u8; 16];
+            
+            // Extract the 4 floats from each source (upper half)
+            for i in 0..4 {
+                src1_floats[i] = f32::from_le_bytes([
+                    src1_high[i*4], src1_high[i*4+1], src1_high[i*4+2], src1_high[i*4+3]
+                ]);
+                src2_floats[i] = f32::from_le_bytes([
+                    src2_high[i*4], src2_high[i*4+1], src2_high[i*4+2], src2_high[i*4+3]
+                ]);
+            }
+            
+            // Shuffle according to imm8 (same pattern for upper half)
+            result_floats[0] = src1_floats[(imm8 >> 0) & 0x3];
+            result_floats[1] = src1_floats[(imm8 >> 2) & 0x3];
+            result_floats[2] = src2_floats[(imm8 >> 4) & 0x3];
+            result_floats[3] = src2_floats[(imm8 >> 6) & 0x3];
+            
+            // Write result for upper 128 bits
+            for i in 0..4 {
+                let bytes = result_floats[i].to_le_bytes();
+                result_high[i*4..i*4+4].copy_from_slice(&bytes);
+            }
+            result[16..32].copy_from_slice(&result_high);
+            
+            let dst_reg = self.convert_register(inst.op_register(0))?;
+            self.engine.cpu.write_ymm(dst_reg, result);
+        } else {
+            // XMM version (128-bit)
+            let src1 = self.read_xmm(inst.op_register(1))?;
+            let src2 = match inst.op_kind(2) {
+                OpKind::Register => self.read_xmm(inst.op_register(2))?,
+                OpKind::Memory => {
+                    let addr = self.calculate_effective_address(inst, 2)?;
+                    let mut result = [0u8; 16];
+                    self.engine.memory.read(addr, &mut result)?;
+                    result
+                }
+                _ => {
+                    return Err(Error::InvalidOperand(
+                        format!("Unsupported VSHUFPS source operand type: {:?}", inst.op_kind(2))
+                    ));
+                }
+            };
+
+            let mut result = [0u8; 16];
+            
+            // Extract the 4 floats from each source
+            let mut src1_floats = [0f32; 4];
+            let mut src2_floats = [0f32; 4];
+            for i in 0..4 {
+                src1_floats[i] = f32::from_le_bytes([
+                    src1[i*4], src1[i*4+1], src1[i*4+2], src1[i*4+3]
+                ]);
+                src2_floats[i] = f32::from_le_bytes([
+                    src2[i*4], src2[i*4+1], src2[i*4+2], src2[i*4+3]
+                ]);
+            }
+            
+            // Shuffle according to imm8
+            let mut result_floats = [0f32; 4];
+            result_floats[0] = src1_floats[(imm8 >> 0) & 0x3];
+            result_floats[1] = src1_floats[(imm8 >> 2) & 0x3];
+            result_floats[2] = src2_floats[(imm8 >> 4) & 0x3];
+            result_floats[3] = src2_floats[(imm8 >> 6) & 0x3];
+            
+            // Write result
+            for i in 0..4 {
+                let bytes = result_floats[i].to_le_bytes();
+                result[i*4..i*4+4].copy_from_slice(&bytes);
+            }
+            
+            let dst_reg = self.convert_register(inst.op_register(0))?;
+            self.engine.cpu.write_xmm(dst_reg, result);
+        }
+        
+        Ok(())
+    }
+
     fn compare_floats_avx(&self, a: f32, b: f32, imm: u8) -> bool {
         // AVX comparison predicates (0-31)
         match imm & 0x1F {
