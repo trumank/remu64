@@ -1,28 +1,19 @@
 use remu64::hooks::HookManager;
 use remu64::memory::{MemoryTrait, Permission};
 use remu64::{Engine, EngineMode, Register};
-use std::sync::{Arc, Mutex};
 
 #[derive(Clone)]
 struct InterruptTracker {
-    interrupts: Arc<Mutex<Vec<(u64, u64)>>>, // (interrupt_number, address)
-    syscalls: Arc<Mutex<Vec<(u64, u64, u64, u64)>>>, // (syscall_num, rdi, rsi, rdx)
+    interrupts: Vec<(u64, u64)>,         // (interrupt_number, address)
+    syscalls: Vec<(u64, u64, u64, u64)>, // (syscall_num, rdi, rsi, rdx)
 }
 
 impl InterruptTracker {
     fn new() -> Self {
         Self {
-            interrupts: Arc::new(Mutex::new(Vec::new())),
-            syscalls: Arc::new(Mutex::new(Vec::new())),
+            interrupts: Vec::new(),
+            syscalls: Vec::new(),
         }
-    }
-
-    fn get_interrupts(&self) -> Vec<(u64, u64)> {
-        self.interrupts.lock().unwrap().clone()
-    }
-
-    fn get_syscalls(&self) -> Vec<(u64, u64, u64, u64)> {
-        self.syscalls.lock().unwrap().clone()
     }
 }
 
@@ -36,7 +27,7 @@ impl<M: MemoryTrait> HookManager<M> for InterruptTracker {
         let address = engine.reg_read(Register::RIP);
 
         // Track the interrupt
-        self.interrupts.lock().unwrap().push((intno, address));
+        self.interrupts.push((intno, address));
 
         // For SYSCALL (interrupt 0x80), also track the syscall parameters
         if intno == 0x80 {
@@ -44,10 +35,7 @@ impl<M: MemoryTrait> HookManager<M> for InterruptTracker {
             let arg1 = engine.reg_read(Register::RDI);
             let arg2 = engine.reg_read(Register::RSI);
             let arg3 = engine.reg_read(Register::RDX);
-            self.syscalls
-                .lock()
-                .unwrap()
-                .push((syscall_num, arg1, arg2, arg3));
+            self.syscalls.push((syscall_num, arg1, arg2, arg3));
         }
 
         Ok(())
@@ -81,9 +69,8 @@ fn test_int_instruction() {
         .unwrap();
 
     // Check that interrupt was triggered
-    let interrupts = tracker.get_interrupts();
-    assert_eq!(interrupts.len(), 1);
-    assert_eq!(interrupts[0].0, 0x80); // Interrupt number
+    assert_eq!(tracker.interrupts.len(), 1);
+    assert_eq!(tracker.interrupts[0].0, 0x80); // Interrupt number
 }
 
 #[test]
@@ -113,9 +100,8 @@ fn test_int3_breakpoint() {
         .unwrap();
 
     // Check that INT3 triggered interrupt 3
-    let interrupts = tracker.get_interrupts();
-    assert_eq!(interrupts.len(), 1);
-    assert_eq!(interrupts[0].0, 3); // Interrupt 3 for breakpoint
+    assert_eq!(tracker.interrupts.len(), 1);
+    assert_eq!(tracker.interrupts[0].0, 3); // Interrupt 3 for breakpoint
 }
 
 // Note: INTO (0xCE) is not valid in 64-bit mode, only in 32-bit mode
@@ -154,17 +140,15 @@ fn test_syscall() {
         .unwrap();
 
     // Check that SYSCALL was triggered
-    let interrupts = tracker.get_interrupts();
-    assert_eq!(interrupts.len(), 1);
-    assert_eq!(interrupts[0].0, 0x80); // We use 0x80 for syscall tracking
+    assert_eq!(tracker.interrupts.len(), 1);
+    assert_eq!(tracker.interrupts[0].0, 0x80); // We use 0x80 for syscall tracking
 
     // Check syscall parameters
-    let syscalls = tracker.get_syscalls();
-    assert_eq!(syscalls.len(), 1);
-    assert_eq!(syscalls[0].0, 1); // sys_write
-    assert_eq!(syscalls[0].1, 1); // stdout
-    assert_eq!(syscalls[0].2, 0x2000); // buffer
-    assert_eq!(syscalls[0].3, 12); // length
+    assert_eq!(tracker.syscalls.len(), 1);
+    assert_eq!(tracker.syscalls[0].0, 1); // sys_write
+    assert_eq!(tracker.syscalls[0].1, 1); // stdout
+    assert_eq!(tracker.syscalls[0].2, 0x2000); // buffer
+    assert_eq!(tracker.syscalls[0].3, 12); // length
 
     // Check that RCX contains the return address (next instruction after syscall)
     let rcx = engine.reg_read(Register::RCX);
@@ -204,11 +188,10 @@ fn test_multiple_interrupts() {
         .unwrap();
 
     // Check all interrupts were triggered in order
-    let interrupts = tracker.get_interrupts();
-    assert_eq!(interrupts.len(), 3);
-    assert_eq!(interrupts[0].0, 0x21);
-    assert_eq!(interrupts[1].0, 0x80);
-    assert_eq!(interrupts[2].0, 3);
+    assert_eq!(tracker.interrupts.len(), 3);
+    assert_eq!(tracker.interrupts[0].0, 0x21);
+    assert_eq!(tracker.interrupts[1].0, 0x80);
+    assert_eq!(tracker.interrupts[2].0, 3);
 }
 
 #[test]
@@ -241,10 +224,9 @@ fn test_int_with_parameter() {
         .unwrap();
 
     // Check all interrupts with correct numbers
-    let interrupts = tracker.get_interrupts();
-    assert_eq!(interrupts.len(), 4);
-    assert_eq!(interrupts[0].0, 0x00);
-    assert_eq!(interrupts[1].0, 0x01);
-    assert_eq!(interrupts[2].0, 0x0d);
-    assert_eq!(interrupts[3].0, 0xff);
+    assert_eq!(tracker.interrupts.len(), 4);
+    assert_eq!(tracker.interrupts[0].0, 0x00);
+    assert_eq!(tracker.interrupts[1].0, 0x01);
+    assert_eq!(tracker.interrupts[2].0, 0x0d);
+    assert_eq!(tracker.interrupts[3].0, 0xff);
 }
