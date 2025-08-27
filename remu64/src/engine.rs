@@ -342,6 +342,8 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             Mnemonic::Vsubpd => self.execute_vsubpd(inst),
             Mnemonic::Vmulpd => self.execute_vmulpd(inst),
             Mnemonic::Vdivpd => self.execute_vdivpd(inst),
+            Mnemonic::Vsqrtps => self.execute_vsqrtps(inst),
+            Mnemonic::Vsqrtpd => self.execute_vsqrtpd(inst),
             Mnemonic::Imul => self.execute_imul(inst),
             Mnemonic::Mul => self.execute_mul(inst),
             Mnemonic::Div => self.execute_div(inst),
@@ -2614,6 +2616,194 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
                 let b = f64::from_bits(b_bits);
                 let quotient = a / b;
                 double_results[i] = quotient.to_bits();
+            }
+            
+            let result = (double_results[0] as u128) |
+                        ((double_results[1] as u128) << 64);
+            
+            let dst_reg = self.convert_register(inst.op_register(0))?;
+            self.engine.cpu.write_xmm(dst_reg, result);
+        }
+        
+        Ok(())
+    }
+
+    fn execute_vsqrtps(&mut self, inst: &Instruction) -> Result<()> {
+        // VSQRTPS - Vector Square Root Packed Single-Precision Floating-Point Values
+        // VEX.256: VSQRTPS ymm1, ymm2/m256
+        // VEX.128: VSQRTPS xmm1, xmm2/m128
+        
+        // Check if this is 256-bit (YMM) or 128-bit (XMM) operation
+        let is_256bit = inst.op_register(0).is_ymm();
+        
+        if inst.op_count() != 2 {
+            return Err(EmulatorError::UnsupportedInstruction(
+                "VSQRTPS requires exactly 2 operands".to_string(),
+            ));
+        }
+
+        if is_256bit {
+            // 256-bit YMM operation
+            let src_data = match inst.op_kind(1) {
+                OpKind::Register => {
+                    let src_reg = self.convert_register(inst.op_register(1))?;
+                    self.engine.cpu.read_ymm(src_reg)
+                }
+                OpKind::Memory => {
+                    self.read_ymm_memory(inst, 1)?
+                }
+                _ => {
+                    return Err(EmulatorError::UnsupportedInstruction(
+                        format!("Unsupported VSQRTPS source operand type: {:?}", inst.op_kind(1))
+                    ));
+                }
+            };
+            
+            // Perform packed single-precision square root
+            // Each YMM register contains 8 32-bit floats (4 per 128-bit half)
+            let mut result = [0u128; 2];
+            
+            for half in 0..2 {
+                let mut float_results = [0u32; 4];
+                for i in 0..4 {
+                    let offset = i * 32;
+                    let val_bits = ((src_data[half] >> offset) & 0xFFFFFFFF) as u32;
+                    
+                    // Convert bits to f32, take square root, convert back to bits
+                    let val = f32::from_bits(val_bits);
+                    let sqrt_val = val.sqrt();
+                    float_results[i] = sqrt_val.to_bits();
+                }
+                
+                result[half] = (float_results[0] as u128) |
+                              ((float_results[1] as u128) << 32) |
+                              ((float_results[2] as u128) << 64) |
+                              ((float_results[3] as u128) << 96);
+            }
+            
+            let dst_reg = self.convert_register(inst.op_register(0))?;
+            self.engine.cpu.write_ymm(dst_reg, result);
+        } else {
+            // 128-bit XMM operation
+            let src_data = match inst.op_kind(1) {
+                OpKind::Register => {
+                    let src_reg = self.convert_register(inst.op_register(1))?;
+                    self.engine.cpu.read_xmm(src_reg)
+                }
+                OpKind::Memory => {
+                    let addr = self.calculate_memory_address(inst, 1)?;
+                    self.read_memory_128(addr)?
+                }
+                _ => {
+                    return Err(EmulatorError::UnsupportedInstruction(
+                        format!("Unsupported VSQRTPS source operand type: {:?}", inst.op_kind(1))
+                    ));
+                }
+            };
+            
+            // Perform packed single-precision square root for XMM (4 floats)
+            let mut float_results = [0u32; 4];
+            for i in 0..4 {
+                let offset = i * 32;
+                let val_bits = ((src_data >> offset) & 0xFFFFFFFF) as u32;
+                
+                let val = f32::from_bits(val_bits);
+                let sqrt_val = val.sqrt();
+                float_results[i] = sqrt_val.to_bits();
+            }
+            
+            let result = (float_results[0] as u128) |
+                        ((float_results[1] as u128) << 32) |
+                        ((float_results[2] as u128) << 64) |
+                        ((float_results[3] as u128) << 96);
+            
+            let dst_reg = self.convert_register(inst.op_register(0))?;
+            self.engine.cpu.write_xmm(dst_reg, result);
+        }
+        
+        Ok(())
+    }
+
+    fn execute_vsqrtpd(&mut self, inst: &Instruction) -> Result<()> {
+        // VSQRTPD - Vector Square Root Packed Double-Precision Floating-Point Values
+        // VEX.256: VSQRTPD ymm1, ymm2/m256
+        // VEX.128: VSQRTPD xmm1, xmm2/m128
+        
+        // Check if this is 256-bit (YMM) or 128-bit (XMM) operation
+        let is_256bit = inst.op_register(0).is_ymm();
+        
+        if inst.op_count() != 2 {
+            return Err(EmulatorError::UnsupportedInstruction(
+                "VSQRTPD requires exactly 2 operands".to_string(),
+            ));
+        }
+
+        if is_256bit {
+            // 256-bit YMM operation
+            let src_data = match inst.op_kind(1) {
+                OpKind::Register => {
+                    let src_reg = self.convert_register(inst.op_register(1))?;
+                    self.engine.cpu.read_ymm(src_reg)
+                }
+                OpKind::Memory => {
+                    self.read_ymm_memory(inst, 1)?
+                }
+                _ => {
+                    return Err(EmulatorError::UnsupportedInstruction(
+                        format!("Unsupported VSQRTPD source operand type: {:?}", inst.op_kind(1))
+                    ));
+                }
+            };
+            
+            // Perform packed double-precision square root
+            // Each YMM register contains 4 64-bit doubles (2 per 128-bit half)
+            let mut result = [0u128; 2];
+            
+            for half in 0..2 {
+                let mut double_results = [0u64; 2];
+                for i in 0..2 {
+                    let offset = i * 64;
+                    let val_bits = ((src_data[half] >> offset) & 0xFFFFFFFFFFFFFFFF) as u64;
+                    
+                    // Convert bits to f64, take square root, convert back to bits
+                    let val = f64::from_bits(val_bits);
+                    let sqrt_val = val.sqrt();
+                    double_results[i] = sqrt_val.to_bits();
+                }
+                
+                result[half] = (double_results[0] as u128) |
+                              ((double_results[1] as u128) << 64);
+            }
+            
+            let dst_reg = self.convert_register(inst.op_register(0))?;
+            self.engine.cpu.write_ymm(dst_reg, result);
+        } else {
+            // 128-bit XMM operation
+            let src_data = match inst.op_kind(1) {
+                OpKind::Register => {
+                    let src_reg = self.convert_register(inst.op_register(1))?;
+                    self.engine.cpu.read_xmm(src_reg)
+                }
+                OpKind::Memory => {
+                    let addr = self.calculate_memory_address(inst, 1)?;
+                    self.read_memory_128(addr)?
+                }
+                _ => {
+                    return Err(EmulatorError::UnsupportedInstruction(
+                        format!("Unsupported VSQRTPD source operand type: {:?}", inst.op_kind(1))
+                    ));
+                }
+            };
+            
+            // Perform packed double-precision square root for XMM (2 doubles)
+            let mut double_results = [0u64; 2];
+            for i in 0..2 {
+                let offset = i * 64;
+                let val_bits = ((src_data >> offset) & 0xFFFFFFFFFFFFFFFF) as u64;
+                
+                let val = f64::from_bits(val_bits);
+                let sqrt_val = val.sqrt();
+                double_results[i] = sqrt_val.to_bits();
             }
             
             let result = (double_results[0] as u128) |
