@@ -238,8 +238,8 @@ fn test_vaddps_ymm() {
     
     let ymm2_high = ymm2_low;
     
-    engine.reg_write_ymm(Register::YMM1, [ymm1_low, ymm1_high]);
-    engine.reg_write_ymm(Register::YMM2, [ymm2_low, ymm2_high]);
+    engine.ymm_write(Register::YMM1, [ymm1_low, ymm1_high]);
+    engine.ymm_write(Register::YMM2, [ymm2_low, ymm2_high]);
 
     // vaddps ymm0, ymm1, ymm2
     // C5 F4 58 C2  
@@ -249,7 +249,7 @@ fn test_vaddps_ymm() {
     engine.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0).unwrap();
 
     // Expected: YMM0 = [3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0]
-    let result = engine.reg_read_ymm(Register::YMM0);
+    let result = engine.ymm_read(Register::YMM0);
     assert_eq!(result[0] & 0xFFFFFFFF, 3.0_f32.to_bits() as u128);
     assert_eq!((result[0] >> 32) & 0xFFFFFFFF, 4.0_f32.to_bits() as u128);
     assert_eq!((result[0] >> 64) & 0xFFFFFFFF, 5.0_f32.to_bits() as u128);
