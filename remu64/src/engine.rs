@@ -289,6 +289,18 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             Mnemonic::Sete => self.execute_sete(inst),
             Mnemonic::Setne => self.execute_setne(inst),
             Mnemonic::Setle => self.execute_setle(inst),
+            Mnemonic::Seta => self.execute_seta(inst),
+            Mnemonic::Setae => self.execute_setae(inst),
+            Mnemonic::Setb => self.execute_setb(inst),
+            Mnemonic::Setg => self.execute_setg(inst),
+            Mnemonic::Setge => self.execute_setge(inst),
+            Mnemonic::Setl => self.execute_setl(inst),
+            Mnemonic::Sets => self.execute_sets(inst),
+            Mnemonic::Setns => self.execute_setns(inst),
+            Mnemonic::Seto => self.execute_seto(inst),
+            Mnemonic::Setno => self.execute_setno(inst),
+            Mnemonic::Setp => self.execute_setp(inst),
+            Mnemonic::Setnp => self.execute_setnp(inst),
             Mnemonic::Shr => self.execute_shr(inst),
             Mnemonic::Shl => self.execute_shl(inst),
             Mnemonic::Cmovb => self.execute_cmovb(inst),
@@ -890,6 +902,107 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         let result = if zf || (sf != of) { 1u64 } else { 0u64 };
 
         // Write 1 byte result to destination
+        self.write_operand(inst, 0, result)?;
+        Ok(())
+    }
+    
+    fn execute_seta(&mut self, inst: &Instruction) -> Result<()> {
+        // SETA: Set if above (CF=0 and ZF=0)
+        let cf = self.engine.cpu.rflags.contains(Flags::CF);
+        let zf = self.engine.cpu.rflags.contains(Flags::ZF);
+        let result = if !cf && !zf { 1u64 } else { 0u64 };
+        self.write_operand(inst, 0, result)?;
+        Ok(())
+    }
+    
+    fn execute_setae(&mut self, inst: &Instruction) -> Result<()> {
+        // SETAE: Set if above or equal (CF=0)
+        let cf = self.engine.cpu.rflags.contains(Flags::CF);
+        let result = if !cf { 1u64 } else { 0u64 };
+        self.write_operand(inst, 0, result)?;
+        Ok(())
+    }
+    
+    fn execute_setb(&mut self, inst: &Instruction) -> Result<()> {
+        // SETB: Set if below (CF=1)
+        let cf = self.engine.cpu.rflags.contains(Flags::CF);
+        let result = if cf { 1u64 } else { 0u64 };
+        self.write_operand(inst, 0, result)?;
+        Ok(())
+    }
+    
+    fn execute_setg(&mut self, inst: &Instruction) -> Result<()> {
+        // SETG: Set if greater (ZF=0 and SF=OF)
+        let zf = self.engine.cpu.rflags.contains(Flags::ZF);
+        let sf = self.engine.cpu.rflags.contains(Flags::SF);
+        let of = self.engine.cpu.rflags.contains(Flags::OF);
+        let result = if !zf && (sf == of) { 1u64 } else { 0u64 };
+        self.write_operand(inst, 0, result)?;
+        Ok(())
+    }
+    
+    fn execute_setge(&mut self, inst: &Instruction) -> Result<()> {
+        // SETGE: Set if greater or equal (SF=OF)
+        let sf = self.engine.cpu.rflags.contains(Flags::SF);
+        let of = self.engine.cpu.rflags.contains(Flags::OF);
+        let result = if sf == of { 1u64 } else { 0u64 };
+        self.write_operand(inst, 0, result)?;
+        Ok(())
+    }
+    
+    fn execute_setl(&mut self, inst: &Instruction) -> Result<()> {
+        // SETL: Set if less (SF!=OF)
+        let sf = self.engine.cpu.rflags.contains(Flags::SF);
+        let of = self.engine.cpu.rflags.contains(Flags::OF);
+        let result = if sf != of { 1u64 } else { 0u64 };
+        self.write_operand(inst, 0, result)?;
+        Ok(())
+    }
+    
+    fn execute_sets(&mut self, inst: &Instruction) -> Result<()> {
+        // SETS: Set if sign (SF=1)
+        let sf = self.engine.cpu.rflags.contains(Flags::SF);
+        let result = if sf { 1u64 } else { 0u64 };
+        self.write_operand(inst, 0, result)?;
+        Ok(())
+    }
+    
+    fn execute_setns(&mut self, inst: &Instruction) -> Result<()> {
+        // SETNS: Set if not sign (SF=0)
+        let sf = self.engine.cpu.rflags.contains(Flags::SF);
+        let result = if !sf { 1u64 } else { 0u64 };
+        self.write_operand(inst, 0, result)?;
+        Ok(())
+    }
+    
+    fn execute_seto(&mut self, inst: &Instruction) -> Result<()> {
+        // SETO: Set if overflow (OF=1)
+        let of = self.engine.cpu.rflags.contains(Flags::OF);
+        let result = if of { 1u64 } else { 0u64 };
+        self.write_operand(inst, 0, result)?;
+        Ok(())
+    }
+    
+    fn execute_setno(&mut self, inst: &Instruction) -> Result<()> {
+        // SETNO: Set if not overflow (OF=0)
+        let of = self.engine.cpu.rflags.contains(Flags::OF);
+        let result = if !of { 1u64 } else { 0u64 };
+        self.write_operand(inst, 0, result)?;
+        Ok(())
+    }
+    
+    fn execute_setp(&mut self, inst: &Instruction) -> Result<()> {
+        // SETP: Set if parity (PF=1)
+        let pf = self.engine.cpu.rflags.contains(Flags::PF);
+        let result = if pf { 1u64 } else { 0u64 };
+        self.write_operand(inst, 0, result)?;
+        Ok(())
+    }
+    
+    fn execute_setnp(&mut self, inst: &Instruction) -> Result<()> {
+        // SETNP: Set if not parity (PF=0)
+        let pf = self.engine.cpu.rflags.contains(Flags::PF);
+        let result = if !pf { 1u64 } else { 0u64 };
         self.write_operand(inst, 0, result)?;
         Ok(())
     }
