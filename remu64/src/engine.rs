@@ -968,9 +968,11 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
                 if count == 0 {
                     return Ok(());
                 }
-                let result = ((dst_value as u32) << count) | ((src_value as u32) >> (32 - count));
-                let cf = ((dst_value >> (32 - count)) & 1) != 0;
-                let of = count == 1 && (((result >> 31) & 1) as u64 != ((dst_value >> 31) & 1));
+                let dst32 = dst_value as u32;
+                let src32 = src_value as u32;
+                let result = (dst32 << count) | (src32 >> (32 - count));
+                let cf = ((dst32 >> (32 - count)) & 1) != 0;
+                let of = count == 1 && (((result >> 31) & 1) != ((dst32 >> 31) & 1));
                 (result as u64, cf, of)
             }
             8 => {
@@ -1005,8 +1007,34 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
                 self.engine.cpu.rflags.remove(Flags::OF);
             }
         }
-        // Update SF, ZF, PF based on result  
-        self.update_flags_logical_iced(result, inst)?;
+        // Update SF, ZF, PF based on result (but not CF/OF, which we already set)
+        // Zero flag
+        if result == 0 {
+            self.engine.cpu.rflags.insert(Flags::ZF);
+        } else {
+            self.engine.cpu.rflags.remove(Flags::ZF);
+        }
+        
+        // Sign flag 
+        let sign_bit = match size {
+            2 => (result & 0x8000) != 0,
+            4 => (result & 0x80000000) != 0,
+            8 => (result & 0x8000000000000000) != 0,
+            _ => false,
+        };
+        if sign_bit {
+            self.engine.cpu.rflags.insert(Flags::SF);
+        } else {
+            self.engine.cpu.rflags.remove(Flags::SF);
+        }
+        
+        // Parity flag - count 1-bits in low byte
+        let low_byte = (result & 0xFF) as u8;
+        if low_byte.count_ones() % 2 == 0 {
+            self.engine.cpu.rflags.insert(Flags::PF);
+        } else {
+            self.engine.cpu.rflags.remove(Flags::PF);
+        }
 
         self.write_operand(inst, 0, result)?;
         Ok(())
@@ -1043,10 +1071,12 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
                 if count == 0 {
                     return Ok(());
                 }
-                let result = ((dst_value as u32) >> count) | ((src_value as u32) << (32 - count));
-                let cf = ((dst_value >> (count - 1)) & 1) != 0;
-                let msb = (dst_value >> 31) & 1;
-                let of = count == 1 && (msb != ((src_value >> 31) & 1));
+                let dst32 = dst_value as u32;
+                let src32 = src_value as u32;
+                let result = (dst32 >> count) | (src32 << (32 - count));
+                let cf = ((dst32 >> (count - 1)) & 1) != 0;
+                let msb = (dst32 >> 31) & 1;
+                let of = count == 1 && (msb != ((src32 >> 31) & 1));
                 (result as u64, cf, of)
             }
             8 => {
@@ -1082,8 +1112,34 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
                 self.engine.cpu.rflags.remove(Flags::OF);
             }
         }
-        // Update SF, ZF, PF based on result  
-        self.update_flags_logical_iced(result, inst)?;
+        // Update SF, ZF, PF based on result (but not CF/OF, which we already set)
+        // Zero flag
+        if result == 0 {
+            self.engine.cpu.rflags.insert(Flags::ZF);
+        } else {
+            self.engine.cpu.rflags.remove(Flags::ZF);
+        }
+        
+        // Sign flag 
+        let sign_bit = match size {
+            2 => (result & 0x8000) != 0,
+            4 => (result & 0x80000000) != 0,
+            8 => (result & 0x8000000000000000) != 0,
+            _ => false,
+        };
+        if sign_bit {
+            self.engine.cpu.rflags.insert(Flags::SF);
+        } else {
+            self.engine.cpu.rflags.remove(Flags::SF);
+        }
+        
+        // Parity flag - count 1-bits in low byte
+        let low_byte = (result & 0xFF) as u8;
+        if low_byte.count_ones() % 2 == 0 {
+            self.engine.cpu.rflags.insert(Flags::PF);
+        } else {
+            self.engine.cpu.rflags.remove(Flags::PF);
+        }
 
         self.write_operand(inst, 0, result)?;
         Ok(())
