@@ -1,3 +1,5 @@
+#![allow(clippy::neg_cmp_op_on_partial_ord)]
+
 use crate::OwnedMemory;
 use crate::cpu::{CpuState, Flags, Register};
 use crate::error::{EmulatorError, Result};
@@ -1128,7 +1130,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         let size = self.get_operand_size_from_instruction(inst, 0)?;
         let (result, cf, of) = match size {
             2 => {
-                let count = (shift_count & 0x1F); // For 16-bit, modulo 32
+                let count = shift_count & 0x1F; // For 16-bit, modulo 32
                 if count >= 16 {
                     let result = (src_value as u16).wrapping_shl(count - 16) as u64;
                     let cf = ((dst_value >> (16 - count)) & 1) != 0;
@@ -1142,7 +1144,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
                 }
             }
             4 => {
-                let count = (shift_count & 0x1F); // For 32-bit, modulo 32
+                let count = shift_count & 0x1F; // For 32-bit, modulo 32
                 if count == 0 {
                     return Ok(());
                 }
@@ -1231,7 +1233,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         let size = self.get_operand_size_from_instruction(inst, 0)?;
         let (result, cf, of) = match size {
             2 => {
-                let count = (shift_count & 0x1F); // For 16-bit, modulo 32
+                let count = shift_count & 0x1F; // For 16-bit, modulo 32
                 if count >= 16 {
                     let result = (src_value as u16).wrapping_shr(count - 16) as u64;
                     let cf = ((dst_value >> (count - 1)) & 1) != 0;
@@ -1246,7 +1248,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
                 }
             }
             4 => {
-                let count = (shift_count & 0x1F); // For 32-bit, modulo 32
+                let count = shift_count & 0x1F; // For 32-bit, modulo 32
                 if count == 0 {
                     return Ok(());
                 }
@@ -8314,8 +8316,8 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
                 let edx_value = (self.engine.cpu.read_reg(Register::RDX) & 0xFFFFFFFF) as u32;
                 let src32 = (src & 0xFFFFFFFF) as u32;
                 let result = edx_value as u64 * src32 as u64;
-                let high = (result >> 32);
-                let low = (result & 0xFFFFFFFF);
+                let high = result >> 32;
+                let low = result & 0xFFFFFFFF;
                 (high, low)
             }
             8 => {

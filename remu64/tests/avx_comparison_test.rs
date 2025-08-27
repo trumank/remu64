@@ -110,7 +110,7 @@ fn test_vcmpps_memory_operand() {
     let mem_addr = 0x2000;
     let data = 0x40A00000_40800000_40400000_40000000u128; // 5.0, 4.0, 3.0, 2.0
     engine.memory.write(mem_addr, &data.to_le_bytes()).unwrap();
-    engine.cpu.write_reg(Register::RDI, mem_addr as u64);
+    engine.cpu.write_reg(Register::RDI, mem_addr);
 
     // VCMPPS XMM0, XMM1, [RDI], 2 (Less than or equal)
     let code = vec![0xC5, 0xF0, 0xC2, 0x07, 0x02];
@@ -374,7 +374,7 @@ fn test_vcmppd_memory_256bit() {
         .memory
         .write(mem_addr + 16, &data2.to_le_bytes())
         .unwrap();
-    engine.cpu.write_reg(Register::RDI, mem_addr as u64);
+    engine.cpu.write_reg(Register::RDI, mem_addr);
 
     // VCMPPD YMM0, YMM1, [RDI], 13 (Greater than or equal)
     let code = vec![0xC5, 0xF5, 0xC2, 0x07, 0x0D];
