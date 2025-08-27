@@ -11,7 +11,7 @@ fn test_rorx_basic() {
     let mut engine = setup_engine();
     
     // Test basic rotation: rotate 0x12345678 right by 4 bits
-    // Expected: 0x81234567
+    // For 64-bit: Expected: 0x8000000001234567
     let code = vec![
         0x48, 0xC7, 0xC0, 0x78, 0x56, 0x34, 0x12,  // mov rax, 0x12345678
         0xC4, 0xE3, 0xFB, 0xF0, 0xD8, 0x04,        // rorx rbx, rax, 4 (VEX.L0.F2.0F3A.W1)
@@ -20,7 +20,7 @@ fn test_rorx_basic() {
     engine.memory.write(0x1000, &code).unwrap();
     engine.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0).unwrap();
     
-    assert_eq!(engine.reg_read(Register::RBX), 0x81234567, "RORX should rotate right by 4");
+    assert_eq!(engine.reg_read(Register::RBX), 0x8000000001234567, "RORX should rotate right by 4");
     assert_eq!(engine.reg_read(Register::RAX), 0x12345678, "Source should remain unchanged");
 }
 
@@ -140,7 +140,10 @@ fn test_rorx_different_registers() {
     engine.memory.write(0x1000, &code).unwrap();
     engine.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0).unwrap();
     
+    // 0xAA rotated right by 4: bottom 4 bits (0xA) go to top
     assert_eq!(engine.reg_read(Register::RDX), 0xa00000000000000a, "RORX to RDX");
+    // 0xAA rotated right by 8: all 8 bits go to top 
     assert_eq!(engine.reg_read(Register::RCX), 0xaa00000000000000, "RORX to RCX");
-    assert_eq!(engine.reg_read(Register::RDI), 0xaa000000000000, "RORX to RDI");
+    // 0xAA rotated right by 12: bottom 12 bits go to top
+    assert_eq!(engine.reg_read(Register::RDI), 0x0aa0000000000000, "RORX to RDI");
 }

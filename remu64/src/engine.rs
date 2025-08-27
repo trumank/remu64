@@ -356,6 +356,9 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             Mnemonic::Pdep => self.execute_pdep(inst),
             Mnemonic::Pext => self.execute_pext(inst),
             Mnemonic::Rorx => self.execute_rorx(inst),
+            Mnemonic::Sarx => self.execute_sarx(inst),
+            Mnemonic::Shlx => self.execute_shlx(inst),
+            Mnemonic::Shrx => self.execute_shrx(inst),
             Mnemonic::Cqo => self.execute_cqo(inst),
             Mnemonic::Xadd => self.execute_xadd(inst),
             Mnemonic::Cpuid => self.execute_cpuid(inst),
@@ -6986,6 +6989,115 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         self.write_operand(inst, 0, result)?;
         
         // RORX does not modify any flags - this is its key advantage
+        
+        Ok(())
+    }
+
+    fn execute_sarx(&mut self, inst: &Instruction) -> Result<()> {
+        // SARX: Shift Arithmetic Right Without Affecting Flags
+        // Performs arithmetic right shift (sign-extending) without modifying flags
+        // This is a BMI2 instruction
+        
+        // SARX has 3 operands: dest, src, shift_count
+        let src = self.read_operand(inst, 1)?;
+        let count = self.read_operand(inst, 2)?;
+        
+        // Get operand size
+        let size = self.get_operand_size_from_instruction(inst, 0)?;
+        
+        let result = match size {
+            4 => {
+                // 32-bit arithmetic shift
+                let src32 = (src & 0xFFFFFFFF) as i32;
+                let shift_count = (count & 0x1F) as u32; // Modulo 32
+                let result32 = src32 >> shift_count;
+                result32 as u32 as u64
+            }
+            8 => {
+                // 64-bit arithmetic shift
+                let src64 = src as i64;
+                let shift_count = (count & 0x3F) as u32; // Modulo 64
+                (src64 >> shift_count) as u64
+            }
+            _ => return Err(EmulatorError::InvalidInstruction(self.engine.cpu.read_reg(Register::RIP))),
+        };
+        
+        // Write result to destination
+        self.write_operand(inst, 0, result)?;
+        
+        // SARX does not modify any flags
+        
+        Ok(())
+    }
+
+    fn execute_shlx(&mut self, inst: &Instruction) -> Result<()> {
+        // SHLX: Shift Logical Left Without Affecting Flags
+        // Performs logical left shift without modifying flags
+        // This is a BMI2 instruction
+        
+        // SHLX has 3 operands: dest, src, shift_count
+        let src = self.read_operand(inst, 1)?;
+        let count = self.read_operand(inst, 2)?;
+        
+        // Get operand size
+        let size = self.get_operand_size_from_instruction(inst, 0)?;
+        
+        let result = match size {
+            4 => {
+                // 32-bit logical shift left
+                let src32 = (src & 0xFFFFFFFF) as u32;
+                let shift_count = (count & 0x1F) as u32; // Modulo 32
+                let result32 = src32 << shift_count;
+                result32 as u64
+            }
+            8 => {
+                // 64-bit logical shift left
+                let shift_count = (count & 0x3F) as u32; // Modulo 64
+                src << shift_count
+            }
+            _ => return Err(EmulatorError::InvalidInstruction(self.engine.cpu.read_reg(Register::RIP))),
+        };
+        
+        // Write result to destination
+        self.write_operand(inst, 0, result)?;
+        
+        // SHLX does not modify any flags
+        
+        Ok(())
+    }
+
+    fn execute_shrx(&mut self, inst: &Instruction) -> Result<()> {
+        // SHRX: Shift Logical Right Without Affecting Flags
+        // Performs logical right shift without modifying flags
+        // This is a BMI2 instruction
+        
+        // SHRX has 3 operands: dest, src, shift_count
+        let src = self.read_operand(inst, 1)?;
+        let count = self.read_operand(inst, 2)?;
+        
+        // Get operand size
+        let size = self.get_operand_size_from_instruction(inst, 0)?;
+        
+        let result = match size {
+            4 => {
+                // 32-bit logical shift right
+                let src32 = (src & 0xFFFFFFFF) as u32;
+                let shift_count = (count & 0x1F) as u32; // Modulo 32
+                let result32 = src32 >> shift_count;
+                result32 as u64
+            }
+            8 => {
+                // 64-bit logical shift right
+                let shift_count = (count & 0x3F) as u32; // Modulo 64
+                src >> shift_count
+            }
+            _ => return Err(EmulatorError::InvalidInstruction(self.engine.cpu.read_reg(Register::RIP))),
+        };
+        
+        // Write result to destination
+        self.write_operand(inst, 0, result)?;
+        
+        // SHRX does not modify any flags
         
         Ok(())
     }
