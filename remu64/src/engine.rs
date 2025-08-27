@@ -406,6 +406,10 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             Mnemonic::Jnp => self.execute_jcc(inst, !self.engine.cpu.rflags.contains(Flags::PF)),
             Mnemonic::Cld => self.execute_cld(inst),
             Mnemonic::Std => self.execute_std(inst),
+            Mnemonic::Int => self.execute_int(inst),
+            Mnemonic::Int3 => self.execute_int3(inst),
+            Mnemonic::Into => self.execute_into(inst),
+            Mnemonic::Syscall => self.execute_syscall(inst),
             Mnemonic::Adc => self.execute_adc(inst),
             Mnemonic::Not => self.execute_not(inst),
             Mnemonic::Ror => self.execute_ror(inst),
@@ -8442,6 +8446,64 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
     fn execute_std(&mut self, _inst: &Instruction) -> Result<()> {
         // STD: Set Direction Flag
         self.engine.cpu.rflags.insert(Flags::DF);
+        Ok(())
+    }
+
+    fn execute_int(&mut self, inst: &Instruction) -> Result<()> {
+        // INT: Software Interrupt
+        let intno = self.read_operand(inst, 0)?;
+        
+        // Call interrupt hook
+        self.hooks.on_interrupt(self.engine, intno, inst.len() as usize)?;
+        
+        // In a real system, this would trigger an interrupt handler
+        // For emulation, we just call the hook and continue
+        // The hook implementation can decide what to do (e.g., emulate syscalls)
+        
+        Ok(())
+    }
+
+    fn execute_int3(&mut self, inst: &Instruction) -> Result<()> {
+        // INT3: Breakpoint (single-byte INT 3)
+        // Call interrupt hook with interrupt number 3
+        self.hooks.on_interrupt(self.engine, 3, inst.len() as usize)?;
+        
+        // INT3 is typically used for debugging breakpoints
+        // The debugger/hook can decide how to handle it
+        
+        Ok(())
+    }
+
+    fn execute_into(&mut self, inst: &Instruction) -> Result<()> {
+        // INTO: Interrupt if Overflow Flag is set
+        if self.engine.cpu.rflags.contains(Flags::OF) {
+            // Call interrupt hook with interrupt number 4 (overflow exception)
+            self.hooks.on_interrupt(self.engine, 4, inst.len() as usize)?;
+        }
+        // If OF is not set, INTO is a no-op
+        Ok(())
+    }
+
+    fn execute_syscall(&mut self, inst: &Instruction) -> Result<()> {
+        // SYSCALL: Fast System Call
+        // In x86-64, SYSCALL is used for system calls instead of INT 0x80
+        
+        // Save return address (next instruction) in RCX
+        let return_addr = inst.next_ip();
+        self.engine.cpu.write_reg(Register::RCX, return_addr);
+        
+        // Save RFLAGS in R11 (masked according to IA32_FMASK MSR, but we'll save all for simplicity)
+        let rflags = self.engine.cpu.rflags.bits();
+        self.engine.cpu.write_reg(Register::R11, rflags);
+        
+        // The syscall number is typically in RAX, parameters in RDI, RSI, RDX, R10, R8, R9
+        // Call the interrupt hook with a special interrupt number for SYSCALL (e.g., 0x80 for Linux compatibility)
+        // The actual syscall number is in RAX, so the hook can read it from there
+        self.hooks.on_interrupt(self.engine, 0x80, inst.len() as usize)?;
+        
+        // Note: The actual kernel entry point would be loaded from MSR registers
+        // For emulation purposes, the hook handles the syscall and we continue
+        
         Ok(())
     }
 }
