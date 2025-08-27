@@ -6856,9 +6856,19 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         let src1 = self.read_operand(inst, 1)?;
         let mask = self.read_operand(inst, 2)?;
         
+        // Get operand size to handle 32-bit vs 64-bit operations
+        let size = inst.op0_register().size();
+        
+        // Mask operands to appropriate size
+        let (src1_masked, mask_masked) = match size {
+            4 => ((src1 & 0xFFFFFFFF), (mask & 0xFFFFFFFF)),
+            8 => (src1, mask),
+            _ => return Err(EmulatorError::InvalidInstruction(self.engine.cpu.read_reg(Register::RIP))),
+        };
+        
         let mut result = 0u64;
-        let mut src_bits = src1;
-        let mut mask_copy = mask;
+        let mut src_bits = src1_masked;
+        let mut mask_copy = mask_masked;
         
         // For each bit position in the mask
         while mask_copy != 0 {
@@ -6875,6 +6885,11 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             
             // Clear this bit from the mask
             mask_copy &= mask_copy - 1;
+        }
+        
+        // Mask result to appropriate size for 32-bit operations
+        if size == 4 {
+            result &= 0xFFFFFFFF;
         }
         
         // Write result to destination
