@@ -399,6 +399,11 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             Mnemonic::Cmpsw => self.execute_cmpsw(inst),
             Mnemonic::Cmpsd => self.execute_cmpsd_string(inst),
             Mnemonic::Cmpsq => self.execute_cmpsq(inst),
+            Mnemonic::Bswap => self.execute_bswap(inst),
+            Mnemonic::Jo => self.execute_jcc(inst, self.engine.cpu.rflags.contains(Flags::OF)),
+            Mnemonic::Jno => self.execute_jcc(inst, !self.engine.cpu.rflags.contains(Flags::OF)),
+            Mnemonic::Jp => self.execute_jcc(inst, self.engine.cpu.rflags.contains(Flags::PF)),
+            Mnemonic::Jnp => self.execute_jcc(inst, !self.engine.cpu.rflags.contains(Flags::PF)),
             Mnemonic::Adc => self.execute_adc(inst),
             Mnemonic::Not => self.execute_not(inst),
             Mnemonic::Ror => self.execute_ror(inst),
@@ -8394,6 +8399,35 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
                 .write_reg(Register::RDI, rdi.wrapping_add(increment));
         }
 
+        Ok(())
+    }
+
+    fn execute_bswap(&mut self, inst: &Instruction) -> Result<()> {
+        // BSWAP: Byte swap - reverses the byte order of a 32-bit or 64-bit register
+        if inst.op_kind(0) != OpKind::Register {
+            return Err(EmulatorError::InvalidOperand);
+        }
+
+        let reg = inst.op0_register();
+        let reg_enum = self.convert_register(reg)?;
+        let value = self.engine.cpu.read_reg(reg_enum);
+
+        let swapped = match reg.size() {
+            4 => {
+                // 32-bit swap
+                let val32 = value as u32;
+                let swapped32 = val32.swap_bytes();
+                // Zero-extend for 64-bit mode
+                swapped32 as u64
+            }
+            8 => {
+                // 64-bit swap
+                value.swap_bytes()
+            }
+            _ => return Err(EmulatorError::InvalidOperand),
+        };
+
+        self.engine.cpu.write_reg(reg_enum, swapped);
         Ok(())
     }
 }
