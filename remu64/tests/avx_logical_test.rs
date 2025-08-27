@@ -244,3 +244,166 @@ fn test_vandpd_pattern() {
         0x8888888888888888_1111111111111111
     );
 }
+
+// VORPS tests
+
+#[test]
+fn test_vorps_xmm() {
+    let mut engine = Engine::new(EngineMode::Mode64);
+    engine.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
+    
+    // Test VORPS xmm0, xmm1, xmm2
+    // Set up test values in XMM registers
+    engine.xmm_write(Register::XMM1, 0xFF00FF00_00000000_FF00FF00_00000000);
+    engine.xmm_write(Register::XMM2, 0x00FF00FF_00000000_00FF00FF_00000000);
+    
+    // VORPS xmm0, xmm1, xmm2
+    let code = vec![
+        0xC5, 0xF0, 0x56, 0xC2,  // vorps xmm0, xmm1, xmm2
+    ];
+    
+    engine.memory.write(0x1000, &code).unwrap();
+    engine.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0).unwrap();
+    
+    // Result should be bitwise OR of xmm1 and xmm2
+    assert_eq!(
+        engine.xmm_read(Register::XMM0),
+        0xFFFFFFFF_00000000_FFFFFFFF_00000000
+    );
+}
+
+#[test]
+fn test_vorps_ymm() {
+    let mut engine = Engine::new(EngineMode::Mode64);
+    engine.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
+    
+    // Test VORPS ymm0, ymm1, ymm2
+    engine.ymm_write(Register::YMM1, [
+        0xFF00FF00_00000000_FF00FF00_00000000,
+        0x00000000_00000000_FFFFFFFF_00000000,
+    ]);
+    engine.ymm_write(Register::YMM2, [
+        0x00FF00FF_00000000_00FF00FF_00000000,
+        0xFFFFFFFF_00000000_00000000_00000000,
+    ]);
+    
+    // VORPS ymm0, ymm1, ymm2
+    let code = vec![
+        0xC5, 0xF4, 0x56, 0xC2,  // vorps ymm0, ymm1, ymm2
+    ];
+    
+    engine.memory.write(0x1000, &code).unwrap();
+    engine.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0).unwrap();
+    
+    // Result should be bitwise OR of ymm1 and ymm2
+    let result = engine.ymm_read(Register::YMM0);
+    assert_eq!(result[0], 0xFFFFFFFF_00000000_FFFFFFFF_00000000);
+    assert_eq!(result[1], 0xFFFFFFFF_00000000_FFFFFFFF_00000000);
+}
+
+#[test]
+fn test_vorpd_xmm() {
+    let mut engine = Engine::new(EngineMode::Mode64);
+    engine.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
+    
+    // Test VORPD xmm0, xmm1, xmm2
+    engine.xmm_write(Register::XMM1, 0xFF00FF00FF00FF00_0000000000000000);
+    engine.xmm_write(Register::XMM2, 0x00FF00FF00FF00FF_FFFFFFFFFFFFFFFF);
+    
+    // VORPD xmm0, xmm1, xmm2
+    let code = vec![
+        0xC5, 0xF1, 0x56, 0xC2,  // vorpd xmm0, xmm1, xmm2
+    ];
+    
+    engine.memory.write(0x1000, &code).unwrap();
+    engine.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0).unwrap();
+    
+    // Result should be bitwise OR of xmm1 and xmm2
+    assert_eq!(
+        engine.xmm_read(Register::XMM0),
+        0xFFFFFFFFFFFFFFFF_FFFFFFFFFFFFFFFF
+    );
+}
+
+#[test]
+fn test_vorpd_ymm() {
+    let mut engine = Engine::new(EngineMode::Mode64);
+    engine.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
+    
+    // Test VORPD ymm0, ymm1, ymm2
+    engine.ymm_write(Register::YMM1, [
+        0xFF00FF00FF00FF00_0000000000000000,
+        0x0000000000000000_FF00FF00FF00FF00,
+    ]);
+    engine.ymm_write(Register::YMM2, [
+        0x00FF00FF00FF00FF_0000000000000000,
+        0xFFFFFFFFFFFFFFFF_00FF00FF00FF00FF,
+    ]);
+    
+    // VORPD ymm0, ymm1, ymm2
+    let code = vec![
+        0xC5, 0xF5, 0x56, 0xC2,  // vorpd ymm0, ymm1, ymm2
+    ];
+    
+    engine.memory.write(0x1000, &code).unwrap();
+    engine.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0).unwrap();
+    
+    // Result should be bitwise OR of ymm1 and ymm2
+    let result = engine.ymm_read(Register::YMM0);
+    assert_eq!(result[0], 0xFFFFFFFFFFFFFFFF_0000000000000000);
+    assert_eq!(result[1], 0xFFFFFFFFFFFFFFFF_FFFFFFFFFFFFFFFF);
+}
+
+#[test]
+fn test_vorps_all_zeros() {
+    let mut engine = Engine::new(EngineMode::Mode64);
+    engine.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
+    
+    // Test VORPS with all zeros - result should be all zeros
+    engine.xmm_write(Register::XMM1, 0x00000000_00000000_00000000_00000000);
+    engine.xmm_write(Register::XMM2, 0x00000000_00000000_00000000_00000000);
+    
+    // VORPS xmm0, xmm1, xmm2
+    let code = vec![
+        0xC5, 0xF0, 0x56, 0xC2,  // vorps xmm0, xmm1, xmm2
+    ];
+    
+    engine.memory.write(0x1000, &code).unwrap();
+    engine.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0).unwrap();
+    
+    assert_eq!(
+        engine.xmm_read(Register::XMM0),
+        0x00000000_00000000_00000000_00000000
+    );
+}
+
+#[test]
+fn test_vorps_memory() {
+    let mut engine = Engine::new(EngineMode::Mode64);
+    engine.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
+    engine.memory.map(0x2000, 0x1000, Permission::ALL).unwrap();
+    
+    // Store test value in memory
+    let mem_value: u128 = 0x00FF00FF_00FF00FF_00FF00FF_00FF00FF;
+    engine.memory.write(0x2000, &mem_value.to_le_bytes()).unwrap();
+    
+    // Set up XMM1 with test value
+    engine.xmm_write(Register::XMM1, 0xFF00FF00_FF00FF00_FF00FF00_FF00FF00);
+    
+    // Set RAX to point to memory
+    engine.reg_write(Register::RAX, 0x2000);
+    
+    // VORPS xmm0, xmm1, [rax]
+    let code = vec![
+        0xC5, 0xF0, 0x56, 0x00,  // vorps xmm0, xmm1, [rax]
+    ];
+    
+    engine.memory.write(0x1000, &code).unwrap();
+    engine.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0).unwrap();
+    
+    // Result should be bitwise OR of xmm1 and memory value
+    assert_eq!(
+        engine.xmm_read(Register::XMM0),
+        0xFFFFFFFF_FFFFFFFF_FFFFFFFF_FFFFFFFF
+    );
+}
