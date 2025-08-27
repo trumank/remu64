@@ -1,8 +1,9 @@
-use remu64::{Engine, Register};
+use remu64::{Engine, EngineMode, Permission, Register, memory::MemoryTrait};
 
 #[test]
 fn test_vandps_xmm() {
-    let mut engine = Engine::new();
+    let mut engine = Engine::new(EngineMode::Mode64);
+    engine.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
     
     // Test VANDPS xmm0, xmm1, xmm2
     // Set up test values in XMM registers
@@ -15,7 +16,8 @@ fn test_vandps_xmm() {
         0xC5, 0xF0, 0x54, 0xC2,  // vandps xmm0, xmm1, xmm2
     ];
     
-    engine.execute(&code, 0x1000).unwrap();
+    engine.memory.write(0x1000, &code).unwrap();
+    engine.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0).unwrap();
     
     // Result should be bitwise AND of xmm1 and xmm2
     assert_eq!(
@@ -26,7 +28,8 @@ fn test_vandps_xmm() {
 
 #[test]
 fn test_vandps_ymm() {
-    let mut engine = Engine::new();
+    let mut engine = Engine::new(EngineMode::Mode64);
+    engine.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
     
     // Test VANDPS ymm0, ymm1, ymm2
     // Set up test values in YMM registers
@@ -44,7 +47,8 @@ fn test_vandps_ymm() {
         0xC5, 0xF4, 0x54, 0xC2,  // vandps ymm0, ymm1, ymm2
     ];
     
-    engine.execute(&code, 0x1000).unwrap();
+    engine.memory.write(0x1000, &code).unwrap();
+    engine.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0).unwrap();
     
     // Result should be bitwise AND of ymm1 and ymm2
     let result = engine.ymm_read(Register::YMM0);
@@ -54,7 +58,8 @@ fn test_vandps_ymm() {
 
 #[test]
 fn test_vandpd_xmm() {
-    let mut engine = Engine::new();
+    let mut engine = Engine::new(EngineMode::Mode64);
+    engine.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
     
     // Test VANDPD xmm0, xmm1, xmm2
     // Set up test values in XMM registers
@@ -66,7 +71,8 @@ fn test_vandpd_xmm() {
         0xC5, 0xF1, 0x54, 0xC2,  // vandpd xmm0, xmm1, xmm2
     ];
     
-    engine.execute(&code, 0x1000).unwrap();
+    engine.memory.write(0x1000, &code).unwrap();
+    engine.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0).unwrap();
     
     // Result should be bitwise AND of xmm1 and xmm2
     assert_eq!(
@@ -77,7 +83,8 @@ fn test_vandpd_xmm() {
 
 #[test]
 fn test_vandpd_ymm() {
-    let mut engine = Engine::new();
+    let mut engine = Engine::new(EngineMode::Mode64);
+    engine.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
     
     // Test VANDPD ymm0, ymm1, ymm2
     // Set up test values in YMM registers
@@ -95,7 +102,8 @@ fn test_vandpd_ymm() {
         0xC5, 0xF5, 0x54, 0xC2,  // vandpd ymm0, ymm1, ymm2
     ];
     
-    engine.execute(&code, 0x1000).unwrap();
+    engine.memory.write(0x1000, &code).unwrap();
+    engine.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0).unwrap();
     
     // Result should be bitwise AND of ymm1 and ymm2
     let result = engine.ymm_read(Register::YMM0);
@@ -105,7 +113,8 @@ fn test_vandpd_ymm() {
 
 #[test]
 fn test_vandps_memory() {
-    let mut engine = Engine::new();
+    let mut engine = Engine::new(EngineMode::Mode64);
+    engine.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
     
     // Test VANDPS with memory operand
     // Store test value in memory
@@ -123,7 +132,8 @@ fn test_vandps_memory() {
         0xC5, 0xF0, 0x54, 0x00,  // vandps xmm0, xmm1, [rax]
     ];
     
-    engine.execute(&code, 0x1000).unwrap();
+    engine.memory.write(0x1000, &code).unwrap();
+    engine.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0).unwrap();
     
     // Result should be bitwise AND of xmm1 and memory value
     assert_eq!(
@@ -134,7 +144,8 @@ fn test_vandps_memory() {
 
 #[test]
 fn test_vandpd_memory() {
-    let mut engine = Engine::new();
+    let mut engine = Engine::new(EngineMode::Mode64);
+    engine.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
     
     // Test VANDPD with memory operand
     // Store test value in memory
@@ -152,7 +163,8 @@ fn test_vandpd_memory() {
         0xC5, 0xF1, 0x54, 0x00,  // vandpd xmm0, xmm1, [rax]
     ];
     
-    engine.execute(&code, 0x1000).unwrap();
+    engine.memory.write(0x1000, &code).unwrap();
+    engine.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0).unwrap();
     
     // Result should be bitwise AND of xmm1 and memory value
     assert_eq!(
@@ -163,7 +175,8 @@ fn test_vandpd_memory() {
 
 #[test]
 fn test_vandps_all_ones() {
-    let mut engine = Engine::new();
+    let mut engine = Engine::new(EngineMode::Mode64);
+    engine.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
     
     // Test VANDPS with all ones - result should be all ones
     engine.xmm_write(Register::XMM1, 0xFFFFFFFF_FFFFFFFF_FFFFFFFF_FFFFFFFF);
@@ -174,7 +187,8 @@ fn test_vandps_all_ones() {
         0xC5, 0xF0, 0x54, 0xC2,  // vandps xmm0, xmm1, xmm2
     ];
     
-    engine.execute(&code, 0x1000).unwrap();
+    engine.memory.write(0x1000, &code).unwrap();
+    engine.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0).unwrap();
     
     assert_eq!(
         engine.xmm_read(Register::XMM0),
@@ -184,7 +198,8 @@ fn test_vandps_all_ones() {
 
 #[test]
 fn test_vandps_all_zeros() {
-    let mut engine = Engine::new();
+    let mut engine = Engine::new(EngineMode::Mode64);
+    engine.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
     
     // Test VANDPS with all zeros - result should be all zeros
     engine.xmm_write(Register::XMM1, 0x00000000_00000000_00000000_00000000);
@@ -195,7 +210,8 @@ fn test_vandps_all_zeros() {
         0xC5, 0xF0, 0x54, 0xC2,  // vandps xmm0, xmm1, xmm2
     ];
     
-    engine.execute(&code, 0x1000).unwrap();
+    engine.memory.write(0x1000, &code).unwrap();
+    engine.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0).unwrap();
     
     assert_eq!(
         engine.xmm_read(Register::XMM0),
@@ -205,7 +221,8 @@ fn test_vandps_all_zeros() {
 
 #[test]
 fn test_vandpd_pattern() {
-    let mut engine = Engine::new();
+    let mut engine = Engine::new(EngineMode::Mode64);
+    engine.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
     
     // Test VANDPD with alternating pattern
     engine.xmm_write(Register::XMM1, 0xAAAAAAAAAAAAAAAA_5555555555555555);
@@ -216,7 +233,8 @@ fn test_vandpd_pattern() {
         0xC5, 0xF1, 0x54, 0xC2,  // vandpd xmm0, xmm1, xmm2
     ];
     
-    engine.execute(&code, 0x1000).unwrap();
+    engine.memory.write(0x1000, &code).unwrap();
+    engine.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0).unwrap();
     
     // Result: 0xAAAA... & 0xCCCC... = 0x8888..., 0x5555... & 0x3333... = 0x1111...
     assert_eq!(
