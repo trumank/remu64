@@ -1,4 +1,4 @@
-use remu64::{memory::MemoryTrait as _, Engine, EngineMode, Permission, Register};
+use remu64::{Engine, EngineMode, Permission, Register, memory::MemoryTrait as _};
 
 #[test]
 fn test_addsd() {

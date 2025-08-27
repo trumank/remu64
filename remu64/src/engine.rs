@@ -1,8 +1,8 @@
+use crate::OwnedMemory;
 use crate::cpu::{CpuState, Flags, Register};
 use crate::error::{EmulatorError, Result};
 use crate::hooks::{HookManager, NoHooks};
 use crate::memory::{MemoryTrait, Permission};
-use crate::OwnedMemory;
 use iced_x86::{
     Code, Decoder, DecoderOptions, Instruction, Mnemonic, OpKind, Register as IcedRegister,
 };
@@ -119,10 +119,10 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
                 break;
             }
 
-            if let Some(timeout) = timeout_duration {
-                if start_time.elapsed() > timeout {
-                    break;
-                }
+            if let Some(timeout) = timeout_duration
+                && start_time.elapsed() > timeout
+            {
+                break;
             }
 
             self.step()?;
@@ -482,7 +482,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
                 return Err(EmulatorError::UnsupportedInstruction(format!(
                     "Unsupported push variant: {:?}",
                     inst.code()
-                )))
+                )));
             }
         };
 
@@ -528,7 +528,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
                 return Err(EmulatorError::UnsupportedInstruction(format!(
                     "Unsupported call target: {:?}",
                     inst.op_kind(0)
-                )))
+                )));
             }
         };
 
@@ -615,7 +615,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
                 return Err(EmulatorError::UnsupportedInstruction(format!(
                     "Unsupported pop variant: {:?}",
                     inst.code()
-                )))
+                )));
             }
         };
 
@@ -722,7 +722,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
                 return Err(EmulatorError::UnsupportedInstruction(format!(
                     "Unsupported size: {}",
                     size
-                )))
+                )));
             }
         };
 
@@ -757,7 +757,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
                 return Err(EmulatorError::UnsupportedInstruction(format!(
                     "Invalid MOVZX source size: {}",
                     src_size
-                )))
+                )));
             }
         };
 
@@ -779,7 +779,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
                 return Err(EmulatorError::UnsupportedInstruction(format!(
                     "Invalid MOVSX source size: {}",
                     src_size
-                )))
+                )));
             }
         };
 
@@ -869,7 +869,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
                 return Err(EmulatorError::UnsupportedInstruction(format!(
                     "Unsupported size: {}",
                     size
-                )))
+                )));
             }
         };
 
@@ -895,7 +895,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
                 return Err(EmulatorError::UnsupportedInstruction(format!(
                     "Unsupported size: {}",
                     size
-                )))
+                )));
             }
         };
 
@@ -1235,7 +1235,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
                 ) {
                     // Moving from general-purpose register to XMM
                     let src_value = self.engine.cpu.read_reg(src_reg) as u32; // Take lower 32 bits
-                                                                              // Zero out the XMM register and set the lower 32 bits
+                    // Zero out the XMM register and set the lower 32 bits
                     self.engine.cpu.write_xmm(dst_reg, src_value as u128);
                 } else if matches!(
                     src_reg,
@@ -1569,7 +1569,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
                 return Err(EmulatorError::UnsupportedInstruction(format!(
                     "Unsupported size for CMPXCHG: {}",
                     size
-                )))
+                )));
             }
         };
 
@@ -2739,7 +2739,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             _ => {
                 return Err(EmulatorError::UnsupportedInstruction(
                     "Invalid CMPPS source".to_string(),
-                ))
+                ));
             }
         };
 
@@ -2788,7 +2788,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             _ => {
                 return Err(EmulatorError::UnsupportedInstruction(
                     "Invalid CMPSS source".to_string(),
-                ))
+                ));
             }
         };
 
@@ -2825,7 +2825,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             _ => {
                 return Err(EmulatorError::UnsupportedInstruction(
                     "Invalid COMISS source".to_string(),
-                ))
+                ));
             }
         };
 
@@ -2850,7 +2850,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             _ => {
                 return Err(EmulatorError::UnsupportedInstruction(
                     "Invalid UCOMISS source".to_string(),
-                ))
+                ));
             }
         };
 
@@ -2945,7 +2945,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             _ => {
                 return Err(EmulatorError::UnsupportedInstruction(
                     "Invalid ADDPS source".to_string(),
-                ))
+                ));
             }
         };
 
@@ -2970,7 +2970,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             _ => {
                 return Err(EmulatorError::UnsupportedInstruction(
                     "Invalid SUBPS source".to_string(),
-                ))
+                ));
             }
         };
 
@@ -2995,7 +2995,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             _ => {
                 return Err(EmulatorError::UnsupportedInstruction(
                     "Invalid MULPS source".to_string(),
-                ))
+                ));
             }
         };
 
@@ -3020,7 +3020,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             _ => {
                 return Err(EmulatorError::UnsupportedInstruction(
                     "Invalid DIVPS source".to_string(),
-                ))
+                ));
             }
         };
 
@@ -3045,7 +3045,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             _ => {
                 return Err(EmulatorError::UnsupportedInstruction(
                     "Invalid ANDPS source".to_string(),
-                ))
+                ));
             }
         };
 
@@ -3070,7 +3070,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             _ => {
                 return Err(EmulatorError::UnsupportedInstruction(
                     "Invalid ORPS source".to_string(),
-                ))
+                ));
             }
         };
 
@@ -3605,7 +3605,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             _ => {
                 return Err(EmulatorError::UnsupportedInstruction(
                     "Invalid ADDSD source".to_string(),
-                ))
+                ));
             }
         };
 
@@ -3636,7 +3636,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             _ => {
                 return Err(EmulatorError::UnsupportedInstruction(
                     "Invalid SUBSD source".to_string(),
-                ))
+                ));
             }
         };
 
@@ -3666,7 +3666,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             _ => {
                 return Err(EmulatorError::UnsupportedInstruction(
                     "Invalid MULSD source".to_string(),
-                ))
+                ));
             }
         };
 
@@ -3696,7 +3696,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             _ => {
                 return Err(EmulatorError::UnsupportedInstruction(
                     "Invalid DIVSD source".to_string(),
-                ))
+                ));
             }
         };
 
@@ -3729,7 +3729,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             _ => {
                 return Err(EmulatorError::UnsupportedInstruction(
                     "Invalid ADDSS source".to_string(),
-                ))
+                ));
             }
         };
 
@@ -3760,7 +3760,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             _ => {
                 return Err(EmulatorError::UnsupportedInstruction(
                     "Invalid SUBSS source".to_string(),
-                ))
+                ));
             }
         };
 
@@ -3790,7 +3790,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             _ => {
                 return Err(EmulatorError::UnsupportedInstruction(
                     "Invalid MULSS source".to_string(),
-                ))
+                ));
             }
         };
 
@@ -3820,7 +3820,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             _ => {
                 return Err(EmulatorError::UnsupportedInstruction(
                     "Invalid DIVSS source".to_string(),
-                ))
+                ));
             }
         };
 
@@ -4067,7 +4067,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             _ => {
                 return Err(EmulatorError::UnsupportedInstruction(
                     "Invalid PADDB source".to_string(),
-                ))
+                ));
             }
         };
 
@@ -4101,7 +4101,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             _ => {
                 return Err(EmulatorError::UnsupportedInstruction(
                     "Invalid PADDW source".to_string(),
-                ))
+                ));
             }
         };
 
@@ -4135,7 +4135,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             _ => {
                 return Err(EmulatorError::UnsupportedInstruction(
                     "Invalid PADDD source".to_string(),
-                ))
+                ));
             }
         };
 
@@ -4169,7 +4169,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             _ => {
                 return Err(EmulatorError::UnsupportedInstruction(
                     "Invalid PADDQ source".to_string(),
-                ))
+                ));
             }
         };
 
@@ -4205,7 +4205,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             _ => {
                 return Err(EmulatorError::UnsupportedInstruction(
                     "Invalid PSUBB source".to_string(),
-                ))
+                ));
             }
         };
 
@@ -4239,7 +4239,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             _ => {
                 return Err(EmulatorError::UnsupportedInstruction(
                     "Invalid PSUBW source".to_string(),
-                ))
+                ));
             }
         };
 
@@ -4273,7 +4273,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             _ => {
                 return Err(EmulatorError::UnsupportedInstruction(
                     "Invalid PSUBD source".to_string(),
-                ))
+                ));
             }
         };
 
@@ -4307,7 +4307,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             _ => {
                 return Err(EmulatorError::UnsupportedInstruction(
                     "Invalid PSUBQ source".to_string(),
-                ))
+                ));
             }
         };
 
@@ -4343,7 +4343,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             _ => {
                 return Err(EmulatorError::UnsupportedInstruction(
                     "Invalid PMULLW source".to_string(),
-                ))
+                ));
             }
         };
 
@@ -4377,7 +4377,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             _ => {
                 return Err(EmulatorError::UnsupportedInstruction(
                     "Invalid PMULHW source".to_string(),
-                ))
+                ));
             }
         };
 
@@ -4411,7 +4411,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             _ => {
                 return Err(EmulatorError::UnsupportedInstruction(
                     "Invalid PMULHUW source".to_string(),
-                ))
+                ));
             }
         };
 
@@ -4445,7 +4445,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             _ => {
                 return Err(EmulatorError::UnsupportedInstruction(
                     "Invalid PMULUDQ source".to_string(),
-                ))
+                ));
             }
         };
 
@@ -4481,7 +4481,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             _ => {
                 return Err(EmulatorError::UnsupportedInstruction(
                     "Invalid PAND source".to_string(),
-                ))
+                ));
             }
         };
         let dst_value = self.engine.cpu.read_xmm(dst_reg);
@@ -4508,7 +4508,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             _ => {
                 return Err(EmulatorError::UnsupportedInstruction(
                     "Invalid PANDN source".to_string(),
-                ))
+                ));
             }
         };
         let dst_value = self.engine.cpu.read_xmm(dst_reg);
@@ -4535,7 +4535,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             _ => {
                 return Err(EmulatorError::UnsupportedInstruction(
                     "Invalid POR source".to_string(),
-                ))
+                ));
             }
         };
         let dst_value = self.engine.cpu.read_xmm(dst_reg);
@@ -4562,7 +4562,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             _ => {
                 return Err(EmulatorError::UnsupportedInstruction(
                     "Invalid PXOR source".to_string(),
-                ))
+                ));
             }
         };
         let dst_value = self.engine.cpu.read_xmm(dst_reg);
@@ -4589,7 +4589,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             _ => {
                 return Err(EmulatorError::UnsupportedInstruction(
                     "Invalid PCMPEQB source".to_string(),
-                ))
+                ));
             }
         };
         let dst_value = self.engine.cpu.read_xmm(dst_reg);
@@ -4623,7 +4623,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             _ => {
                 return Err(EmulatorError::UnsupportedInstruction(
                     "Invalid PCMPEQW source".to_string(),
-                ))
+                ));
             }
         };
         let dst_value = self.engine.cpu.read_xmm(dst_reg);
@@ -4657,7 +4657,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             _ => {
                 return Err(EmulatorError::UnsupportedInstruction(
                     "Invalid PCMPEQD source".to_string(),
-                ))
+                ));
             }
         };
         let dst_value = self.engine.cpu.read_xmm(dst_reg);
@@ -4691,7 +4691,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             _ => {
                 return Err(EmulatorError::UnsupportedInstruction(
                     "Invalid PCMPGTB source".to_string(),
-                ))
+                ));
             }
         };
         let dst_value = self.engine.cpu.read_xmm(dst_reg);
@@ -4725,7 +4725,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             _ => {
                 return Err(EmulatorError::UnsupportedInstruction(
                     "Invalid PCMPGTW source".to_string(),
-                ))
+                ));
             }
         };
         let dst_value = self.engine.cpu.read_xmm(dst_reg);
@@ -4759,7 +4759,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             _ => {
                 return Err(EmulatorError::UnsupportedInstruction(
                     "Invalid PCMPGTD source".to_string(),
-                ))
+                ));
             }
         };
         let dst_value = self.engine.cpu.read_xmm(dst_reg);
@@ -5164,7 +5164,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             _ => {
                 return Err(EmulatorError::UnsupportedInstruction(
                     "Invalid operand size".to_string(),
-                ))
+                ));
             }
         };
 
@@ -5489,7 +5489,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
                     return Err(EmulatorError::UnsupportedInstruction(format!(
                         "Unsupported BSR operand size: {}",
                         size
-                    )))
+                    )));
                 }
             };
 
@@ -5876,7 +5876,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
                 return Err(EmulatorError::UnsupportedInstruction(format!(
                     "Unsupported size: {}",
                     size
-                )))
+                )));
             }
         };
 
@@ -5967,7 +5967,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
                 return Err(EmulatorError::UnsupportedInstruction(format!(
                     "Unsupported size: {}",
                     size
-                )))
+                )));
             }
         };
 
@@ -6354,7 +6354,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             _ => {
                 return Err(EmulatorError::UnsupportedInstruction(
                     "Invalid PSLLW source".to_string(),
-                ))
+                ));
             }
         };
 
@@ -6393,7 +6393,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             _ => {
                 return Err(EmulatorError::UnsupportedInstruction(
                     "Invalid PSLLD source".to_string(),
-                ))
+                ));
             }
         };
 
@@ -6432,7 +6432,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             _ => {
                 return Err(EmulatorError::UnsupportedInstruction(
                     "Invalid PSLLQ source".to_string(),
-                ))
+                ));
             }
         };
 
@@ -6471,7 +6471,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             _ => {
                 return Err(EmulatorError::UnsupportedInstruction(
                     "Invalid PSRLW source".to_string(),
-                ))
+                ));
             }
         };
 
@@ -6510,7 +6510,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             _ => {
                 return Err(EmulatorError::UnsupportedInstruction(
                     "Invalid PSRLD source".to_string(),
-                ))
+                ));
             }
         };
 
@@ -6549,7 +6549,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             _ => {
                 return Err(EmulatorError::UnsupportedInstruction(
                     "Invalid PSRLQ source".to_string(),
-                ))
+                ));
             }
         };
 
@@ -6588,7 +6588,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             _ => {
                 return Err(EmulatorError::UnsupportedInstruction(
                     "Invalid PSRAW source".to_string(),
-                ))
+                ));
             }
         };
 
@@ -6626,7 +6626,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             _ => {
                 return Err(EmulatorError::UnsupportedInstruction(
                     "Invalid PSRAD source".to_string(),
-                ))
+                ));
             }
         };
 
@@ -6661,7 +6661,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             _ => {
                 return Err(EmulatorError::UnsupportedInstruction(
                     "Invalid PACKSSWB source".to_string(),
-                ))
+                ));
             }
         };
 
@@ -6713,7 +6713,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             _ => {
                 return Err(EmulatorError::UnsupportedInstruction(
                     "Invalid PACKUSWB source".to_string(),
-                ))
+                ));
             }
         };
 
@@ -6766,7 +6766,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             _ => {
                 return Err(EmulatorError::UnsupportedInstruction(
                     "Invalid PMADDWD source".to_string(),
-                ))
+                ));
             }
         };
 
@@ -6809,7 +6809,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             _ => {
                 return Err(EmulatorError::UnsupportedInstruction(
                     "Invalid PACKSSDW source".to_string(),
-                ))
+                ));
             }
         };
 
@@ -6861,7 +6861,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             _ => {
                 return Err(EmulatorError::UnsupportedInstruction(
                     "Invalid PUNPCKLBW source".to_string(),
-                ))
+                ));
             }
         };
 
@@ -6897,7 +6897,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             _ => {
                 return Err(EmulatorError::UnsupportedInstruction(
                     "Invalid PUNPCKHBW source".to_string(),
-                ))
+                ));
             }
         };
 
@@ -6933,7 +6933,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             _ => {
                 return Err(EmulatorError::UnsupportedInstruction(
                     "Invalid PUNPCKHWD source".to_string(),
-                ))
+                ));
             }
         };
 
@@ -6969,7 +6969,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             _ => {
                 return Err(EmulatorError::UnsupportedInstruction(
                     "Invalid PUNPCKLDQ source".to_string(),
-                ))
+                ));
             }
         };
 
@@ -7006,7 +7006,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             _ => {
                 return Err(EmulatorError::UnsupportedInstruction(
                     "Invalid PUNPCKHDQ source".to_string(),
-                ))
+                ));
             }
         };
 
@@ -7043,7 +7043,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             _ => {
                 return Err(EmulatorError::UnsupportedInstruction(
                     "Invalid PUNPCKLQDQ source".to_string(),
-                ))
+                ));
             }
         };
 
@@ -7071,7 +7071,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             _ => {
                 return Err(EmulatorError::UnsupportedInstruction(
                     "Invalid PUNPCKHQDQ source".to_string(),
-                ))
+                ));
             }
         };
 
@@ -7099,7 +7099,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             _ => {
                 return Err(EmulatorError::UnsupportedInstruction(
                     "Invalid PMOVSXBW source".to_string(),
-                ))
+                ));
             }
         };
 
@@ -7129,7 +7129,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             _ => {
                 return Err(EmulatorError::UnsupportedInstruction(
                     "Invalid PMOVSXBD source".to_string(),
-                ))
+                ));
             }
         };
 
@@ -7160,7 +7160,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             _ => {
                 return Err(EmulatorError::UnsupportedInstruction(
                     "Invalid PMOVSXBQ source".to_string(),
-                ))
+                ));
             }
         };
 
@@ -7190,7 +7190,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             _ => {
                 return Err(EmulatorError::UnsupportedInstruction(
                     "Invalid PMOVSXWD source".to_string(),
-                ))
+                ));
             }
         };
 
@@ -7220,7 +7220,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             _ => {
                 return Err(EmulatorError::UnsupportedInstruction(
                     "Invalid PMOVSXWQ source".to_string(),
-                ))
+                ));
             }
         };
 
@@ -7250,7 +7250,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             _ => {
                 return Err(EmulatorError::UnsupportedInstruction(
                     "Invalid PMOVSXDQ source".to_string(),
-                ))
+                ));
             }
         };
 
@@ -7280,7 +7280,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             _ => {
                 return Err(EmulatorError::UnsupportedInstruction(
                     "Invalid PMOVZXBW source".to_string(),
-                ))
+                ));
             }
         };
 
@@ -7309,7 +7309,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             _ => {
                 return Err(EmulatorError::UnsupportedInstruction(
                     "Invalid PMOVZXBD source".to_string(),
-                ))
+                ));
             }
         };
 
@@ -7339,7 +7339,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             _ => {
                 return Err(EmulatorError::UnsupportedInstruction(
                     "Invalid PMOVZXBQ source".to_string(),
-                ))
+                ));
             }
         };
 
@@ -7368,7 +7368,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             _ => {
                 return Err(EmulatorError::UnsupportedInstruction(
                     "Invalid PMOVZXWD source".to_string(),
-                ))
+                ));
             }
         };
 
@@ -7397,7 +7397,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             _ => {
                 return Err(EmulatorError::UnsupportedInstruction(
                     "Invalid PMOVZXWQ source".to_string(),
-                ))
+                ));
             }
         };
 
@@ -7426,7 +7426,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             _ => {
                 return Err(EmulatorError::UnsupportedInstruction(
                     "Invalid PMOVZXDQ source".to_string(),
-                ))
+                ));
             }
         };
 

@@ -1,4 +1,4 @@
-use remu64::{memory::MemoryTrait as _, Engine, EngineMode, Permission, Register};
+use remu64::{Engine, EngineMode, Permission, Register, memory::MemoryTrait as _};
 
 #[test]
 fn test_cmpps_equal() {
@@ -104,7 +104,7 @@ fn test_cmpss_equal() {
     // Check result - only lowest 32 bits should be affected
     let result = emu.xmm_read(Register::XMM0);
     assert_eq!(result & 0xFFFFFFFF, 0xFFFFFFFF); // Equal, so all 1s
-                                                 // Upper bits should remain unchanged
+    // Upper bits should remain unchanged
     assert_eq!((result >> 32) & 0xFFFFFFFF, 99.0_f32.to_bits() as u128);
     assert_eq!((result >> 64) & 0xFFFFFFFF, 88.0_f32.to_bits() as u128);
     assert_eq!((result >> 96) & 0xFFFFFFFF, 77.0_f32.to_bits() as u128);

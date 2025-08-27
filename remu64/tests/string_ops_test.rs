@@ -1,7 +1,7 @@
 use remu64::{
+    Engine, EngineMode,
     cpu::Register,
     memory::{MemoryTrait as _, Permission},
-    Engine, EngineMode,
 };
 
 #[test]

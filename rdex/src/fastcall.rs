@@ -1,6 +1,6 @@
 use crate::vm_context::VMContext;
 use anyhow::Result;
-use remu64::{memory::MemoryTrait, Engine, Register};
+use remu64::{Engine, Register, memory::MemoryTrait};
 
 #[derive(Debug, Clone, Copy)]
 pub struct FName {

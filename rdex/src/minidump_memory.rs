@@ -1,7 +1,7 @@
 use minidump::{MmapMinidump, UnifiedMemory};
 use remu64::{
-    memory::{MemoryRegionTrait, MemoryTrait},
     EmulatorError, Permission, Result,
+    memory::{MemoryRegionTrait, MemoryTrait},
 };
 use std::{collections::BTreeMap, ops::Range};
 

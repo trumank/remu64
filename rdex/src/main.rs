@@ -47,7 +47,9 @@ fn main() -> Result<()> {
     }
 
     let Some(function_address_str) = &cli.function_address else {
-        println!("No function address specified. Use the function_address argument to specify a function address to execute.");
+        println!(
+            "No function address specified. Use the function_address argument to specify a function address to execute."
+        );
         return Ok(());
     };
 

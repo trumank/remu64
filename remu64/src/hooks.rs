@@ -1,6 +1,6 @@
+use crate::Engine;
 use crate::error::Result;
 use crate::memory::MemoryTrait;
-use crate::Engine;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum HookType {

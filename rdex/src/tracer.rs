@@ -5,7 +5,7 @@ use iced_x86::{
     Decoder, DecoderOptions, Formatter, FormatterOutput, FormatterTextKind, Instruction,
     IntelFormatter,
 };
-use remu64::{memory::MemoryTrait, Engine, Register};
+use remu64::{Engine, Register, memory::MemoryTrait};
 use std::io::Write;
 
 struct ColorFormatterOutput {
@@ -239,11 +239,11 @@ impl InstructionTracer {
                     _ => None,
                 };
 
-                if let Some((name, value)) = reg_info {
-                    if seen_registers.insert(reg) {
-                        used_registers
-                            .push(format!("{}={:016x}", name, value).bright_blue().to_string());
-                    }
+                if let Some((name, value)) = reg_info
+                    && seen_registers.insert(reg)
+                {
+                    used_registers
+                        .push(format!("{}={:016x}", name, value).bright_blue().to_string());
                 }
             }
 

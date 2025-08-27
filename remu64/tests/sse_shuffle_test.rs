@@ -1,4 +1,4 @@
-use remu64::{memory::MemoryTrait as _, Engine, EngineMode, Permission, Register};
+use remu64::{Engine, EngineMode, Permission, Register, memory::MemoryTrait as _};
 
 #[test]
 fn test_shufps() {
@@ -21,14 +21,14 @@ fn test_shufps() {
     // XMM0 = [1.0, 2.0, 3.0, 4.0]
     // XMM1 = [5.0, 6.0, 7.0, 8.0]
     let mut xmm0_val = 0u128;
-    xmm0_val |= (1.0f32.to_bits() as u128);
+    xmm0_val |= 1.0f32.to_bits() as u128;
     xmm0_val |= (2.0f32.to_bits() as u128) << 32;
     xmm0_val |= (3.0f32.to_bits() as u128) << 64;
     xmm0_val |= (4.0f32.to_bits() as u128) << 96;
     engine.xmm_write(Register::XMM0, xmm0_val);
 
     let mut xmm1_val = 0u128;
-    xmm1_val |= (5.0f32.to_bits() as u128);
+    xmm1_val |= 5.0f32.to_bits() as u128;
     xmm1_val |= (6.0f32.to_bits() as u128) << 32;
     xmm1_val |= (7.0f32.to_bits() as u128) << 64;
     xmm1_val |= (8.0f32.to_bits() as u128) << 96;
@@ -71,14 +71,14 @@ fn test_unpcklps() {
     // XMM0 = [1.0, 2.0, 3.0, 4.0]
     // XMM1 = [5.0, 6.0, 7.0, 8.0]
     let mut xmm0_val = 0u128;
-    xmm0_val |= (1.0f32.to_bits() as u128);
+    xmm0_val |= 1.0f32.to_bits() as u128;
     xmm0_val |= (2.0f32.to_bits() as u128) << 32;
     xmm0_val |= (3.0f32.to_bits() as u128) << 64;
     xmm0_val |= (4.0f32.to_bits() as u128) << 96;
     engine.xmm_write(Register::XMM0, xmm0_val);
 
     let mut xmm1_val = 0u128;
-    xmm1_val |= (5.0f32.to_bits() as u128);
+    xmm1_val |= 5.0f32.to_bits() as u128;
     xmm1_val |= (6.0f32.to_bits() as u128) << 32;
     xmm1_val |= (7.0f32.to_bits() as u128) << 64;
     xmm1_val |= (8.0f32.to_bits() as u128) << 96;
@@ -117,14 +117,14 @@ fn test_unpckhps() {
     // XMM0 = [1.0, 2.0, 3.0, 4.0]
     // XMM1 = [5.0, 6.0, 7.0, 8.0]
     let mut xmm0_val = 0u128;
-    xmm0_val |= (1.0f32.to_bits() as u128);
+    xmm0_val |= 1.0f32.to_bits() as u128;
     xmm0_val |= (2.0f32.to_bits() as u128) << 32;
     xmm0_val |= (3.0f32.to_bits() as u128) << 64;
     xmm0_val |= (4.0f32.to_bits() as u128) << 96;
     engine.xmm_write(Register::XMM0, xmm0_val);
 
     let mut xmm1_val = 0u128;
-    xmm1_val |= (5.0f32.to_bits() as u128);
+    xmm1_val |= 5.0f32.to_bits() as u128;
     xmm1_val |= (6.0f32.to_bits() as u128) << 32;
     xmm1_val |= (7.0f32.to_bits() as u128) << 64;
     xmm1_val |= (8.0f32.to_bits() as u128) << 96;
@@ -166,12 +166,12 @@ fn test_shufpd() {
     // XMM0 = [1.0, 2.0]
     // XMM1 = [3.0, 4.0]
     let mut xmm0_val = 0u128;
-    xmm0_val |= (1.0f64.to_bits() as u128);
+    xmm0_val |= 1.0f64.to_bits() as u128;
     xmm0_val |= (2.0f64.to_bits() as u128) << 64;
     engine.xmm_write(Register::XMM0, xmm0_val);
 
     let mut xmm1_val = 0u128;
-    xmm1_val |= (3.0f64.to_bits() as u128);
+    xmm1_val |= 3.0f64.to_bits() as u128;
     xmm1_val |= (4.0f64.to_bits() as u128) << 64;
     engine.xmm_write(Register::XMM1, xmm1_val);
 
@@ -208,12 +208,12 @@ fn test_unpcklpd() {
     // XMM0 = [1.0, 2.0]
     // XMM1 = [3.0, 4.0]
     let mut xmm0_val = 0u128;
-    xmm0_val |= (1.0f64.to_bits() as u128);
+    xmm0_val |= 1.0f64.to_bits() as u128;
     xmm0_val |= (2.0f64.to_bits() as u128) << 64;
     engine.xmm_write(Register::XMM0, xmm0_val);
 
     let mut xmm1_val = 0u128;
-    xmm1_val |= (3.0f64.to_bits() as u128);
+    xmm1_val |= 3.0f64.to_bits() as u128;
     xmm1_val |= (4.0f64.to_bits() as u128) << 64;
     engine.xmm_write(Register::XMM1, xmm1_val);
 
@@ -248,12 +248,12 @@ fn test_unpckhpd() {
     // XMM0 = [1.0, 2.0]
     // XMM1 = [3.0, 4.0]
     let mut xmm0_val = 0u128;
-    xmm0_val |= (1.0f64.to_bits() as u128);
+    xmm0_val |= 1.0f64.to_bits() as u128;
     xmm0_val |= (2.0f64.to_bits() as u128) << 64;
     engine.xmm_write(Register::XMM0, xmm0_val);
 
     let mut xmm1_val = 0u128;
-    xmm1_val |= (3.0f64.to_bits() as u128);
+    xmm1_val |= 3.0f64.to_bits() as u128;
     xmm1_val |= (4.0f64.to_bits() as u128) << 64;
     engine.xmm_write(Register::XMM1, xmm1_val);
 

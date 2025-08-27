@@ -1,4 +1,4 @@
-use remu64::{memory::MemoryTrait as _, Engine, EngineMode, Permission, Register};
+use remu64::{Engine, EngineMode, Permission, Register, memory::MemoryTrait as _};
 
 #[test]
 fn test_packsswb() {
@@ -133,14 +133,12 @@ fn test_packuswb() {
     // Expected: unsigned bytes from xmm0 (low) and xmm1 (high)
     // xmm0 -> 0xFF, 0xFF, 0x00, 0x00, 0x80, 0x00, 0xFE, 0xFF
     // xmm1 -> 0x01, 0x00, 0xFF, 0x00, 0x50, 0x00, 0xC8, 0xFF
-    let expected = (((0xFFu128 | (0xFFu128 << 8)) | (0x80u128 << 32))
+    let expected = (((((0xFFu128 | (0xFFu128 << 8)) | (0x80u128 << 32))
         | (0xFEu128 << 48)
         | (0xFFu128 << 56)
         | (0x01u128 << 64))
-        | (0xFFu128 << 80)
-        | (0x00u128 << 88)
-        | (0x50u128 << 96)
-        | (0x00u128 << 104)
+        | (0xFFu128 << 80))
+        | (0x50u128 << 96))
         | (0xC8u128 << 112)
         | (0xFFu128 << 120);
 

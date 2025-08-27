@@ -1,4 +1,4 @@
-use remu64::{memory::MemoryTrait as _, Engine, EngineMode, Permission, Register};
+use remu64::{Engine, EngineMode, Permission, Register, memory::MemoryTrait as _};
 
 fn main() {
     let mut engine = Engine::new(EngineMode::Mode64);

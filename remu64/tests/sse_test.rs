@@ -1,4 +1,4 @@
-use remu64::{memory::MemoryTrait as _, Engine, EngineMode, Permission, Register};
+use remu64::{Engine, EngineMode, Permission, Register, memory::MemoryTrait as _};
 
 #[test]
 fn test_movaps() {
@@ -76,7 +76,7 @@ fn test_addps() {
     let mut state = engine.context_save();
 
     let mut xmm0_val = 0u128;
-    xmm0_val |= (1.0f32.to_bits() as u128);
+    xmm0_val |= 1.0f32.to_bits() as u128;
     xmm0_val |= (2.0f32.to_bits() as u128) << 32;
     xmm0_val |= (3.0f32.to_bits() as u128) << 64;
     xmm0_val |= (4.0f32.to_bits() as u128) << 96;
@@ -84,7 +84,7 @@ fn test_addps() {
     state.ymm_regs[0][1] = 0;
 
     let mut xmm1_val = 0u128;
-    xmm1_val |= (5.0f32.to_bits() as u128);
+    xmm1_val |= 5.0f32.to_bits() as u128;
     xmm1_val |= (6.0f32.to_bits() as u128) << 32;
     xmm1_val |= (7.0f32.to_bits() as u128) << 64;
     xmm1_val |= (8.0f32.to_bits() as u128) << 96;
@@ -127,7 +127,7 @@ fn test_subps() {
     let mut state = engine.context_save();
 
     let mut xmm0_val = 0u128;
-    xmm0_val |= (10.0f32.to_bits() as u128);
+    xmm0_val |= 10.0f32.to_bits() as u128;
     xmm0_val |= (20.0f32.to_bits() as u128) << 32;
     xmm0_val |= (30.0f32.to_bits() as u128) << 64;
     xmm0_val |= (40.0f32.to_bits() as u128) << 96;
@@ -135,7 +135,7 @@ fn test_subps() {
     state.ymm_regs[0][1] = 0;
 
     let mut xmm1_val = 0u128;
-    xmm1_val |= (5.0f32.to_bits() as u128);
+    xmm1_val |= 5.0f32.to_bits() as u128;
     xmm1_val |= (10.0f32.to_bits() as u128) << 32;
     xmm1_val |= (15.0f32.to_bits() as u128) << 64;
     xmm1_val |= (20.0f32.to_bits() as u128) << 96;
@@ -178,7 +178,7 @@ fn test_mulps() {
     let mut state = engine.context_save();
 
     let mut xmm0_val = 0u128;
-    xmm0_val |= (2.0f32.to_bits() as u128);
+    xmm0_val |= 2.0f32.to_bits() as u128;
     xmm0_val |= (3.0f32.to_bits() as u128) << 32;
     xmm0_val |= (4.0f32.to_bits() as u128) << 64;
     xmm0_val |= (5.0f32.to_bits() as u128) << 96;
@@ -186,7 +186,7 @@ fn test_mulps() {
     state.ymm_regs[0][1] = 0;
 
     let mut xmm1_val = 0u128;
-    xmm1_val |= (3.0f32.to_bits() as u128);
+    xmm1_val |= 3.0f32.to_bits() as u128;
     xmm1_val |= (4.0f32.to_bits() as u128) << 32;
     xmm1_val |= (5.0f32.to_bits() as u128) << 64;
     xmm1_val |= (6.0f32.to_bits() as u128) << 96;
@@ -229,7 +229,7 @@ fn test_divps() {
     let mut state = engine.context_save();
 
     let mut xmm0_val = 0u128;
-    xmm0_val |= (10.0f32.to_bits() as u128);
+    xmm0_val |= 10.0f32.to_bits() as u128;
     xmm0_val |= (20.0f32.to_bits() as u128) << 32;
     xmm0_val |= (30.0f32.to_bits() as u128) << 64;
     xmm0_val |= (40.0f32.to_bits() as u128) << 96;
@@ -237,7 +237,7 @@ fn test_divps() {
     state.ymm_regs[0][1] = 0;
 
     let mut xmm1_val = 0u128;
-    xmm1_val |= (2.0f32.to_bits() as u128);
+    xmm1_val |= 2.0f32.to_bits() as u128;
     xmm1_val |= (4.0f32.to_bits() as u128) << 32;
     xmm1_val |= (5.0f32.to_bits() as u128) << 64;
     xmm1_val |= (8.0f32.to_bits() as u128) << 96;

@@ -1,4 +1,4 @@
-use remu64::{memory::MemoryTrait, Engine, EngineMode, Permission, Register};
+use remu64::{Engine, EngineMode, Permission, Register, memory::MemoryTrait};
 
 #[test]
 fn test_mov_instruction() {
