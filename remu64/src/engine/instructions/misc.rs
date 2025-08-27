@@ -4,7 +4,7 @@ use crate::memory::MemoryTrait;
 use crate::{Flags, HookManager, Register};
 use iced_x86::{Instruction, OpKind};
 
-impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
+impl<H: HookManager<M, PS>, M: MemoryTrait<PS>, const PS: u64> ExecutionContext<'_, H, M, PS> {
     pub(crate) fn execute_cdq(&mut self, _inst: &Instruction) -> Result<()> {
         // CDQ: Sign-extend EAX into EDX:EAX (32-bit version)
         // If EAX high bit is set, EDX = 0xFFFFFFFF, else EDX = 0

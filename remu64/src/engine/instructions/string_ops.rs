@@ -4,7 +4,7 @@ use crate::memory::MemoryTrait;
 use crate::{Flags, HookManager, Register};
 use iced_x86::Instruction;
 
-impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
+impl<H: HookManager<M, PS>, M: MemoryTrait<PS>, const PS: u64> ExecutionContext<'_, H, M, PS> {
     pub(crate) fn execute_movsb(&mut self, inst: &Instruction) -> Result<()> {
         // MOVSB: Move Byte from [RSI] to [RDI]
         let count = if inst.has_rep_prefix() || inst.has_repne_prefix() {

@@ -2,6 +2,7 @@
 
 mod instructions;
 
+use crate::DEFAULT_PAGE_SIZE;
 use crate::OwnedMemory;
 use crate::cpu::{CpuState, Flags, Register};
 use crate::error::{EmulatorError, Result};
@@ -16,13 +17,13 @@ pub enum EngineMode {
     Mode64,
 }
 
-pub struct Engine<M: MemoryTrait> {
+pub struct Engine<M: MemoryTrait<PS>, const PS: u64 = DEFAULT_PAGE_SIZE> {
     pub cpu: CpuState,
     pub memory: M,
     mode: EngineMode,
 }
 
-impl Engine<OwnedMemory> {
+impl Engine<OwnedMemory, DEFAULT_PAGE_SIZE> {
     pub fn new(mode: EngineMode) -> Self {
         Self {
             cpu: CpuState::new(),
@@ -31,7 +32,7 @@ impl Engine<OwnedMemory> {
         }
     }
 }
-impl<M: MemoryTrait> Engine<M> {
+impl<M: MemoryTrait<PS>, const PS: u64> Engine<M, PS> {
     pub fn new_memory(mode: EngineMode, memory: M) -> Self {
         Self {
             cpu: CpuState::new(),
@@ -86,7 +87,7 @@ impl<M: MemoryTrait> Engine<M> {
         self.emu_start_with_hooks(begin, until, timeout, count, &mut no_hooks)
     }
 
-    pub fn emu_start_with_hooks<H: HookManager<M>>(
+    pub fn emu_start_with_hooks<H: HookManager<M, PS>>(
         &mut self,
         begin: u64,
         until: u64,
@@ -102,12 +103,12 @@ impl<M: MemoryTrait> Engine<M> {
     }
 }
 
-struct ExecutionContext<'a, H: HookManager<M>, M: MemoryTrait> {
-    engine: &'a mut Engine<M>,
+struct ExecutionContext<'a, H: HookManager<M, PS>, M: MemoryTrait<PS>, const PS: u64> {
+    engine: &'a mut Engine<M, PS>,
     hooks: &'a mut H,
 }
 
-impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
+impl<H: HookManager<M, PS>, M: MemoryTrait<PS>, const PS: u64> ExecutionContext<'_, H, M, PS> {
     /// Start emulation with custom hooks
     fn emu_start(&mut self, begin: u64, until: u64, timeout: u64, count: usize) -> Result<()> {
         self.engine.cpu.rip = begin;
@@ -234,7 +235,6 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         rip: u64,
         bitness: u32,
     ) -> Result<Instruction> {
-        const PAGE_SIZE: u64 = 4096;
         const CHUNK_SIZE: usize = 16;
 
         let mut inst_bytes = vec![];
@@ -245,8 +245,8 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             let next_addr = rip + inst_bytes.len() as u64;
 
             // Calculate how many bytes we can read until the next page boundary
-            let page_start = next_addr & !(PAGE_SIZE - 1);
-            let page_end = page_start + PAGE_SIZE;
+            let page_start = next_addr & !(PS - 1);
+            let page_end = page_start + PS;
             let bytes_until_page_boundary = (page_end - next_addr) as usize;
 
             // Read either 16 bytes or until page boundary, whichever is smaller

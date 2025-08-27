@@ -4,7 +4,7 @@ use crate::error::{EmulatorError, Result};
 use crate::memory::MemoryTrait;
 use iced_x86::{Instruction, OpKind};
 
-impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
+impl<H: HookManager<M, PS>, M: MemoryTrait<PS>, const PS: u64> ExecutionContext<'_, H, M, PS> {
     pub(crate) fn execute_pmovmskb(&mut self, inst: &Instruction) -> Result<()> {
         // PMOVMSKB: Move Byte Mask
         // Creates a 16-bit mask from the most significant bits of each byte in an XMM register

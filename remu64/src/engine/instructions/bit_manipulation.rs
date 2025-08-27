@@ -4,7 +4,7 @@ use crate::memory::MemoryTrait;
 use crate::{Flags, HookManager};
 use iced_x86::Instruction;
 
-impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
+impl<H: HookManager<M, PS>, M: MemoryTrait<PS>, const PS: u64> ExecutionContext<'_, H, M, PS> {
     pub(crate) fn execute_bt(&mut self, inst: &Instruction) -> Result<()> {
         // BT: Bit Test - Test bit in first operand by second operand, set CF accordingly
         let bit_base = self.read_operand(inst, 0)?;

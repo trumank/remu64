@@ -4,7 +4,7 @@ use crate::error::{EmulatorError, Result};
 use crate::memory::MemoryTrait;
 use iced_x86::{Instruction, OpKind};
 
-impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
+impl<H: HookManager<M, PS>, M: MemoryTrait<PS>, const PS: u64> ExecutionContext<'_, H, M, PS> {
     pub(crate) fn execute_vaddps(&mut self, inst: &Instruction) -> Result<()> {
         // VADDPS - Vector Add Packed Single-Precision Floating-Point Values
         // VEX.256: VADDPS ymm1, ymm2, ymm3/m256

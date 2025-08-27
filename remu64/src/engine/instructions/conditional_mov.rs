@@ -4,7 +4,7 @@ use crate::memory::MemoryTrait;
 use crate::{Flags, HookManager};
 use iced_x86::Instruction;
 
-impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
+impl<H: HookManager<M, PS>, M: MemoryTrait<PS>, const PS: u64> ExecutionContext<'_, H, M, PS> {
     pub(crate) fn execute_cmovb(&mut self, inst: &Instruction) -> Result<()> {
         // CMOVB: Conditional move if below (CF=1)
         let cf = self.engine.cpu.rflags.contains(Flags::CF);

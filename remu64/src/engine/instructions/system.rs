@@ -4,7 +4,7 @@ use crate::memory::MemoryTrait;
 use crate::{HookManager, Register};
 use iced_x86::{Instruction, OpKind, Register as IcedRegister};
 
-impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
+impl<H: HookManager<M, PS>, M: MemoryTrait<PS>, const PS: u64> ExecutionContext<'_, H, M, PS> {
     pub(crate) fn execute_cpuid(&mut self, _inst: &Instruction) -> Result<()> {
         // CPUID: CPU Identification
         // Input: EAX = function number, ECX = sub-function (for some functions)

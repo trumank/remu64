@@ -4,7 +4,7 @@ use crate::error::{EmulatorError, Result};
 use crate::memory::MemoryTrait;
 use iced_x86::{Instruction, OpKind};
 
-impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
+impl<H: HookManager<M, PS>, M: MemoryTrait<PS>, const PS: u64> ExecutionContext<'_, H, M, PS> {
     pub(crate) fn execute_punpcklwd(&mut self, inst: &Instruction) -> Result<()> {
         // PUNPCKLWD: Unpack and interleave low words
         // For XMM registers: takes low 4 words (64 bits) from each operand and interleaves them

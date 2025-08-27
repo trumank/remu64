@@ -4,7 +4,7 @@ use crate::error::{EmulatorError, Result};
 use crate::memory::MemoryTrait;
 use iced_x86::{Instruction, OpKind};
 
-impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
+impl<H: HookManager<M, PS>, M: MemoryTrait<PS>, const PS: u64> ExecutionContext<'_, H, M, PS> {
     pub(crate) fn execute_test(&mut self, inst: &Instruction) -> Result<()> {
         let src1 = self.read_operand(inst, 0)?;
         let src2 = self.read_operand(inst, 1)?;

@@ -1,4 +1,4 @@
-use remu64::{Engine, EngineMode, Permission, Register, memory::MemoryTrait};
+use remu64::{DEFAULT_PAGE_SIZE, Engine, EngineMode, Permission, Register, memory::MemoryTrait};
 
 #[test]
 fn test_instruction_near_page_end() {
@@ -6,10 +6,9 @@ fn test_instruction_near_page_end() {
 
     // Map a single page for code
     let code_base = 0x1000;
-    let page_size = 0x1000u64; // 4KB page
     engine
         .memory
-        .map(code_base, page_size as usize, Permission::ALL)
+        .map(code_base, DEFAULT_PAGE_SIZE as usize, Permission::ALL)
         .unwrap();
 
     // Place a multi-byte instruction very close to the end of the page
@@ -17,7 +16,7 @@ fn test_instruction_near_page_end() {
     let instruction = vec![0x48, 0xB8, 0xEF, 0xCD, 0xAB, 0x90, 0x78, 0x56, 0x34, 0x12];
 
     // Place instruction so it ends exactly at page boundary
-    let instruction_addr = code_base + page_size - instruction.len() as u64;
+    let instruction_addr = code_base + DEFAULT_PAGE_SIZE - instruction.len() as u64;
 
     engine
         .memory
@@ -49,15 +48,14 @@ fn test_instruction_crossing_page_boundary() {
     // Map two consecutive pages
     let page1_base = 0x1000;
     let page2_base = 0x2000;
-    let page_size = 0x1000u64;
 
     engine
         .memory
-        .map(page1_base, page_size as usize, Permission::ALL)
+        .map(page1_base, DEFAULT_PAGE_SIZE as usize, Permission::ALL)
         .unwrap();
     engine
         .memory
-        .map(page2_base, page_size as usize, Permission::ALL)
+        .map(page2_base, DEFAULT_PAGE_SIZE as usize, Permission::ALL)
         .unwrap();
 
     // Place a multi-byte instruction that spans across the page boundary
@@ -96,16 +94,15 @@ fn test_instruction_at_end_of_mapped_memory() {
 
     // Map memory region
     let mem_base = 0x10000;
-    let mem_size = 0x1000u64; // 4KB
     engine
         .memory
-        .map(mem_base, mem_size as usize, Permission::ALL)
+        .map(mem_base, DEFAULT_PAGE_SIZE as usize, Permission::ALL)
         .unwrap();
 
     // Place instruction at the very end of mapped memory
     // Using a 3-byte instruction: inc rax (0x48, 0xFF, 0xC0)
     let instruction = vec![0x48, 0xFF, 0xC0];
-    let instruction_addr = mem_base + mem_size - instruction.len() as u64;
+    let instruction_addr = mem_base + DEFAULT_PAGE_SIZE - instruction.len() as u64;
 
     engine
         .memory
@@ -140,15 +137,14 @@ fn test_jump_near_page_boundary() {
     // Map two pages
     let page1_base = 0x1000;
     let page2_base = 0x2000;
-    let page_size = 0x1000u64;
 
     engine
         .memory
-        .map(page1_base, page_size as usize, Permission::ALL)
+        .map(page1_base, DEFAULT_PAGE_SIZE as usize, Permission::ALL)
         .unwrap();
     engine
         .memory
-        .map(page2_base, page_size as usize, Permission::ALL)
+        .map(page2_base, DEFAULT_PAGE_SIZE as usize, Permission::ALL)
         .unwrap();
 
     // Code that jumps from near end of first page to second page
@@ -190,15 +186,14 @@ fn test_memory_access_near_page_boundary() {
     // Map code page and data page
     let code_base = 0x1000;
     let data_base = 0x2000;
-    let page_size = 0x1000u64;
 
     engine
         .memory
-        .map(code_base, page_size as usize, Permission::ALL)
+        .map(code_base, DEFAULT_PAGE_SIZE as usize, Permission::ALL)
         .unwrap();
     engine
         .memory
-        .map(data_base, page_size as usize, Permission::ALL)
+        .map(data_base, DEFAULT_PAGE_SIZE as usize, Permission::ALL)
         .unwrap();
 
     // Code that accesses memory near page boundary
@@ -210,7 +205,7 @@ fn test_memory_access_near_page_boundary() {
     engine.memory.write_code(code_base, &code).unwrap();
 
     // Set RAX to point near end of data page (but still within bounds)
-    let data_addr = data_base + page_size - 8; // 8 bytes from end for qword access
+    let data_addr = data_base + DEFAULT_PAGE_SIZE - 8; // 8 bytes from end for qword access
     engine.reg_write(Register::RAX, data_addr);
 
     // Execute the memory access instructions
@@ -233,10 +228,10 @@ fn test_instruction_sequence_across_pages() {
 
     // Map multiple pages to test instruction sequences
     for i in 0..3 {
-        let page_base = 0x1000 + (i * 0x1000);
+        let page_base = 0x1000 + (i * DEFAULT_PAGE_SIZE);
         engine
             .memory
-            .map(page_base, 0x1000, Permission::ALL)
+            .map(page_base, DEFAULT_PAGE_SIZE as usize, Permission::ALL)
             .unwrap();
     }
 
@@ -244,7 +239,7 @@ fn test_instruction_sequence_across_pages() {
     let mut all_code = Vec::new();
 
     // Fill most of first page with NOPs, leaving space for a few instructions
-    let nop_count = 0x1000 - 20; // Leave 20 bytes at end of page
+    let nop_count = DEFAULT_PAGE_SIZE as usize - 20; // Leave 20 bytes at end of page
     all_code.extend(vec![0x90; nop_count]); // NOPs
 
     // Add instructions that will span page boundaries

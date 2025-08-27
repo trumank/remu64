@@ -1,9 +1,7 @@
 use crate::minidump_loader::MinidumpLoader;
 use anyhow::{Context, Result};
-use remu64::{Engine, OwnedMemory};
+use remu64::{DEFAULT_PAGE_SIZE, Engine, OwnedMemory};
 use std::collections::HashMap;
-
-const PAGE_SIZE: u64 = 4096;
 
 #[derive(Debug, Clone)]
 pub struct MemoryPage {
@@ -17,8 +15,8 @@ pub struct MemoryPage {
 impl MemoryPage {
     pub fn new(base_address: u64, size: usize) -> Self {
         MemoryPage {
-            base_address: align_down(base_address, PAGE_SIZE),
-            data: vec![0; align_up(size, PAGE_SIZE as usize)],
+            base_address: align_down(base_address, DEFAULT_PAGE_SIZE),
+            data: vec![0; align_up(size, DEFAULT_PAGE_SIZE as usize)],
             readable: true,
             writable: true,
             executable: false,
@@ -26,8 +24,8 @@ impl MemoryPage {
     }
 
     pub fn from_data(base_address: u64, data: Vec<u8>) -> Self {
-        let aligned_base = align_down(base_address, PAGE_SIZE);
-        let aligned_size = align_up(data.len(), PAGE_SIZE as usize);
+        let aligned_base = align_down(base_address, DEFAULT_PAGE_SIZE);
+        let aligned_size = align_up(data.len(), DEFAULT_PAGE_SIZE as usize);
 
         let mut page_data = vec![0; aligned_size];
         let offset = (base_address - aligned_base) as usize;
@@ -78,28 +76,28 @@ impl<'a> MemoryManager<'a> {
         address: u64,
         _engine: &mut Engine<OwnedMemory>,
     ) -> Result<bool> {
-        let page_base = align_down(address, PAGE_SIZE);
+        let page_base = align_down(address, DEFAULT_PAGE_SIZE);
 
         if self.pages.contains_key(&page_base) {
             return Ok(true);
         }
 
         if let Some(ref loader) = self.minidump_loader {
-            match loader.read_memory(page_base, PAGE_SIZE as usize) {
+            match loader.read_memory(page_base, DEFAULT_PAGE_SIZE as usize) {
                 Ok(data) => {
                     let page = MemoryPage::from_data(page_base, data);
                     self.pages.insert(page_base, page);
                     return Ok(true);
                 }
                 Err(_) => {
-                    let page = MemoryPage::new(page_base, PAGE_SIZE as usize);
+                    let page = MemoryPage::new(page_base, DEFAULT_PAGE_SIZE as usize);
                     self.pages.insert(page_base, page);
                     return Ok(true);
                 }
             }
         }
 
-        let page = MemoryPage::new(page_base, PAGE_SIZE as usize);
+        let page = MemoryPage::new(page_base, DEFAULT_PAGE_SIZE as usize);
         self.pages.insert(page_base, page);
         Ok(true)
     }
@@ -110,25 +108,25 @@ impl<'a> MemoryManager<'a> {
         let mut remaining = size;
 
         while remaining > 0 {
-            let page_base = align_down(current_addr, PAGE_SIZE);
+            let page_base = align_down(current_addr, DEFAULT_PAGE_SIZE);
 
             if !self.pages.contains_key(&page_base) {
                 // Try to load from minidump first
                 if let Some(ref loader) = self.minidump_loader {
-                    match loader.read_memory(page_base, PAGE_SIZE as usize) {
+                    match loader.read_memory(page_base, DEFAULT_PAGE_SIZE as usize) {
                         Ok(data) => {
                             let page = MemoryPage::from_data(page_base, data);
                             self.pages.insert(page_base, page);
                         }
                         Err(_) => {
                             // If minidump doesn't have this memory, create a dummy page
-                            let page = MemoryPage::new(page_base, PAGE_SIZE as usize);
+                            let page = MemoryPage::new(page_base, DEFAULT_PAGE_SIZE as usize);
                             self.pages.insert(page_base, page);
                         }
                     }
                 } else {
                     // No minidump loader, create dummy page
-                    let page = MemoryPage::new(page_base, PAGE_SIZE as usize);
+                    let page = MemoryPage::new(page_base, DEFAULT_PAGE_SIZE as usize);
                     self.pages.insert(page_base, page);
                 }
             }
@@ -146,7 +144,7 @@ impl<'a> MemoryManager<'a> {
             }
 
             let page_offset = (current_addr - page_base) as usize;
-            let bytes_in_page = std::cmp::min(remaining, PAGE_SIZE as usize - page_offset);
+            let bytes_in_page = std::cmp::min(remaining, DEFAULT_PAGE_SIZE as usize - page_offset);
 
             if page_offset + bytes_in_page > page.data.len() {
                 anyhow::bail!("Read would exceed page bounds at 0x{:x}", current_addr);
@@ -166,25 +164,25 @@ impl<'a> MemoryManager<'a> {
         let mut remaining_data = data;
 
         while !remaining_data.is_empty() {
-            let page_base = align_down(current_addr, PAGE_SIZE);
+            let page_base = align_down(current_addr, DEFAULT_PAGE_SIZE);
 
             if !self.pages.contains_key(&page_base) {
                 // Try to load from minidump first
                 if let Some(ref loader) = self.minidump_loader {
-                    match loader.read_memory(page_base, PAGE_SIZE as usize) {
+                    match loader.read_memory(page_base, DEFAULT_PAGE_SIZE as usize) {
                         Ok(data) => {
                             let page = MemoryPage::from_data(page_base, data);
                             self.pages.insert(page_base, page);
                         }
                         Err(_) => {
                             // If minidump doesn't have this memory, create a dummy page
-                            let page = MemoryPage::new(page_base, PAGE_SIZE as usize);
+                            let page = MemoryPage::new(page_base, DEFAULT_PAGE_SIZE as usize);
                             self.pages.insert(page_base, page);
                         }
                     }
                 } else {
                     // No minidump loader, create dummy page
-                    let page = MemoryPage::new(page_base, PAGE_SIZE as usize);
+                    let page = MemoryPage::new(page_base, DEFAULT_PAGE_SIZE as usize);
                     self.pages.insert(page_base, page);
                 }
             }
@@ -202,8 +200,10 @@ impl<'a> MemoryManager<'a> {
             }
 
             let page_offset = (current_addr - page_base) as usize;
-            let bytes_in_page =
-                std::cmp::min(remaining_data.len(), PAGE_SIZE as usize - page_offset);
+            let bytes_in_page = std::cmp::min(
+                remaining_data.len(),
+                DEFAULT_PAGE_SIZE as usize - page_offset,
+            );
 
             if page_offset + bytes_in_page > page.data.len() {
                 anyhow::bail!("Write would exceed page bounds at 0x{:x}", current_addr);
@@ -220,7 +220,7 @@ impl<'a> MemoryManager<'a> {
     }
 
     pub fn map_memory(&mut self, base_address: u64, data: Vec<u8>, executable: bool) -> Result<()> {
-        let aligned_base = align_down(base_address, PAGE_SIZE);
+        let aligned_base = align_down(base_address, DEFAULT_PAGE_SIZE);
         let mut page = MemoryPage::from_data(base_address, data);
         page.executable = executable;
         self.pages.insert(aligned_base, page);
@@ -229,11 +229,11 @@ impl<'a> MemoryManager<'a> {
 
     pub fn allocate_stack(&mut self, size: u64) -> Result<u64> {
         let stack_base = 0x500000u64;
-        let aligned_size = align_up(size as usize, PAGE_SIZE as usize);
+        let aligned_size = align_up(size as usize, DEFAULT_PAGE_SIZE as usize);
 
-        for i in 0..(aligned_size / PAGE_SIZE as usize) {
-            let page_addr = stack_base - ((i + 1) as u64 * PAGE_SIZE);
-            let page = MemoryPage::new(page_addr, PAGE_SIZE as usize);
+        for i in 0..(aligned_size / DEFAULT_PAGE_SIZE as usize) {
+            let page_addr = stack_base - ((i + 1) as u64 * DEFAULT_PAGE_SIZE);
+            let page = MemoryPage::new(page_addr, DEFAULT_PAGE_SIZE as usize);
             self.pages.insert(page_addr, page);
         }
 
@@ -241,7 +241,7 @@ impl<'a> MemoryManager<'a> {
     }
 
     pub fn is_executable(&self, address: u64) -> bool {
-        let page_base = align_down(address, PAGE_SIZE);
+        let page_base = align_down(address, DEFAULT_PAGE_SIZE);
         self.pages
             .get(&page_base)
             .is_some_and(|page| page.executable)

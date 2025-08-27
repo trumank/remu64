@@ -4,7 +4,7 @@ use crate::error::{EmulatorError, Result};
 use crate::memory::MemoryTrait;
 use iced_x86::{Instruction, OpKind};
 
-impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
+impl<H: HookManager<M, PS>, M: MemoryTrait<PS>, const PS: u64> ExecutionContext<'_, H, M, PS> {
     pub(crate) fn execute_addps(&mut self, inst: &Instruction) -> Result<()> {
         // ADDPS: Add Packed Single-Precision Floating-Point Values
         let dst_reg = self.convert_register(inst.op_register(0))?;

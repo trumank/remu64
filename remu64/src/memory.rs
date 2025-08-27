@@ -1,6 +1,25 @@
+use crate::DEFAULT_PAGE_SIZE;
 use crate::error::{EmulatorError, Result};
 use bitflags::bitflags;
 use std::{collections::BTreeMap, ops::Range};
+
+fn assert_valid_region(addr: u64, size: usize, page_size: u64, operation: &str) {
+    assert_eq!(
+        addr & (page_size - 1),
+        0,
+        "{}() addr must be page-aligned: {:#x}",
+        operation,
+        addr
+    );
+    assert!(size > 0, "{}() size must > 0: {:#x}", operation, addr);
+    assert_eq!(
+        size & (page_size as usize - 1),
+        0,
+        "{}() size must be page-aligned: {:#x}",
+        operation,
+        size
+    );
+}
 
 bitflags! {
     #[derive(Debug, Clone, Copy)]
@@ -13,6 +32,11 @@ bitflags! {
     }
 }
 
+/// Trait for memory regions within a memory system.
+///
+/// **IMPORTANT: Memory regions must be aligned to page boundaries.**
+/// The start address returned by `range()` must be page-aligned, and the
+/// region size must be a multiple of the page size.
 pub trait MemoryRegionTrait {
     fn range(&self) -> Range<u64>;
     fn data(&self) -> &[u8];
@@ -31,7 +55,7 @@ pub trait MemoryRegionTrait {
     }
 }
 
-pub trait MemoryTrait {
+pub trait MemoryTrait<const PS: u64 = DEFAULT_PAGE_SIZE> {
     type MemoryRegion: MemoryRegionTrait;
 
     /// Find a memory region containing the given address.
@@ -172,8 +196,25 @@ pub trait MemoryTrait {
         self.write(addr, &value.to_le_bytes())
     }
 
+    /// Map memory at the given address with the specified permissions.
+    ///
+    /// **IMPORTANT: All parameters must be aligned to page boundaries.**
+    /// - `addr` must be page-aligned
+    /// - `size` must be a multiple of the page size
     fn map(&mut self, addr: u64, size: usize, perms: Permission) -> Result<()>;
+
+    /// Unmap memory at the given address.
+    ///
+    /// **IMPORTANT: All parameters must be aligned to page boundaries.**
+    /// - `addr` must be page-aligned
+    /// - `size` must be a multiple of the page size
     fn unmap(&mut self, addr: u64, size: usize) -> Result<()>;
+
+    /// Change memory permissions for the given address range.
+    ///
+    /// **IMPORTANT: All parameters must be aligned to page boundaries.**
+    /// - `addr` must be page-aligned
+    /// - `size` must be a multiple of the page size
     fn protect(&mut self, addr: u64, size: usize, perms: Permission) -> Result<()>;
 
     // fn regions(&self) -> impl Iterator<Item = &MemoryRegion>;
@@ -205,6 +246,8 @@ impl MemoryRegionTrait for MemoryRegion {
 
 impl MemoryRegion {
     pub fn new(start: u64, size: usize, perms: Permission) -> Self {
+        assert_valid_region(start, size, DEFAULT_PAGE_SIZE, "MemoryRegion::new");
+
         Self {
             start,
             end: start + size as u64,
@@ -214,22 +257,20 @@ impl MemoryRegion {
     }
 }
 
-pub struct OwnedMemory {
+pub struct OwnedMemory<const PS: u64 = DEFAULT_PAGE_SIZE> {
     regions: BTreeMap<u64, MemoryRegion>,
-    page_size: usize,
 }
 
-impl Default for OwnedMemory {
+impl<const PS: u64> Default for OwnedMemory<PS> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl OwnedMemory {
+impl<const PS: u64> OwnedMemory<PS> {
     pub fn new() -> Self {
         Self {
             regions: BTreeMap::new(),
-            page_size: 4096,
         }
     }
     pub fn regions(&self) -> impl Iterator<Item = &MemoryRegion> {
@@ -237,7 +278,7 @@ impl OwnedMemory {
     }
 }
 
-impl MemoryTrait for OwnedMemory {
+impl<const PS: u64> MemoryTrait<PS> for OwnedMemory<PS> {
     type MemoryRegion = MemoryRegion;
 
     fn find_region(&self, addr: u64) -> Option<&MemoryRegion> {
@@ -274,42 +315,35 @@ impl MemoryTrait for OwnedMemory {
     }
 
     fn map(&mut self, addr: u64, size: usize, perms: Permission) -> Result<()> {
-        if size == 0 {
-            return Err(EmulatorError::InvalidArgument("Size cannot be zero".into()));
-        }
+        assert_valid_region(addr, size, PS, "map");
 
-        let aligned_addr = addr & !(self.page_size as u64 - 1);
-        let aligned_size =
-            ((addr - aligned_addr) as usize + size + self.page_size - 1) & !(self.page_size - 1);
-
-        let end = aligned_addr + aligned_size as u64;
+        let end = addr + size as u64;
 
         for region in self.regions.values() {
-            if (aligned_addr >= region.start && aligned_addr < region.end)
+            if (addr >= region.start && addr < region.end)
                 || (end > region.start && end <= region.end)
-                || (aligned_addr <= region.start && end >= region.end)
+                || (addr <= region.start && end >= region.end)
             {
                 return Err(EmulatorError::InvalidArgument(format!(
                     "Memory overlap at {:#x}-{:#x}",
-                    aligned_addr, end
+                    addr, end
                 )));
             }
         }
 
-        let region = MemoryRegion::new(aligned_addr, aligned_size, perms);
-        self.regions.insert(aligned_addr, region);
+        let region = MemoryRegion::new(addr, size, perms);
+        self.regions.insert(addr, region);
         Ok(())
     }
 
     fn unmap(&mut self, addr: u64, size: usize) -> Result<()> {
-        let aligned_addr = addr & !(self.page_size as u64 - 1);
-        let aligned_size =
-            ((addr - aligned_addr) as usize + size + self.page_size - 1) & !(self.page_size - 1);
-        let end = aligned_addr + aligned_size as u64;
+        assert_valid_region(addr, size, PS, "unmap");
+
+        let end = addr + size as u64;
 
         let mut to_remove = Vec::new();
         for (&start, region) in &self.regions {
-            if start >= aligned_addr && region.end <= end {
+            if start >= addr && region.end <= end {
                 to_remove.push(start);
             }
         }
@@ -326,6 +360,8 @@ impl MemoryTrait for OwnedMemory {
     }
 
     fn protect(&mut self, addr: u64, size: usize, perms: Permission) -> Result<()> {
+        assert_valid_region(addr, size, PS, "protect");
+
         let end = addr + size as u64;
 
         let mut regions_to_update = Vec::new();
@@ -356,18 +392,16 @@ impl MemoryTrait for OwnedMemory {
     }
 }
 
-pub struct CowMemory<T: MemoryTrait> {
+pub struct CowMemory<T: MemoryTrait<PS>, const PS: u64 = DEFAULT_PAGE_SIZE> {
     base: T,
     overlay: BTreeMap<u64, MemoryRegion>,
-    page_size: usize,
 }
 
-impl<T: MemoryTrait> CowMemory<T> {
+impl<T: MemoryTrait<PS>, const PS: u64> CowMemory<T, PS> {
     pub fn new(base: T) -> Self {
         Self {
             base,
             overlay: BTreeMap::new(),
-            page_size: 4096,
         }
     }
 
@@ -386,18 +420,18 @@ impl<T: MemoryTrait> CowMemory<T> {
     }
 
     fn copy_page(&mut self, addr: u64) -> Result<()> {
-        let page_addr = addr & !(self.page_size as u64 - 1);
+        let page_addr = addr & !(PS - 1);
 
         if self.overlay.contains_key(&page_addr) {
             return Ok(());
         }
 
         // Try to read a full page from base memory to determine actual accessible size
-        let mut page_data = vec![0u8; self.page_size];
+        let mut page_data = vec![0u8; PS as usize];
         let mut actual_size = 0;
 
         // Read byte by byte to find the extent of readable memory
-        for offset in 0..self.page_size {
+        for offset in 0..PS as usize {
             match self.base.read(page_addr + offset as u64, &mut [0u8; 1]) {
                 Ok(_) => actual_size += 1,
                 Err(_) => break, // Stop at first inaccessible byte
@@ -423,7 +457,7 @@ impl<T: MemoryTrait> CowMemory<T> {
     }
 }
 
-impl<T: MemoryTrait> MemoryTrait for CowMemory<T> {
+impl<T: MemoryTrait<PS>, const PS: u64> MemoryTrait<PS> for CowMemory<T, PS> {
     type MemoryRegion = MemoryRegion;
 
     /// Find a region in the CoW overlay only (optimization method).
@@ -515,7 +549,7 @@ impl<T: MemoryTrait> MemoryTrait for CowMemory<T> {
         let mut current_addr = addr;
 
         while offset < data.len() {
-            let page_addr = current_addr & !(self.page_size as u64 - 1);
+            let page_addr = current_addr & !(PS - 1);
 
             // Check if page_addr is already covered by an existing overlay region
             let page_already_in_overlay = self
@@ -555,7 +589,7 @@ impl<T: MemoryTrait> MemoryTrait for CowMemory<T> {
         let mut current_addr = addr;
 
         while offset < data.len() {
-            let page_addr = current_addr & !(self.page_size as u64 - 1);
+            let page_addr = current_addr & !(PS - 1);
 
             // Check if page_addr is already covered by an existing overlay region
             let page_already_in_overlay = self
@@ -587,59 +621,48 @@ impl<T: MemoryTrait> MemoryTrait for CowMemory<T> {
     }
 
     fn map(&mut self, addr: u64, size: usize, perms: Permission) -> Result<()> {
-        if size == 0 {
-            return Err(EmulatorError::InvalidArgument("Size cannot be zero".into()));
-        }
+        assert_valid_region(addr, size, PS, "map");
 
-        let aligned_addr = addr & !(self.page_size as u64 - 1);
-        let aligned_size =
-            ((addr - aligned_addr) as usize + size + self.page_size - 1) & !(self.page_size - 1);
-
-        let end = aligned_addr + aligned_size as u64;
+        let end = addr + size as u64;
 
         for region in self.overlay.values() {
-            if (aligned_addr >= region.start && aligned_addr < region.end)
+            if (addr >= region.start && addr < region.end)
                 || (end > region.start && end <= region.end)
-                || (aligned_addr <= region.start && end >= region.end)
+                || (addr <= region.start && end >= region.end)
             {
                 return Err(EmulatorError::InvalidArgument(format!(
                     "Memory overlap at {:#x}-{:#x}",
-                    aligned_addr, end
+                    addr, end
                 )));
             }
         }
 
         // Check for overlap with base memory by testing if any part of the range is readable
         // We test a few key points: start, middle, and end of the range
-        let test_points = [
-            aligned_addr,
-            aligned_addr + aligned_size as u64 / 2,
-            end - 1,
-        ];
+        let test_points = [addr, addr + size as u64 / 2, end - 1];
 
         for &test_addr in &test_points {
             if self.base.read(test_addr, &mut [0u8; 1]).is_ok() {
                 return Err(EmulatorError::InvalidArgument(format!(
                     "Memory overlap with base at {:#x}-{:#x}",
-                    aligned_addr, end
+                    addr, end
                 )));
             }
         }
 
-        let region = MemoryRegion::new(aligned_addr, aligned_size, perms);
-        self.overlay.insert(aligned_addr, region);
+        let region = MemoryRegion::new(addr, size, perms);
+        self.overlay.insert(addr, region);
         Ok(())
     }
 
     fn unmap(&mut self, addr: u64, size: usize) -> Result<()> {
-        let aligned_addr = addr & !(self.page_size as u64 - 1);
-        let aligned_size =
-            ((addr - aligned_addr) as usize + size + self.page_size - 1) & !(self.page_size - 1);
-        let end = aligned_addr + aligned_size as u64;
+        assert_valid_region(addr, size, PS, "unmap");
+
+        let end = addr + size as u64;
 
         let mut to_remove = Vec::new();
         for (&start, region) in &self.overlay {
-            if start >= aligned_addr && region.end <= end {
+            if start >= addr && region.end <= end {
                 to_remove.push(start);
             }
         }
@@ -656,6 +679,8 @@ impl<T: MemoryTrait> MemoryTrait for CowMemory<T> {
     }
 
     fn protect(&mut self, addr: u64, size: usize, perms: Permission) -> Result<()> {
+        assert_valid_region(addr, size, PS, "protect");
+
         let end = addr + size as u64;
 
         let mut regions_to_update = Vec::new();
@@ -855,7 +880,7 @@ mod tests {
 
     #[test]
     fn test_cow_memory_permissions() {
-        let mut base = OwnedMemory::new();
+        let mut base = <OwnedMemory>::new();
         base.map(0x1000, 0x1000, Permission::READ).unwrap(); // Read-only base
 
         // Fill with data
@@ -914,7 +939,7 @@ mod tests {
 
     #[test]
     fn test_cow_memory_write_bytes_bypass_permissions() {
-        let mut base = OwnedMemory::new();
+        let mut base = <OwnedMemory>::new();
         base.map(0x1000, 0x1000, Permission::READ).unwrap(); // Read-only
 
         let mut cow = CowMemory::new(base);

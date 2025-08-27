@@ -4,7 +4,7 @@ use crate::error::{EmulatorError, Result};
 use crate::memory::MemoryTrait;
 use iced_x86::{Instruction, OpKind};
 
-impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
+impl<H: HookManager<M, PS>, M: MemoryTrait<PS>, const PS: u64> ExecutionContext<'_, H, M, PS> {
     pub(crate) fn execute_xorps(&mut self, inst: &Instruction) -> Result<()> {
         // XORPS: Bitwise XOR of Packed Single-Precision Floating-Point Values
         // Performs bitwise XOR between two 128-bit XMM registers

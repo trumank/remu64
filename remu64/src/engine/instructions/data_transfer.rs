@@ -4,7 +4,7 @@ use crate::memory::MemoryTrait;
 use crate::{HookManager, Register};
 use iced_x86::{Code, Instruction, OpKind};
 
-impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
+impl<H: HookManager<M, PS>, M: MemoryTrait<PS>, const PS: u64> ExecutionContext<'_, H, M, PS> {
     pub(crate) fn execute_mov(&mut self, inst: &Instruction) -> Result<()> {
         let src_value = self.read_operand(inst, 1)?;
         self.write_operand(inst, 0, src_value)?;
