@@ -410,6 +410,9 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             Mnemonic::Int3 => self.execute_int3(inst),
             // Note: INTO is not valid in 64-bit mode, only supported in 32-bit mode
             Mnemonic::Syscall => self.execute_syscall(inst),
+            Mnemonic::Mfence => self.execute_mfence(inst),
+            Mnemonic::Sfence => self.execute_sfence(inst),
+            Mnemonic::Lfence => self.execute_lfence(inst),
             Mnemonic::Adc => self.execute_adc(inst),
             Mnemonic::Not => self.execute_not(inst),
             Mnemonic::Ror => self.execute_ror(inst),
@@ -8493,6 +8496,41 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         
         // Note: The actual kernel entry point would be loaded from MSR registers
         // For emulation purposes, the hook handles the syscall and we continue
+        
+        Ok(())
+    }
+
+    fn execute_mfence(&mut self, _inst: &Instruction) -> Result<()> {
+        // MFENCE: Memory Fence
+        // Serializes all load and store operations that occurred prior to the MFENCE instruction
+        // In emulation, this is essentially a no-op since we're single-threaded
+        // But for completeness, we could flush any pending memory operations here
+        
+        // In a real CPU, this ensures:
+        // - All loads and stores before the fence are globally visible before any after
+        // - Used for strong memory ordering guarantees
+        
+        Ok(())
+    }
+
+    fn execute_sfence(&mut self, _inst: &Instruction) -> Result<()> {
+        // SFENCE: Store Fence
+        // Serializes all store operations that occurred prior to the SFENCE instruction
+        // Stores before SFENCE are guaranteed to be globally visible before stores after
+        
+        // In emulation, this is a no-op since we execute instructions sequentially
+        // In real hardware, ensures store ordering for weakly-ordered memory types
+        
+        Ok(())
+    }
+
+    fn execute_lfence(&mut self, _inst: &Instruction) -> Result<()> {
+        // LFENCE: Load Fence  
+        // Serializes all load operations that occurred prior to the LFENCE instruction
+        // Loads before LFENCE are guaranteed to be globally visible before loads after
+        
+        // In emulation, this is a no-op since we execute instructions sequentially
+        // In real hardware, ensures load ordering and can prevent speculative execution
         
         Ok(())
     }
