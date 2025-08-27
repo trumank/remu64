@@ -29,19 +29,23 @@ fn allocate_memory<P: rdex::ProcessTrait>(
     executor: &mut rdex::FunctionExecutor<P>,
     size: usize,
 ) -> Result<u64> {
-    use remu64::Permission;
+    use remu64::{DEFAULT_PAGE_SIZE, Permission};
 
     // Use a fixed allocation area for simplicity
     let alloc_base = 0x7fff_e000_0000u64;
 
+    // Round up size to next page boundary
+    let aligned_size = ((size + DEFAULT_PAGE_SIZE as usize - 1) / DEFAULT_PAGE_SIZE as usize)
+        * DEFAULT_PAGE_SIZE as usize;
+
     executor.vm_context.engine.memory.map(
         alloc_base,
-        size,
+        aligned_size,
         Permission::READ | Permission::WRITE,
     )?;
 
     // Zero out the allocated memory
-    let zero_buffer = vec![0u8; size];
+    let zero_buffer = vec![0u8; aligned_size];
     executor
         .vm_context
         .engine
