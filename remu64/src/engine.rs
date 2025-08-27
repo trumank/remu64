@@ -355,6 +355,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             Mnemonic::Mulx => self.execute_mulx(inst),
             Mnemonic::Pdep => self.execute_pdep(inst),
             Mnemonic::Pext => self.execute_pext(inst),
+            Mnemonic::Rorx => self.execute_rorx(inst),
             Mnemonic::Cqo => self.execute_cqo(inst),
             Mnemonic::Xadd => self.execute_xadd(inst),
             Mnemonic::Cpuid => self.execute_cpuid(inst),
@@ -6948,6 +6949,43 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         self.write_operand(inst, 0, result)?;
         
         // PEXT does not modify any flags
+        
+        Ok(())
+    }
+
+    fn execute_rorx(&mut self, inst: &Instruction) -> Result<()> {
+        // RORX: Rotate Right Logical Without Affecting Flags
+        // Rotates the source operand right by the specified immediate count
+        // and stores the result in the destination without modifying flags
+        // This is a BMI2 instruction
+        
+        // RORX has 3 operands: dest, src, imm8
+        let src = self.read_operand(inst, 1)?;
+        let count = self.read_operand(inst, 2)? as u32;
+        
+        // Get operand size to determine rotation width
+        let size = self.get_operand_size_from_instruction(inst, 0)?;
+        
+        let result = match size {
+            4 => {
+                // 32-bit rotation
+                let src32 = (src & 0xFFFFFFFF) as u32;
+                let rotate_count = count & 0x1F; // Modulo 32
+                let result32 = src32.rotate_right(rotate_count);
+                result32 as u64
+            }
+            8 => {
+                // 64-bit rotation
+                let rotate_count = count & 0x3F; // Modulo 64
+                src.rotate_right(rotate_count)
+            }
+            _ => return Err(EmulatorError::InvalidInstruction(self.engine.cpu.read_reg(Register::RIP))),
+        };
+        
+        // Write result to destination
+        self.write_operand(inst, 0, result)?;
+        
+        // RORX does not modify any flags - this is its key advantage
         
         Ok(())
     }
