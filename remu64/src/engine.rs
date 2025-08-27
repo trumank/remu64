@@ -12223,7 +12223,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
                     self.read_ymm_memory(inst, 2)?
                 }
                 _ => {
-                    return Err(EmulatorError::InvalidOperand(
+                    return Err(EmulatorError::UnsupportedInstruction(
                         format!("Unsupported VSHUFPS source operand type: {:?}", inst.op_kind(2))
                     ));
                 }
@@ -12284,7 +12284,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
                     self.read_memory_128(addr)?
                 }
                 _ => {
-                    return Err(EmulatorError::InvalidOperand(
+                    return Err(EmulatorError::UnsupportedInstruction(
                         format!("Unsupported VSHUFPS source operand type: {:?}", inst.op_kind(2))
                     ));
                 }
@@ -12356,7 +12356,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
                     self.read_ymm_memory(inst, 2)?
                 }
                 _ => {
-                    return Err(EmulatorError::InvalidOperand(
+                    return Err(EmulatorError::UnsupportedInstruction(
                         format!("Unsupported VSHUFPD source operand type: {:?}", inst.op_kind(2))
                     ));
                 }
@@ -12425,7 +12425,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
                     self.read_memory_128(addr)?
                 }
                 _ => {
-                    return Err(EmulatorError::InvalidOperand(
+                    return Err(EmulatorError::UnsupportedInstruction(
                         format!("Unsupported VSHUFPD source operand type: {:?}", inst.op_kind(2))
                     ));
                 }
