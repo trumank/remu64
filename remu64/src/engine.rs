@@ -428,6 +428,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             Mnemonic::Clc => self.execute_clc(inst),
             Mnemonic::Cmc => self.execute_cmc(inst),
             Mnemonic::Xlatb => self.execute_xlat(inst),
+            Mnemonic::Pause => self.execute_pause(inst),
             Mnemonic::Shufps => self.execute_shufps(inst),
             Mnemonic::Unpcklps => self.execute_unpcklps(inst),
             Mnemonic::Unpckhps => self.execute_unpckhps(inst),
@@ -5677,6 +5678,18 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         self.engine.cpu.write_reg(Register::RAX, new_rax);
         
         // XLAT doesn't affect flags
+        Ok(())
+    }
+    
+    fn execute_pause(&mut self, _inst: &Instruction) -> Result<()> {
+        // PAUSE: Spin-wait loop hint
+        // This is a hint to the processor that the code is in a spin-wait loop
+        // In emulation, we don't need to do anything special
+        // Real processors use this to improve power consumption and performance
+        // when one logical processor is waiting for another
+        
+        // PAUSE doesn't affect registers or flags
+        // It's essentially a NOP with a hint for the processor
         Ok(())
     }
 
