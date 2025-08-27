@@ -961,7 +961,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         self.write_operand(inst, 0, result)?;
         Ok(())
     }
-    
+
     fn execute_seta(&mut self, inst: &Instruction) -> Result<()> {
         // SETA: Set if above (CF=0 and ZF=0)
         let cf = self.engine.cpu.rflags.contains(Flags::CF);
@@ -970,7 +970,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         self.write_operand(inst, 0, result)?;
         Ok(())
     }
-    
+
     fn execute_setae(&mut self, inst: &Instruction) -> Result<()> {
         // SETAE: Set if above or equal (CF=0)
         let cf = self.engine.cpu.rflags.contains(Flags::CF);
@@ -978,7 +978,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         self.write_operand(inst, 0, result)?;
         Ok(())
     }
-    
+
     fn execute_setb(&mut self, inst: &Instruction) -> Result<()> {
         // SETB: Set if below (CF=1)
         let cf = self.engine.cpu.rflags.contains(Flags::CF);
@@ -986,7 +986,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         self.write_operand(inst, 0, result)?;
         Ok(())
     }
-    
+
     fn execute_setg(&mut self, inst: &Instruction) -> Result<()> {
         // SETG: Set if greater (ZF=0 and SF=OF)
         let zf = self.engine.cpu.rflags.contains(Flags::ZF);
@@ -996,7 +996,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         self.write_operand(inst, 0, result)?;
         Ok(())
     }
-    
+
     fn execute_setge(&mut self, inst: &Instruction) -> Result<()> {
         // SETGE: Set if greater or equal (SF=OF)
         let sf = self.engine.cpu.rflags.contains(Flags::SF);
@@ -1005,7 +1005,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         self.write_operand(inst, 0, result)?;
         Ok(())
     }
-    
+
     fn execute_setl(&mut self, inst: &Instruction) -> Result<()> {
         // SETL: Set if less (SF!=OF)
         let sf = self.engine.cpu.rflags.contains(Flags::SF);
@@ -1014,7 +1014,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         self.write_operand(inst, 0, result)?;
         Ok(())
     }
-    
+
     fn execute_sets(&mut self, inst: &Instruction) -> Result<()> {
         // SETS: Set if sign (SF=1)
         let sf = self.engine.cpu.rflags.contains(Flags::SF);
@@ -1022,7 +1022,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         self.write_operand(inst, 0, result)?;
         Ok(())
     }
-    
+
     fn execute_setns(&mut self, inst: &Instruction) -> Result<()> {
         // SETNS: Set if not sign (SF=0)
         let sf = self.engine.cpu.rflags.contains(Flags::SF);
@@ -1030,7 +1030,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         self.write_operand(inst, 0, result)?;
         Ok(())
     }
-    
+
     fn execute_seto(&mut self, inst: &Instruction) -> Result<()> {
         // SETO: Set if overflow (OF=1)
         let of = self.engine.cpu.rflags.contains(Flags::OF);
@@ -1038,7 +1038,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         self.write_operand(inst, 0, result)?;
         Ok(())
     }
-    
+
     fn execute_setno(&mut self, inst: &Instruction) -> Result<()> {
         // SETNO: Set if not overflow (OF=0)
         let of = self.engine.cpu.rflags.contains(Flags::OF);
@@ -1046,7 +1046,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         self.write_operand(inst, 0, result)?;
         Ok(())
     }
-    
+
     fn execute_setp(&mut self, inst: &Instruction) -> Result<()> {
         // SETP: Set if parity (PF=1)
         let pf = self.engine.cpu.rflags.contains(Flags::PF);
@@ -1054,7 +1054,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         self.write_operand(inst, 0, result)?;
         Ok(())
     }
-    
+
     fn execute_setnp(&mut self, inst: &Instruction) -> Result<()> {
         // SETNP: Set if not parity (PF=0)
         let pf = self.engine.cpu.rflags.contains(Flags::PF);
@@ -1128,20 +1128,21 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         let size = self.get_operand_size_from_instruction(inst, 0)?;
         let (result, cf, of) = match size {
             2 => {
-                let count = (shift_count & 0x1F) as u32; // For 16-bit, modulo 32
+                let count = (shift_count & 0x1F); // For 16-bit, modulo 32
                 if count >= 16 {
                     let result = (src_value as u16).wrapping_shl(count - 16) as u64;
                     let cf = ((dst_value >> (16 - count)) & 1) != 0;
                     (result, cf, false)
                 } else {
-                    let result = ((dst_value as u16) << count) | ((src_value as u16) >> (16 - count));
+                    let result =
+                        ((dst_value as u16) << count) | ((src_value as u16) >> (16 - count));
                     let cf = ((dst_value >> (16 - count)) & 1) != 0;
                     let of = count == 1 && (((result >> 15) & 1) as u64 != ((dst_value >> 15) & 1));
                     (result as u64, cf, of)
                 }
             }
             4 => {
-                let count = (shift_count & 0x1F) as u32; // For 32-bit, modulo 32
+                let count = (shift_count & 0x1F); // For 32-bit, modulo 32
                 if count == 0 {
                     return Ok(());
                 }
@@ -1191,8 +1192,8 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         } else {
             self.engine.cpu.rflags.remove(Flags::ZF);
         }
-        
-        // Sign flag 
+
+        // Sign flag
         let sign_bit = match size {
             2 => (result & 0x8000) != 0,
             4 => (result & 0x80000000) != 0,
@@ -1204,10 +1205,10 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         } else {
             self.engine.cpu.rflags.remove(Flags::SF);
         }
-        
+
         // Parity flag - count 1-bits in low byte
         let low_byte = (result & 0xFF) as u8;
-        if low_byte.count_ones() % 2 == 0 {
+        if low_byte.count_ones().is_multiple_of(2) {
             self.engine.cpu.rflags.insert(Flags::PF);
         } else {
             self.engine.cpu.rflags.remove(Flags::PF);
@@ -1230,13 +1231,14 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         let size = self.get_operand_size_from_instruction(inst, 0)?;
         let (result, cf, of) = match size {
             2 => {
-                let count = (shift_count & 0x1F) as u32; // For 16-bit, modulo 32
+                let count = (shift_count & 0x1F); // For 16-bit, modulo 32
                 if count >= 16 {
                     let result = (src_value as u16).wrapping_shr(count - 16) as u64;
                     let cf = ((dst_value >> (count - 1)) & 1) != 0;
                     (result, cf, false)
                 } else {
-                    let result = ((dst_value as u16) >> count) | ((src_value as u16) << (16 - count));
+                    let result =
+                        ((dst_value as u16) >> count) | ((src_value as u16) << (16 - count));
                     let cf = ((dst_value >> (count - 1)) & 1) != 0;
                     let msb = (dst_value >> 15) & 1;
                     let of = count == 1 && (msb != ((src_value >> 15) & 1));
@@ -1244,7 +1246,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
                 }
             }
             4 => {
-                let count = (shift_count & 0x1F) as u32; // For 32-bit, modulo 32
+                let count = (shift_count & 0x1F); // For 32-bit, modulo 32
                 if count == 0 {
                     return Ok(());
                 }
@@ -1296,8 +1298,8 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         } else {
             self.engine.cpu.rflags.remove(Flags::ZF);
         }
-        
-        // Sign flag 
+
+        // Sign flag
         let sign_bit = match size {
             2 => (result & 0x8000) != 0,
             4 => (result & 0x80000000) != 0,
@@ -1309,10 +1311,10 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         } else {
             self.engine.cpu.rflags.remove(Flags::SF);
         }
-        
+
         // Parity flag - count 1-bits in low byte
         let low_byte = (result & 0xFF) as u8;
-        if low_byte.count_ones() % 2 == 0 {
+        if low_byte.count_ones().is_multiple_of(2) {
             self.engine.cpu.rflags.insert(Flags::PF);
         } else {
             self.engine.cpu.rflags.remove(Flags::PF);
@@ -1445,89 +1447,89 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
 
         Ok(())
     }
-    
+
     fn execute_cmovae(&mut self, inst: &Instruction) -> Result<()> {
         // CMOVAE: Conditional move if above or equal (CF=0)
         let cf = self.engine.cpu.rflags.contains(Flags::CF);
-        
+
         if !cf {
             let src_value = self.read_operand(inst, 1)?;
             self.write_operand(inst, 0, src_value)?;
         }
-        
+
         Ok(())
     }
-    
+
     fn execute_cmovge(&mut self, inst: &Instruction) -> Result<()> {
         // CMOVGE: Conditional move if greater or equal (SF=OF)
         let sf = self.engine.cpu.rflags.contains(Flags::SF);
         let of = self.engine.cpu.rflags.contains(Flags::OF);
-        
+
         if sf == of {
             let src_value = self.read_operand(inst, 1)?;
             self.write_operand(inst, 0, src_value)?;
         }
-        
+
         Ok(())
     }
-    
+
     fn execute_cmovs(&mut self, inst: &Instruction) -> Result<()> {
         // CMOVS: Conditional move if sign (SF=1)
         let sf = self.engine.cpu.rflags.contains(Flags::SF);
-        
+
         if sf {
             let src_value = self.read_operand(inst, 1)?;
             self.write_operand(inst, 0, src_value)?;
         }
-        
+
         Ok(())
     }
-    
+
     fn execute_cmovo(&mut self, inst: &Instruction) -> Result<()> {
         // CMOVO: Conditional move if overflow (OF=1)
         let of = self.engine.cpu.rflags.contains(Flags::OF);
-        
+
         if of {
             let src_value = self.read_operand(inst, 1)?;
             self.write_operand(inst, 0, src_value)?;
         }
-        
+
         Ok(())
     }
-    
+
     fn execute_cmovno(&mut self, inst: &Instruction) -> Result<()> {
         // CMOVNO: Conditional move if not overflow (OF=0)
         let of = self.engine.cpu.rflags.contains(Flags::OF);
-        
+
         if !of {
             let src_value = self.read_operand(inst, 1)?;
             self.write_operand(inst, 0, src_value)?;
         }
-        
+
         Ok(())
     }
-    
+
     fn execute_cmovp(&mut self, inst: &Instruction) -> Result<()> {
         // CMOVP: Conditional move if parity (PF=1)
         let pf = self.engine.cpu.rflags.contains(Flags::PF);
-        
+
         if pf {
             let src_value = self.read_operand(inst, 1)?;
             self.write_operand(inst, 0, src_value)?;
         }
-        
+
         Ok(())
     }
-    
+
     fn execute_cmovnp(&mut self, inst: &Instruction) -> Result<()> {
         // CMOVNP: Conditional move if not parity (PF=0)
         let pf = self.engine.cpu.rflags.contains(Flags::PF);
-        
+
         if !pf {
             let src_value = self.read_operand(inst, 1)?;
             self.write_operand(inst, 0, src_value)?;
         }
-        
+
         Ok(())
     }
 
@@ -1808,10 +1810,10 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         // VADDPS - Vector Add Packed Single-Precision Floating-Point Values
         // VEX.256: VADDPS ymm1, ymm2, ymm3/m256
         // VEX.128: VADDPS xmm1, xmm2, xmm3/m128
-        
+
         // Check if this is 256-bit (YMM) or 128-bit (XMM) operation
         let is_256bit = inst.op_register(0).is_ymm();
-        
+
         if inst.op_count() != 3 {
             return Err(EmulatorError::UnsupportedInstruction(
                 "VADDPS requires exactly 3 operands".to_string(),
@@ -1822,54 +1824,53 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             // 256-bit YMM operation
             let src1_reg = self.convert_register(inst.op_register(1))?;
             let src1_data = self.engine.cpu.read_ymm(src1_reg);
-            
+
             let src2_data = match inst.op_kind(2) {
                 OpKind::Register => {
                     let src2_reg = self.convert_register(inst.op_register(2))?;
                     self.engine.cpu.read_ymm(src2_reg)
                 }
-                OpKind::Memory => {
-                    self.read_ymm_memory(inst, 2)?
-                }
+                OpKind::Memory => self.read_ymm_memory(inst, 2)?,
                 _ => {
-                    return Err(EmulatorError::UnsupportedInstruction(
-                        format!("Unsupported VADDPS source operand type: {:?}", inst.op_kind(2))
-                    ));
+                    return Err(EmulatorError::UnsupportedInstruction(format!(
+                        "Unsupported VADDPS source operand type: {:?}",
+                        inst.op_kind(2)
+                    )));
                 }
             };
-            
+
             // Perform packed single-precision addition
             // Each YMM register contains 8 32-bit floats (4 per 128-bit half)
             let mut result = [0u128; 2];
-            
+
             for half in 0..2 {
                 let mut float_results = [0u32; 4];
                 for i in 0..4 {
                     let offset = i * 32;
                     let a_bits = ((src1_data[half] >> offset) & 0xFFFFFFFF) as u32;
                     let b_bits = ((src2_data[half] >> offset) & 0xFFFFFFFF) as u32;
-                    
+
                     // Convert bits to f32, add, convert back to bits
                     let a = f32::from_bits(a_bits);
                     let b = f32::from_bits(b_bits);
                     let sum = a + b;
                     float_results[i] = sum.to_bits();
                 }
-                
+
                 // Pack the results back into u128
-                result[half] = (float_results[0] as u128) |
-                              ((float_results[1] as u128) << 32) |
-                              ((float_results[2] as u128) << 64) |
-                              ((float_results[3] as u128) << 96);
+                result[half] = (float_results[0] as u128)
+                    | ((float_results[1] as u128) << 32)
+                    | ((float_results[2] as u128) << 64)
+                    | ((float_results[3] as u128) << 96);
             }
-            
+
             let dst_reg = self.convert_register(inst.op_register(0))?;
             self.engine.cpu.write_ymm(dst_reg, result);
         } else {
             // 128-bit XMM operation
             let src1_reg = self.convert_register(inst.op_register(1))?;
             let src1_data = self.engine.cpu.read_xmm(src1_reg);
-            
+
             let src2_data = match inst.op_kind(2) {
                 OpKind::Register => {
                     let src2_reg = self.convert_register(inst.op_register(2))?;
@@ -1880,34 +1881,35 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
                     self.read_memory_128(addr)?
                 }
                 _ => {
-                    return Err(EmulatorError::UnsupportedInstruction(
-                        format!("Unsupported VADDPS source operand type: {:?}", inst.op_kind(2))
-                    ));
+                    return Err(EmulatorError::UnsupportedInstruction(format!(
+                        "Unsupported VADDPS source operand type: {:?}",
+                        inst.op_kind(2)
+                    )));
                 }
             };
-            
+
             // Perform packed single-precision addition for XMM (4 floats)
             let mut float_results = [0u32; 4];
             for i in 0..4 {
                 let offset = i * 32;
                 let a_bits = ((src1_data >> offset) & 0xFFFFFFFF) as u32;
                 let b_bits = ((src2_data >> offset) & 0xFFFFFFFF) as u32;
-                
+
                 let a = f32::from_bits(a_bits);
                 let b = f32::from_bits(b_bits);
                 let sum = a + b;
                 float_results[i] = sum.to_bits();
             }
-            
-            let result = (float_results[0] as u128) |
-                        ((float_results[1] as u128) << 32) |
-                        ((float_results[2] as u128) << 64) |
-                        ((float_results[3] as u128) << 96);
-            
+
+            let result = (float_results[0] as u128)
+                | ((float_results[1] as u128) << 32)
+                | ((float_results[2] as u128) << 64)
+                | ((float_results[3] as u128) << 96);
+
             let dst_reg = self.convert_register(inst.op_register(0))?;
             self.engine.cpu.write_xmm(dst_reg, result);
         }
-        
+
         Ok(())
     }
 
@@ -1915,10 +1917,10 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         // VSUBPS - Vector Subtract Packed Single-Precision Floating-Point Values
         // VEX.256: VSUBPS ymm1, ymm2, ymm3/m256
         // VEX.128: VSUBPS xmm1, xmm2, xmm3/m128
-        
+
         // Check if this is 256-bit (YMM) or 128-bit (XMM) operation
         let is_256bit = inst.op_register(0).is_ymm();
-        
+
         if inst.op_count() != 3 {
             return Err(EmulatorError::UnsupportedInstruction(
                 "VSUBPS requires exactly 3 operands".to_string(),
@@ -1929,54 +1931,53 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             // 256-bit YMM operation
             let src1_reg = self.convert_register(inst.op_register(1))?;
             let src1_data = self.engine.cpu.read_ymm(src1_reg);
-            
+
             let src2_data = match inst.op_kind(2) {
                 OpKind::Register => {
                     let src2_reg = self.convert_register(inst.op_register(2))?;
                     self.engine.cpu.read_ymm(src2_reg)
                 }
-                OpKind::Memory => {
-                    self.read_ymm_memory(inst, 2)?
-                }
+                OpKind::Memory => self.read_ymm_memory(inst, 2)?,
                 _ => {
-                    return Err(EmulatorError::UnsupportedInstruction(
-                        format!("Unsupported VSUBPS source operand type: {:?}", inst.op_kind(2))
-                    ));
+                    return Err(EmulatorError::UnsupportedInstruction(format!(
+                        "Unsupported VSUBPS source operand type: {:?}",
+                        inst.op_kind(2)
+                    )));
                 }
             };
-            
+
             // Perform packed single-precision subtraction
             // Each YMM register contains 8 32-bit floats (4 per 128-bit half)
             let mut result = [0u128; 2];
-            
+
             for half in 0..2 {
                 let mut float_results = [0u32; 4];
                 for i in 0..4 {
                     let offset = i * 32;
                     let a_bits = ((src1_data[half] >> offset) & 0xFFFFFFFF) as u32;
                     let b_bits = ((src2_data[half] >> offset) & 0xFFFFFFFF) as u32;
-                    
+
                     // Convert bits to f32, subtract, convert back to bits
                     let a = f32::from_bits(a_bits);
                     let b = f32::from_bits(b_bits);
                     let diff = a - b;
                     float_results[i] = diff.to_bits();
                 }
-                
+
                 // Pack the results back into u128
-                result[half] = (float_results[0] as u128) |
-                              ((float_results[1] as u128) << 32) |
-                              ((float_results[2] as u128) << 64) |
-                              ((float_results[3] as u128) << 96);
+                result[half] = (float_results[0] as u128)
+                    | ((float_results[1] as u128) << 32)
+                    | ((float_results[2] as u128) << 64)
+                    | ((float_results[3] as u128) << 96);
             }
-            
+
             let dst_reg = self.convert_register(inst.op_register(0))?;
             self.engine.cpu.write_ymm(dst_reg, result);
         } else {
             // 128-bit XMM operation
             let src1_reg = self.convert_register(inst.op_register(1))?;
             let src1_data = self.engine.cpu.read_xmm(src1_reg);
-            
+
             let src2_data = match inst.op_kind(2) {
                 OpKind::Register => {
                     let src2_reg = self.convert_register(inst.op_register(2))?;
@@ -1987,34 +1988,35 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
                     self.read_memory_128(addr)?
                 }
                 _ => {
-                    return Err(EmulatorError::UnsupportedInstruction(
-                        format!("Unsupported VSUBPS source operand type: {:?}", inst.op_kind(2))
-                    ));
+                    return Err(EmulatorError::UnsupportedInstruction(format!(
+                        "Unsupported VSUBPS source operand type: {:?}",
+                        inst.op_kind(2)
+                    )));
                 }
             };
-            
+
             // Perform packed single-precision subtraction for XMM (4 floats)
             let mut float_results = [0u32; 4];
             for i in 0..4 {
                 let offset = i * 32;
                 let a_bits = ((src1_data >> offset) & 0xFFFFFFFF) as u32;
                 let b_bits = ((src2_data >> offset) & 0xFFFFFFFF) as u32;
-                
+
                 let a = f32::from_bits(a_bits);
                 let b = f32::from_bits(b_bits);
                 let diff = a - b;
                 float_results[i] = diff.to_bits();
             }
-            
-            let result = (float_results[0] as u128) |
-                        ((float_results[1] as u128) << 32) |
-                        ((float_results[2] as u128) << 64) |
-                        ((float_results[3] as u128) << 96);
-            
+
+            let result = (float_results[0] as u128)
+                | ((float_results[1] as u128) << 32)
+                | ((float_results[2] as u128) << 64)
+                | ((float_results[3] as u128) << 96);
+
             let dst_reg = self.convert_register(inst.op_register(0))?;
             self.engine.cpu.write_xmm(dst_reg, result);
         }
-        
+
         Ok(())
     }
 
@@ -2022,10 +2024,10 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         // VMULPS - Vector Multiply Packed Single-Precision Floating-Point Values
         // VEX.256: VMULPS ymm1, ymm2, ymm3/m256
         // VEX.128: VMULPS xmm1, xmm2, xmm3/m128
-        
+
         // Check if this is 256-bit (YMM) or 128-bit (XMM) operation
         let is_256bit = inst.op_register(0).is_ymm();
-        
+
         if inst.op_count() != 3 {
             return Err(EmulatorError::UnsupportedInstruction(
                 "VMULPS requires exactly 3 operands".to_string(),
@@ -2036,54 +2038,53 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             // 256-bit YMM operation
             let src1_reg = self.convert_register(inst.op_register(1))?;
             let src1_data = self.engine.cpu.read_ymm(src1_reg);
-            
+
             let src2_data = match inst.op_kind(2) {
                 OpKind::Register => {
                     let src2_reg = self.convert_register(inst.op_register(2))?;
                     self.engine.cpu.read_ymm(src2_reg)
                 }
-                OpKind::Memory => {
-                    self.read_ymm_memory(inst, 2)?
-                }
+                OpKind::Memory => self.read_ymm_memory(inst, 2)?,
                 _ => {
-                    return Err(EmulatorError::UnsupportedInstruction(
-                        format!("Unsupported VMULPS source operand type: {:?}", inst.op_kind(2))
-                    ));
+                    return Err(EmulatorError::UnsupportedInstruction(format!(
+                        "Unsupported VMULPS source operand type: {:?}",
+                        inst.op_kind(2)
+                    )));
                 }
             };
-            
+
             // Perform packed single-precision multiplication
             // Each YMM register contains 8 32-bit floats (4 per 128-bit half)
             let mut result = [0u128; 2];
-            
+
             for half in 0..2 {
                 let mut float_results = [0u32; 4];
                 for i in 0..4 {
                     let offset = i * 32;
                     let a_bits = ((src1_data[half] >> offset) & 0xFFFFFFFF) as u32;
                     let b_bits = ((src2_data[half] >> offset) & 0xFFFFFFFF) as u32;
-                    
+
                     // Convert bits to f32, multiply, convert back to bits
                     let a = f32::from_bits(a_bits);
                     let b = f32::from_bits(b_bits);
                     let prod = a * b;
                     float_results[i] = prod.to_bits();
                 }
-                
+
                 // Pack the results back into u128
-                result[half] = (float_results[0] as u128) |
-                              ((float_results[1] as u128) << 32) |
-                              ((float_results[2] as u128) << 64) |
-                              ((float_results[3] as u128) << 96);
+                result[half] = (float_results[0] as u128)
+                    | ((float_results[1] as u128) << 32)
+                    | ((float_results[2] as u128) << 64)
+                    | ((float_results[3] as u128) << 96);
             }
-            
+
             let dst_reg = self.convert_register(inst.op_register(0))?;
             self.engine.cpu.write_ymm(dst_reg, result);
         } else {
             // 128-bit XMM operation
             let src1_reg = self.convert_register(inst.op_register(1))?;
             let src1_data = self.engine.cpu.read_xmm(src1_reg);
-            
+
             let src2_data = match inst.op_kind(2) {
                 OpKind::Register => {
                     let src2_reg = self.convert_register(inst.op_register(2))?;
@@ -2094,34 +2095,35 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
                     self.read_memory_128(addr)?
                 }
                 _ => {
-                    return Err(EmulatorError::UnsupportedInstruction(
-                        format!("Unsupported VMULPS source operand type: {:?}", inst.op_kind(2))
-                    ));
+                    return Err(EmulatorError::UnsupportedInstruction(format!(
+                        "Unsupported VMULPS source operand type: {:?}",
+                        inst.op_kind(2)
+                    )));
                 }
             };
-            
+
             // Perform packed single-precision multiplication for XMM (4 floats)
             let mut float_results = [0u32; 4];
             for i in 0..4 {
                 let offset = i * 32;
                 let a_bits = ((src1_data >> offset) & 0xFFFFFFFF) as u32;
                 let b_bits = ((src2_data >> offset) & 0xFFFFFFFF) as u32;
-                
+
                 let a = f32::from_bits(a_bits);
                 let b = f32::from_bits(b_bits);
                 let prod = a * b;
                 float_results[i] = prod.to_bits();
             }
-            
-            let result = (float_results[0] as u128) |
-                        ((float_results[1] as u128) << 32) |
-                        ((float_results[2] as u128) << 64) |
-                        ((float_results[3] as u128) << 96);
-            
+
+            let result = (float_results[0] as u128)
+                | ((float_results[1] as u128) << 32)
+                | ((float_results[2] as u128) << 64)
+                | ((float_results[3] as u128) << 96);
+
             let dst_reg = self.convert_register(inst.op_register(0))?;
             self.engine.cpu.write_xmm(dst_reg, result);
         }
-        
+
         Ok(())
     }
 
@@ -2129,10 +2131,10 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         // VDIVPS - Vector Divide Packed Single-Precision Floating-Point Values
         // VEX.256: VDIVPS ymm1, ymm2, ymm3/m256
         // VEX.128: VDIVPS xmm1, xmm2, xmm3/m128
-        
+
         // Check if this is 256-bit (YMM) or 128-bit (XMM) operation
         let is_256bit = inst.op_register(0).is_ymm();
-        
+
         if inst.op_count() != 3 {
             return Err(EmulatorError::UnsupportedInstruction(
                 "VDIVPS requires exactly 3 operands".to_string(),
@@ -2143,54 +2145,53 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             // 256-bit YMM operation
             let src1_reg = self.convert_register(inst.op_register(1))?;
             let src1_data = self.engine.cpu.read_ymm(src1_reg);
-            
+
             let src2_data = match inst.op_kind(2) {
                 OpKind::Register => {
                     let src2_reg = self.convert_register(inst.op_register(2))?;
                     self.engine.cpu.read_ymm(src2_reg)
                 }
-                OpKind::Memory => {
-                    self.read_ymm_memory(inst, 2)?
-                }
+                OpKind::Memory => self.read_ymm_memory(inst, 2)?,
                 _ => {
-                    return Err(EmulatorError::UnsupportedInstruction(
-                        format!("Unsupported VDIVPS source operand type: {:?}", inst.op_kind(2))
-                    ));
+                    return Err(EmulatorError::UnsupportedInstruction(format!(
+                        "Unsupported VDIVPS source operand type: {:?}",
+                        inst.op_kind(2)
+                    )));
                 }
             };
-            
+
             // Perform packed single-precision division
             // Each YMM register contains 8 32-bit floats (4 per 128-bit half)
             let mut result = [0u128; 2];
-            
+
             for half in 0..2 {
                 let mut float_results = [0u32; 4];
                 for i in 0..4 {
                     let offset = i * 32;
                     let a_bits = ((src1_data[half] >> offset) & 0xFFFFFFFF) as u32;
                     let b_bits = ((src2_data[half] >> offset) & 0xFFFFFFFF) as u32;
-                    
+
                     // Convert bits to f32, divide, convert back to bits
                     let a = f32::from_bits(a_bits);
                     let b = f32::from_bits(b_bits);
                     let quotient = a / b;
                     float_results[i] = quotient.to_bits();
                 }
-                
+
                 // Pack the results back into u128
-                result[half] = (float_results[0] as u128) |
-                              ((float_results[1] as u128) << 32) |
-                              ((float_results[2] as u128) << 64) |
-                              ((float_results[3] as u128) << 96);
+                result[half] = (float_results[0] as u128)
+                    | ((float_results[1] as u128) << 32)
+                    | ((float_results[2] as u128) << 64)
+                    | ((float_results[3] as u128) << 96);
             }
-            
+
             let dst_reg = self.convert_register(inst.op_register(0))?;
             self.engine.cpu.write_ymm(dst_reg, result);
         } else {
             // 128-bit XMM operation
             let src1_reg = self.convert_register(inst.op_register(1))?;
             let src1_data = self.engine.cpu.read_xmm(src1_reg);
-            
+
             let src2_data = match inst.op_kind(2) {
                 OpKind::Register => {
                     let src2_reg = self.convert_register(inst.op_register(2))?;
@@ -2201,34 +2202,35 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
                     self.read_memory_128(addr)?
                 }
                 _ => {
-                    return Err(EmulatorError::UnsupportedInstruction(
-                        format!("Unsupported VDIVPS source operand type: {:?}", inst.op_kind(2))
-                    ));
+                    return Err(EmulatorError::UnsupportedInstruction(format!(
+                        "Unsupported VDIVPS source operand type: {:?}",
+                        inst.op_kind(2)
+                    )));
                 }
             };
-            
+
             // Perform packed single-precision division for XMM (4 floats)
             let mut float_results = [0u32; 4];
             for i in 0..4 {
                 let offset = i * 32;
                 let a_bits = ((src1_data >> offset) & 0xFFFFFFFF) as u32;
                 let b_bits = ((src2_data >> offset) & 0xFFFFFFFF) as u32;
-                
+
                 let a = f32::from_bits(a_bits);
                 let b = f32::from_bits(b_bits);
                 let quotient = a / b;
                 float_results[i] = quotient.to_bits();
             }
-            
-            let result = (float_results[0] as u128) |
-                        ((float_results[1] as u128) << 32) |
-                        ((float_results[2] as u128) << 64) |
-                        ((float_results[3] as u128) << 96);
-            
+
+            let result = (float_results[0] as u128)
+                | ((float_results[1] as u128) << 32)
+                | ((float_results[2] as u128) << 64)
+                | ((float_results[3] as u128) << 96);
+
             let dst_reg = self.convert_register(inst.op_register(0))?;
             self.engine.cpu.write_xmm(dst_reg, result);
         }
-        
+
         Ok(())
     }
 
@@ -2236,10 +2238,10 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         // VADDPD - Vector Add Packed Double-Precision Floating-Point Values
         // VEX.256: VADDPD ymm1, ymm2, ymm3/m256
         // VEX.128: VADDPD xmm1, xmm2, xmm3/m128
-        
+
         // Check if this is 256-bit (YMM) or 128-bit (XMM) operation
         let is_256bit = inst.op_register(0).is_ymm();
-        
+
         if inst.op_count() != 3 {
             return Err(EmulatorError::UnsupportedInstruction(
                 "VADDPD requires exactly 3 operands".to_string(),
@@ -2250,52 +2252,50 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             // 256-bit YMM operation
             let src1_reg = self.convert_register(inst.op_register(1))?;
             let src1_data = self.engine.cpu.read_ymm(src1_reg);
-            
+
             let src2_data = match inst.op_kind(2) {
                 OpKind::Register => {
                     let src2_reg = self.convert_register(inst.op_register(2))?;
                     self.engine.cpu.read_ymm(src2_reg)
                 }
-                OpKind::Memory => {
-                    self.read_ymm_memory(inst, 2)?
-                }
+                OpKind::Memory => self.read_ymm_memory(inst, 2)?,
                 _ => {
-                    return Err(EmulatorError::UnsupportedInstruction(
-                        format!("Unsupported VADDPD source operand type: {:?}", inst.op_kind(2))
-                    ));
+                    return Err(EmulatorError::UnsupportedInstruction(format!(
+                        "Unsupported VADDPD source operand type: {:?}",
+                        inst.op_kind(2)
+                    )));
                 }
             };
-            
+
             // Perform packed double-precision addition
             // Each YMM register contains 4 64-bit doubles (2 per 128-bit half)
             let mut result = [0u128; 2];
-            
+
             for half in 0..2 {
                 let mut double_results = [0u64; 2];
                 for i in 0..2 {
                     let offset = i * 64;
                     let a_bits = ((src1_data[half] >> offset) & 0xFFFFFFFFFFFFFFFF) as u64;
                     let b_bits = ((src2_data[half] >> offset) & 0xFFFFFFFFFFFFFFFF) as u64;
-                    
+
                     // Convert bits to f64, add, convert back to bits
                     let a = f64::from_bits(a_bits);
                     let b = f64::from_bits(b_bits);
                     let sum = a + b;
                     double_results[i] = sum.to_bits();
                 }
-                
+
                 // Pack the results back into u128
-                result[half] = (double_results[0] as u128) |
-                              ((double_results[1] as u128) << 64);
+                result[half] = (double_results[0] as u128) | ((double_results[1] as u128) << 64);
             }
-            
+
             let dst_reg = self.convert_register(inst.op_register(0))?;
             self.engine.cpu.write_ymm(dst_reg, result);
         } else {
             // 128-bit XMM operation
             let src1_reg = self.convert_register(inst.op_register(1))?;
             let src1_data = self.engine.cpu.read_xmm(src1_reg);
-            
+
             let src2_data = match inst.op_kind(2) {
                 OpKind::Register => {
                     let src2_reg = self.convert_register(inst.op_register(2))?;
@@ -2306,32 +2306,32 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
                     self.read_memory_128(addr)?
                 }
                 _ => {
-                    return Err(EmulatorError::UnsupportedInstruction(
-                        format!("Unsupported VADDPD source operand type: {:?}", inst.op_kind(2))
-                    ));
+                    return Err(EmulatorError::UnsupportedInstruction(format!(
+                        "Unsupported VADDPD source operand type: {:?}",
+                        inst.op_kind(2)
+                    )));
                 }
             };
-            
+
             // Perform packed double-precision addition for XMM (2 doubles)
             let mut double_results = [0u64; 2];
             for i in 0..2 {
                 let offset = i * 64;
                 let a_bits = ((src1_data >> offset) & 0xFFFFFFFFFFFFFFFF) as u64;
                 let b_bits = ((src2_data >> offset) & 0xFFFFFFFFFFFFFFFF) as u64;
-                
+
                 let a = f64::from_bits(a_bits);
                 let b = f64::from_bits(b_bits);
                 let sum = a + b;
                 double_results[i] = sum.to_bits();
             }
-            
-            let result = (double_results[0] as u128) |
-                        ((double_results[1] as u128) << 64);
-            
+
+            let result = (double_results[0] as u128) | ((double_results[1] as u128) << 64);
+
             let dst_reg = self.convert_register(inst.op_register(0))?;
             self.engine.cpu.write_xmm(dst_reg, result);
         }
-        
+
         Ok(())
     }
 
@@ -2339,10 +2339,10 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         // VSUBPD - Vector Subtract Packed Double-Precision Floating-Point Values
         // VEX.256: VSUBPD ymm1, ymm2, ymm3/m256
         // VEX.128: VSUBPD xmm1, xmm2, xmm3/m128
-        
+
         // Check if this is 256-bit (YMM) or 128-bit (XMM) operation
         let is_256bit = inst.op_register(0).is_ymm();
-        
+
         if inst.op_count() != 3 {
             return Err(EmulatorError::UnsupportedInstruction(
                 "VSUBPD requires exactly 3 operands".to_string(),
@@ -2353,52 +2353,50 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             // 256-bit YMM operation
             let src1_reg = self.convert_register(inst.op_register(1))?;
             let src1_data = self.engine.cpu.read_ymm(src1_reg);
-            
+
             let src2_data = match inst.op_kind(2) {
                 OpKind::Register => {
                     let src2_reg = self.convert_register(inst.op_register(2))?;
                     self.engine.cpu.read_ymm(src2_reg)
                 }
-                OpKind::Memory => {
-                    self.read_ymm_memory(inst, 2)?
-                }
+                OpKind::Memory => self.read_ymm_memory(inst, 2)?,
                 _ => {
-                    return Err(EmulatorError::UnsupportedInstruction(
-                        format!("Unsupported VSUBPD source operand type: {:?}", inst.op_kind(2))
-                    ));
+                    return Err(EmulatorError::UnsupportedInstruction(format!(
+                        "Unsupported VSUBPD source operand type: {:?}",
+                        inst.op_kind(2)
+                    )));
                 }
             };
-            
+
             // Perform packed double-precision subtraction
             // Each YMM register contains 4 64-bit doubles (2 per 128-bit half)
             let mut result = [0u128; 2];
-            
+
             for half in 0..2 {
                 let mut double_results = [0u64; 2];
                 for i in 0..2 {
                     let offset = i * 64;
                     let a_bits = ((src1_data[half] >> offset) & 0xFFFFFFFFFFFFFFFF) as u64;
                     let b_bits = ((src2_data[half] >> offset) & 0xFFFFFFFFFFFFFFFF) as u64;
-                    
+
                     // Convert bits to f64, subtract, convert back to bits
                     let a = f64::from_bits(a_bits);
                     let b = f64::from_bits(b_bits);
                     let diff = a - b;
                     double_results[i] = diff.to_bits();
                 }
-                
+
                 // Pack the results back into u128
-                result[half] = (double_results[0] as u128) |
-                              ((double_results[1] as u128) << 64);
+                result[half] = (double_results[0] as u128) | ((double_results[1] as u128) << 64);
             }
-            
+
             let dst_reg = self.convert_register(inst.op_register(0))?;
             self.engine.cpu.write_ymm(dst_reg, result);
         } else {
             // 128-bit XMM operation
             let src1_reg = self.convert_register(inst.op_register(1))?;
             let src1_data = self.engine.cpu.read_xmm(src1_reg);
-            
+
             let src2_data = match inst.op_kind(2) {
                 OpKind::Register => {
                     let src2_reg = self.convert_register(inst.op_register(2))?;
@@ -2409,32 +2407,32 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
                     self.read_memory_128(addr)?
                 }
                 _ => {
-                    return Err(EmulatorError::UnsupportedInstruction(
-                        format!("Unsupported VSUBPD source operand type: {:?}", inst.op_kind(2))
-                    ));
+                    return Err(EmulatorError::UnsupportedInstruction(format!(
+                        "Unsupported VSUBPD source operand type: {:?}",
+                        inst.op_kind(2)
+                    )));
                 }
             };
-            
+
             // Perform packed double-precision subtraction for XMM (2 doubles)
             let mut double_results = [0u64; 2];
             for i in 0..2 {
                 let offset = i * 64;
                 let a_bits = ((src1_data >> offset) & 0xFFFFFFFFFFFFFFFF) as u64;
                 let b_bits = ((src2_data >> offset) & 0xFFFFFFFFFFFFFFFF) as u64;
-                
+
                 let a = f64::from_bits(a_bits);
                 let b = f64::from_bits(b_bits);
                 let diff = a - b;
                 double_results[i] = diff.to_bits();
             }
-            
-            let result = (double_results[0] as u128) |
-                        ((double_results[1] as u128) << 64);
-            
+
+            let result = (double_results[0] as u128) | ((double_results[1] as u128) << 64);
+
             let dst_reg = self.convert_register(inst.op_register(0))?;
             self.engine.cpu.write_xmm(dst_reg, result);
         }
-        
+
         Ok(())
     }
 
@@ -2442,10 +2440,10 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         // VMULPD - Vector Multiply Packed Double-Precision Floating-Point Values
         // VEX.256: VMULPD ymm1, ymm2, ymm3/m256
         // VEX.128: VMULPD xmm1, xmm2, xmm3/m128
-        
+
         // Check if this is 256-bit (YMM) or 128-bit (XMM) operation
         let is_256bit = inst.op_register(0).is_ymm();
-        
+
         if inst.op_count() != 3 {
             return Err(EmulatorError::UnsupportedInstruction(
                 "VMULPD requires exactly 3 operands".to_string(),
@@ -2456,51 +2454,49 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             // 256-bit YMM operation
             let src1_reg = self.convert_register(inst.op_register(1))?;
             let src1_data = self.engine.cpu.read_ymm(src1_reg);
-            
+
             let src2_data = match inst.op_kind(2) {
                 OpKind::Register => {
                     let src2_reg = self.convert_register(inst.op_register(2))?;
                     self.engine.cpu.read_ymm(src2_reg)
                 }
-                OpKind::Memory => {
-                    self.read_ymm_memory(inst, 2)?
-                }
+                OpKind::Memory => self.read_ymm_memory(inst, 2)?,
                 _ => {
-                    return Err(EmulatorError::UnsupportedInstruction(
-                        format!("Unsupported VMULPD source operand type: {:?}", inst.op_kind(2))
-                    ));
+                    return Err(EmulatorError::UnsupportedInstruction(format!(
+                        "Unsupported VMULPD source operand type: {:?}",
+                        inst.op_kind(2)
+                    )));
                 }
             };
-            
+
             // Perform packed double-precision multiplication
             // Each YMM register contains 4 64-bit doubles (2 per 128-bit half)
             let mut result = [0u128; 2];
-            
+
             for half in 0..2 {
                 let mut double_results = [0u64; 2];
                 for i in 0..2 {
                     let offset = i * 64;
                     let a_bits = ((src1_data[half] >> offset) & 0xFFFFFFFFFFFFFFFF) as u64;
                     let b_bits = ((src2_data[half] >> offset) & 0xFFFFFFFFFFFFFFFF) as u64;
-                    
+
                     // Convert bits to f64, multiply, convert back to bits
                     let a = f64::from_bits(a_bits);
                     let b = f64::from_bits(b_bits);
                     let prod = a * b;
                     double_results[i] = prod.to_bits();
                 }
-                
-                result[half] = (double_results[0] as u128) |
-                              ((double_results[1] as u128) << 64);
+
+                result[half] = (double_results[0] as u128) | ((double_results[1] as u128) << 64);
             }
-            
+
             let dst_reg = self.convert_register(inst.op_register(0))?;
             self.engine.cpu.write_ymm(dst_reg, result);
         } else {
             // 128-bit XMM operation
             let src1_reg = self.convert_register(inst.op_register(1))?;
             let src1_data = self.engine.cpu.read_xmm(src1_reg);
-            
+
             let src2_data = match inst.op_kind(2) {
                 OpKind::Register => {
                     let src2_reg = self.convert_register(inst.op_register(2))?;
@@ -2511,32 +2507,32 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
                     self.read_memory_128(addr)?
                 }
                 _ => {
-                    return Err(EmulatorError::UnsupportedInstruction(
-                        format!("Unsupported VMULPD source operand type: {:?}", inst.op_kind(2))
-                    ));
+                    return Err(EmulatorError::UnsupportedInstruction(format!(
+                        "Unsupported VMULPD source operand type: {:?}",
+                        inst.op_kind(2)
+                    )));
                 }
             };
-            
+
             // Perform packed double-precision multiplication for XMM (2 doubles)
             let mut double_results = [0u64; 2];
             for i in 0..2 {
                 let offset = i * 64;
                 let a_bits = ((src1_data >> offset) & 0xFFFFFFFFFFFFFFFF) as u64;
                 let b_bits = ((src2_data >> offset) & 0xFFFFFFFFFFFFFFFF) as u64;
-                
+
                 let a = f64::from_bits(a_bits);
                 let b = f64::from_bits(b_bits);
                 let prod = a * b;
                 double_results[i] = prod.to_bits();
             }
-            
-            let result = (double_results[0] as u128) |
-                        ((double_results[1] as u128) << 64);
-            
+
+            let result = (double_results[0] as u128) | ((double_results[1] as u128) << 64);
+
             let dst_reg = self.convert_register(inst.op_register(0))?;
             self.engine.cpu.write_xmm(dst_reg, result);
         }
-        
+
         Ok(())
     }
 
@@ -2544,10 +2540,10 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         // VDIVPD - Vector Divide Packed Double-Precision Floating-Point Values
         // VEX.256: VDIVPD ymm1, ymm2, ymm3/m256
         // VEX.128: VDIVPD xmm1, xmm2, xmm3/m128
-        
+
         // Check if this is 256-bit (YMM) or 128-bit (XMM) operation
         let is_256bit = inst.op_register(0).is_ymm();
-        
+
         if inst.op_count() != 3 {
             return Err(EmulatorError::UnsupportedInstruction(
                 "VDIVPD requires exactly 3 operands".to_string(),
@@ -2558,51 +2554,49 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             // 256-bit YMM operation
             let src1_reg = self.convert_register(inst.op_register(1))?;
             let src1_data = self.engine.cpu.read_ymm(src1_reg);
-            
+
             let src2_data = match inst.op_kind(2) {
                 OpKind::Register => {
                     let src2_reg = self.convert_register(inst.op_register(2))?;
                     self.engine.cpu.read_ymm(src2_reg)
                 }
-                OpKind::Memory => {
-                    self.read_ymm_memory(inst, 2)?
-                }
+                OpKind::Memory => self.read_ymm_memory(inst, 2)?,
                 _ => {
-                    return Err(EmulatorError::UnsupportedInstruction(
-                        format!("Unsupported VDIVPD source operand type: {:?}", inst.op_kind(2))
-                    ));
+                    return Err(EmulatorError::UnsupportedInstruction(format!(
+                        "Unsupported VDIVPD source operand type: {:?}",
+                        inst.op_kind(2)
+                    )));
                 }
             };
-            
+
             // Perform packed double-precision division
             // Each YMM register contains 4 64-bit doubles (2 per 128-bit half)
             let mut result = [0u128; 2];
-            
+
             for half in 0..2 {
                 let mut double_results = [0u64; 2];
                 for i in 0..2 {
                     let offset = i * 64;
                     let a_bits = ((src1_data[half] >> offset) & 0xFFFFFFFFFFFFFFFF) as u64;
                     let b_bits = ((src2_data[half] >> offset) & 0xFFFFFFFFFFFFFFFF) as u64;
-                    
+
                     // Convert bits to f64, divide, convert back to bits
                     let a = f64::from_bits(a_bits);
                     let b = f64::from_bits(b_bits);
                     let quotient = a / b;
                     double_results[i] = quotient.to_bits();
                 }
-                
-                result[half] = (double_results[0] as u128) |
-                              ((double_results[1] as u128) << 64);
+
+                result[half] = (double_results[0] as u128) | ((double_results[1] as u128) << 64);
             }
-            
+
             let dst_reg = self.convert_register(inst.op_register(0))?;
             self.engine.cpu.write_ymm(dst_reg, result);
         } else {
             // 128-bit XMM operation
             let src1_reg = self.convert_register(inst.op_register(1))?;
             let src1_data = self.engine.cpu.read_xmm(src1_reg);
-            
+
             let src2_data = match inst.op_kind(2) {
                 OpKind::Register => {
                     let src2_reg = self.convert_register(inst.op_register(2))?;
@@ -2613,32 +2607,32 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
                     self.read_memory_128(addr)?
                 }
                 _ => {
-                    return Err(EmulatorError::UnsupportedInstruction(
-                        format!("Unsupported VDIVPD source operand type: {:?}", inst.op_kind(2))
-                    ));
+                    return Err(EmulatorError::UnsupportedInstruction(format!(
+                        "Unsupported VDIVPD source operand type: {:?}",
+                        inst.op_kind(2)
+                    )));
                 }
             };
-            
+
             // Perform packed double-precision division for XMM (2 doubles)
             let mut double_results = [0u64; 2];
             for i in 0..2 {
                 let offset = i * 64;
                 let a_bits = ((src1_data >> offset) & 0xFFFFFFFFFFFFFFFF) as u64;
                 let b_bits = ((src2_data >> offset) & 0xFFFFFFFFFFFFFFFF) as u64;
-                
+
                 let a = f64::from_bits(a_bits);
                 let b = f64::from_bits(b_bits);
                 let quotient = a / b;
                 double_results[i] = quotient.to_bits();
             }
-            
-            let result = (double_results[0] as u128) |
-                        ((double_results[1] as u128) << 64);
-            
+
+            let result = (double_results[0] as u128) | ((double_results[1] as u128) << 64);
+
             let dst_reg = self.convert_register(inst.op_register(0))?;
             self.engine.cpu.write_xmm(dst_reg, result);
         }
-        
+
         Ok(())
     }
 
@@ -2646,10 +2640,10 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         // VSQRTPS - Vector Square Root Packed Single-Precision Floating-Point Values
         // VEX.256: VSQRTPS ymm1, ymm2/m256
         // VEX.128: VSQRTPS xmm1, xmm2/m128
-        
+
         // Check if this is 256-bit (YMM) or 128-bit (XMM) operation
         let is_256bit = inst.op_register(0).is_ymm();
-        
+
         if inst.op_count() != 2 {
             return Err(EmulatorError::UnsupportedInstruction(
                 "VSQRTPS requires exactly 2 operands".to_string(),
@@ -2663,38 +2657,37 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
                     let src_reg = self.convert_register(inst.op_register(1))?;
                     self.engine.cpu.read_ymm(src_reg)
                 }
-                OpKind::Memory => {
-                    self.read_ymm_memory(inst, 1)?
-                }
+                OpKind::Memory => self.read_ymm_memory(inst, 1)?,
                 _ => {
-                    return Err(EmulatorError::UnsupportedInstruction(
-                        format!("Unsupported VSQRTPS source operand type: {:?}", inst.op_kind(1))
-                    ));
+                    return Err(EmulatorError::UnsupportedInstruction(format!(
+                        "Unsupported VSQRTPS source operand type: {:?}",
+                        inst.op_kind(1)
+                    )));
                 }
             };
-            
+
             // Perform packed single-precision square root
             // Each YMM register contains 8 32-bit floats (4 per 128-bit half)
             let mut result = [0u128; 2];
-            
+
             for half in 0..2 {
                 let mut float_results = [0u32; 4];
                 for i in 0..4 {
                     let offset = i * 32;
                     let val_bits = ((src_data[half] >> offset) & 0xFFFFFFFF) as u32;
-                    
+
                     // Convert bits to f32, take square root, convert back to bits
                     let val = f32::from_bits(val_bits);
                     let sqrt_val = val.sqrt();
                     float_results[i] = sqrt_val.to_bits();
                 }
-                
-                result[half] = (float_results[0] as u128) |
-                              ((float_results[1] as u128) << 32) |
-                              ((float_results[2] as u128) << 64) |
-                              ((float_results[3] as u128) << 96);
+
+                result[half] = (float_results[0] as u128)
+                    | ((float_results[1] as u128) << 32)
+                    | ((float_results[2] as u128) << 64)
+                    | ((float_results[3] as u128) << 96);
             }
-            
+
             let dst_reg = self.convert_register(inst.op_register(0))?;
             self.engine.cpu.write_ymm(dst_reg, result);
         } else {
@@ -2709,32 +2702,33 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
                     self.read_memory_128(addr)?
                 }
                 _ => {
-                    return Err(EmulatorError::UnsupportedInstruction(
-                        format!("Unsupported VSQRTPS source operand type: {:?}", inst.op_kind(1))
-                    ));
+                    return Err(EmulatorError::UnsupportedInstruction(format!(
+                        "Unsupported VSQRTPS source operand type: {:?}",
+                        inst.op_kind(1)
+                    )));
                 }
             };
-            
+
             // Perform packed single-precision square root for XMM (4 floats)
             let mut float_results = [0u32; 4];
             for i in 0..4 {
                 let offset = i * 32;
                 let val_bits = ((src_data >> offset) & 0xFFFFFFFF) as u32;
-                
+
                 let val = f32::from_bits(val_bits);
                 let sqrt_val = val.sqrt();
                 float_results[i] = sqrt_val.to_bits();
             }
-            
-            let result = (float_results[0] as u128) |
-                        ((float_results[1] as u128) << 32) |
-                        ((float_results[2] as u128) << 64) |
-                        ((float_results[3] as u128) << 96);
-            
+
+            let result = (float_results[0] as u128)
+                | ((float_results[1] as u128) << 32)
+                | ((float_results[2] as u128) << 64)
+                | ((float_results[3] as u128) << 96);
+
             let dst_reg = self.convert_register(inst.op_register(0))?;
             self.engine.cpu.write_xmm(dst_reg, result);
         }
-        
+
         Ok(())
     }
 
@@ -2742,10 +2736,10 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         // VSQRTPD - Vector Square Root Packed Double-Precision Floating-Point Values
         // VEX.256: VSQRTPD ymm1, ymm2/m256
         // VEX.128: VSQRTPD xmm1, xmm2/m128
-        
+
         // Check if this is 256-bit (YMM) or 128-bit (XMM) operation
         let is_256bit = inst.op_register(0).is_ymm();
-        
+
         if inst.op_count() != 2 {
             return Err(EmulatorError::UnsupportedInstruction(
                 "VSQRTPD requires exactly 2 operands".to_string(),
@@ -2759,36 +2753,34 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
                     let src_reg = self.convert_register(inst.op_register(1))?;
                     self.engine.cpu.read_ymm(src_reg)
                 }
-                OpKind::Memory => {
-                    self.read_ymm_memory(inst, 1)?
-                }
+                OpKind::Memory => self.read_ymm_memory(inst, 1)?,
                 _ => {
-                    return Err(EmulatorError::UnsupportedInstruction(
-                        format!("Unsupported VSQRTPD source operand type: {:?}", inst.op_kind(1))
-                    ));
+                    return Err(EmulatorError::UnsupportedInstruction(format!(
+                        "Unsupported VSQRTPD source operand type: {:?}",
+                        inst.op_kind(1)
+                    )));
                 }
             };
-            
+
             // Perform packed double-precision square root
             // Each YMM register contains 4 64-bit doubles (2 per 128-bit half)
             let mut result = [0u128; 2];
-            
+
             for half in 0..2 {
                 let mut double_results = [0u64; 2];
                 for i in 0..2 {
                     let offset = i * 64;
                     let val_bits = ((src_data[half] >> offset) & 0xFFFFFFFFFFFFFFFF) as u64;
-                    
+
                     // Convert bits to f64, take square root, convert back to bits
                     let val = f64::from_bits(val_bits);
                     let sqrt_val = val.sqrt();
                     double_results[i] = sqrt_val.to_bits();
                 }
-                
-                result[half] = (double_results[0] as u128) |
-                              ((double_results[1] as u128) << 64);
+
+                result[half] = (double_results[0] as u128) | ((double_results[1] as u128) << 64);
             }
-            
+
             let dst_reg = self.convert_register(inst.op_register(0))?;
             self.engine.cpu.write_ymm(dst_reg, result);
         } else {
@@ -2803,30 +2795,30 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
                     self.read_memory_128(addr)?
                 }
                 _ => {
-                    return Err(EmulatorError::UnsupportedInstruction(
-                        format!("Unsupported VSQRTPD source operand type: {:?}", inst.op_kind(1))
-                    ));
+                    return Err(EmulatorError::UnsupportedInstruction(format!(
+                        "Unsupported VSQRTPD source operand type: {:?}",
+                        inst.op_kind(1)
+                    )));
                 }
             };
-            
+
             // Perform packed double-precision square root for XMM (2 doubles)
             let mut double_results = [0u64; 2];
             for i in 0..2 {
                 let offset = i * 64;
                 let val_bits = ((src_data >> offset) & 0xFFFFFFFFFFFFFFFF) as u64;
-                
+
                 let val = f64::from_bits(val_bits);
                 let sqrt_val = val.sqrt();
                 double_results[i] = sqrt_val.to_bits();
             }
-            
-            let result = (double_results[0] as u128) |
-                        ((double_results[1] as u128) << 64);
-            
+
+            let result = (double_results[0] as u128) | ((double_results[1] as u128) << 64);
+
             let dst_reg = self.convert_register(inst.op_register(0))?;
             self.engine.cpu.write_xmm(dst_reg, result);
         }
-        
+
         Ok(())
     }
 
@@ -2834,9 +2826,9 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         // VMAXPS - Maximum of Packed Single-Precision Floating-Point Values
         // VEX.256: VMAXPS ymm1, ymm2, ymm3/m256
         // VEX.128: VMAXPS xmm1, xmm2, xmm3/m128
-        
+
         let is_256bit = inst.op_register(0).is_ymm();
-        
+
         if inst.op_count() != 3 {
             return Err(EmulatorError::UnsupportedInstruction(
                 "VMAXPS requires exactly 3 operands".to_string(),
@@ -2847,32 +2839,31 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             // 256-bit YMM operation
             let src1_reg = self.convert_register(inst.op_register(1))?;
             let src1_data = self.engine.cpu.read_ymm(src1_reg);
-            
+
             let src2_data = match inst.op_kind(2) {
                 OpKind::Register => {
                     let src2_reg = self.convert_register(inst.op_register(2))?;
                     self.engine.cpu.read_ymm(src2_reg)
                 }
-                OpKind::Memory => {
-                    self.read_ymm_memory(inst, 2)?
-                }
+                OpKind::Memory => self.read_ymm_memory(inst, 2)?,
                 _ => {
-                    return Err(EmulatorError::UnsupportedInstruction(
-                        format!("Unsupported VMAXPS source operand type: {:?}", inst.op_kind(2))
-                    ));
+                    return Err(EmulatorError::UnsupportedInstruction(format!(
+                        "Unsupported VMAXPS source operand type: {:?}",
+                        inst.op_kind(2)
+                    )));
                 }
             };
-            
+
             // Perform element-wise maximum
             let mut result = [0u128; 2];
-            
+
             for half in 0..2 {
                 let mut float_results = [0u32; 4];
                 for i in 0..4 {
                     let offset = i * 32;
                     let a_bits = ((src1_data[half] >> offset) & 0xFFFFFFFF) as u32;
                     let b_bits = ((src2_data[half] >> offset) & 0xFFFFFFFF) as u32;
-                    
+
                     let a = f32::from_bits(a_bits);
                     let b = f32::from_bits(b_bits);
                     // Handle NaN propagation: if either is NaN, result is second operand
@@ -2883,20 +2874,20 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
                     };
                     float_results[i] = max_val.to_bits();
                 }
-                
-                result[half] = (float_results[0] as u128) |
-                              ((float_results[1] as u128) << 32) |
-                              ((float_results[2] as u128) << 64) |
-                              ((float_results[3] as u128) << 96);
+
+                result[half] = (float_results[0] as u128)
+                    | ((float_results[1] as u128) << 32)
+                    | ((float_results[2] as u128) << 64)
+                    | ((float_results[3] as u128) << 96);
             }
-            
+
             let dst_reg = self.convert_register(inst.op_register(0))?;
             self.engine.cpu.write_ymm(dst_reg, result);
         } else {
             // 128-bit XMM operation
             let src1_reg = self.convert_register(inst.op_register(1))?;
             let src1_data = self.engine.cpu.read_xmm(src1_reg);
-            
+
             let src2_data = match inst.op_kind(2) {
                 OpKind::Register => {
                     let src2_reg = self.convert_register(inst.op_register(2))?;
@@ -2907,18 +2898,19 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
                     self.read_memory_128(addr)?
                 }
                 _ => {
-                    return Err(EmulatorError::UnsupportedInstruction(
-                        format!("Unsupported VMAXPS source operand type: {:?}", inst.op_kind(2))
-                    ));
+                    return Err(EmulatorError::UnsupportedInstruction(format!(
+                        "Unsupported VMAXPS source operand type: {:?}",
+                        inst.op_kind(2)
+                    )));
                 }
             };
-            
+
             let mut float_results = [0u32; 4];
             for i in 0..4 {
                 let offset = i * 32;
                 let a_bits = ((src1_data >> offset) & 0xFFFFFFFF) as u32;
                 let b_bits = ((src2_data >> offset) & 0xFFFFFFFF) as u32;
-                
+
                 let a = f32::from_bits(a_bits);
                 let b = f32::from_bits(b_bits);
                 let max_val = if a.is_nan() || b.is_nan() {
@@ -2928,16 +2920,16 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
                 };
                 float_results[i] = max_val.to_bits();
             }
-            
-            let result = (float_results[0] as u128) |
-                        ((float_results[1] as u128) << 32) |
-                        ((float_results[2] as u128) << 64) |
-                        ((float_results[3] as u128) << 96);
-            
+
+            let result = (float_results[0] as u128)
+                | ((float_results[1] as u128) << 32)
+                | ((float_results[2] as u128) << 64)
+                | ((float_results[3] as u128) << 96);
+
             let dst_reg = self.convert_register(inst.op_register(0))?;
             self.engine.cpu.write_xmm(dst_reg, result);
         }
-        
+
         Ok(())
     }
 
@@ -2945,9 +2937,9 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         // VMAXPD - Maximum of Packed Double-Precision Floating-Point Values
         // VEX.256: VMAXPD ymm1, ymm2, ymm3/m256
         // VEX.128: VMAXPD xmm1, xmm2, xmm3/m128
-        
+
         let is_256bit = inst.op_register(0).is_ymm();
-        
+
         if inst.op_count() != 3 {
             return Err(EmulatorError::UnsupportedInstruction(
                 "VMAXPD requires exactly 3 operands".to_string(),
@@ -2958,31 +2950,30 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             // 256-bit YMM operation
             let src1_reg = self.convert_register(inst.op_register(1))?;
             let src1_data = self.engine.cpu.read_ymm(src1_reg);
-            
+
             let src2_data = match inst.op_kind(2) {
                 OpKind::Register => {
                     let src2_reg = self.convert_register(inst.op_register(2))?;
                     self.engine.cpu.read_ymm(src2_reg)
                 }
-                OpKind::Memory => {
-                    self.read_ymm_memory(inst, 2)?
-                }
+                OpKind::Memory => self.read_ymm_memory(inst, 2)?,
                 _ => {
-                    return Err(EmulatorError::UnsupportedInstruction(
-                        format!("Unsupported VMAXPD source operand type: {:?}", inst.op_kind(2))
-                    ));
+                    return Err(EmulatorError::UnsupportedInstruction(format!(
+                        "Unsupported VMAXPD source operand type: {:?}",
+                        inst.op_kind(2)
+                    )));
                 }
             };
-            
+
             let mut result = [0u128; 2];
-            
+
             for half in 0..2 {
                 let mut double_results = [0u64; 2];
                 for i in 0..2 {
                     let offset = i * 64;
                     let a_bits = ((src1_data[half] >> offset) & 0xFFFFFFFFFFFFFFFF) as u64;
                     let b_bits = ((src2_data[half] >> offset) & 0xFFFFFFFFFFFFFFFF) as u64;
-                    
+
                     let a = f64::from_bits(a_bits);
                     let b = f64::from_bits(b_bits);
                     let max_val = if a.is_nan() || b.is_nan() {
@@ -2992,18 +2983,17 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
                     };
                     double_results[i] = max_val.to_bits();
                 }
-                
-                result[half] = (double_results[0] as u128) |
-                              ((double_results[1] as u128) << 64);
+
+                result[half] = (double_results[0] as u128) | ((double_results[1] as u128) << 64);
             }
-            
+
             let dst_reg = self.convert_register(inst.op_register(0))?;
             self.engine.cpu.write_ymm(dst_reg, result);
         } else {
             // 128-bit XMM operation
             let src1_reg = self.convert_register(inst.op_register(1))?;
             let src1_data = self.engine.cpu.read_xmm(src1_reg);
-            
+
             let src2_data = match inst.op_kind(2) {
                 OpKind::Register => {
                     let src2_reg = self.convert_register(inst.op_register(2))?;
@@ -3014,18 +3004,19 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
                     self.read_memory_128(addr)?
                 }
                 _ => {
-                    return Err(EmulatorError::UnsupportedInstruction(
-                        format!("Unsupported VMAXPD source operand type: {:?}", inst.op_kind(2))
-                    ));
+                    return Err(EmulatorError::UnsupportedInstruction(format!(
+                        "Unsupported VMAXPD source operand type: {:?}",
+                        inst.op_kind(2)
+                    )));
                 }
             };
-            
+
             let mut double_results = [0u64; 2];
             for i in 0..2 {
                 let offset = i * 64;
                 let a_bits = ((src1_data >> offset) & 0xFFFFFFFFFFFFFFFF) as u64;
                 let b_bits = ((src2_data >> offset) & 0xFFFFFFFFFFFFFFFF) as u64;
-                
+
                 let a = f64::from_bits(a_bits);
                 let b = f64::from_bits(b_bits);
                 let max_val = if a.is_nan() || b.is_nan() {
@@ -3035,14 +3026,13 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
                 };
                 double_results[i] = max_val.to_bits();
             }
-            
-            let result = (double_results[0] as u128) |
-                        ((double_results[1] as u128) << 64);
-            
+
+            let result = (double_results[0] as u128) | ((double_results[1] as u128) << 64);
+
             let dst_reg = self.convert_register(inst.op_register(0))?;
             self.engine.cpu.write_xmm(dst_reg, result);
         }
-        
+
         Ok(())
     }
 
@@ -3050,9 +3040,9 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         // VMINPS - Minimum of Packed Single-Precision Floating-Point Values
         // VEX.256: VMINPS ymm1, ymm2, ymm3/m256
         // VEX.128: VMINPS xmm1, xmm2, xmm3/m128
-        
+
         let is_256bit = inst.op_register(0).is_ymm();
-        
+
         if inst.op_count() != 3 {
             return Err(EmulatorError::UnsupportedInstruction(
                 "VMINPS requires exactly 3 operands".to_string(),
@@ -3063,32 +3053,31 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             // 256-bit YMM operation
             let src1_reg = self.convert_register(inst.op_register(1))?;
             let src1_data = self.engine.cpu.read_ymm(src1_reg);
-            
+
             let src2_data = match inst.op_kind(2) {
                 OpKind::Register => {
                     let src2_reg = self.convert_register(inst.op_register(2))?;
                     self.engine.cpu.read_ymm(src2_reg)
                 }
-                OpKind::Memory => {
-                    self.read_ymm_memory(inst, 2)?
-                }
+                OpKind::Memory => self.read_ymm_memory(inst, 2)?,
                 _ => {
-                    return Err(EmulatorError::UnsupportedInstruction(
-                        format!("Unsupported VMINPS source operand type: {:?}", inst.op_kind(2))
-                    ));
+                    return Err(EmulatorError::UnsupportedInstruction(format!(
+                        "Unsupported VMINPS source operand type: {:?}",
+                        inst.op_kind(2)
+                    )));
                 }
             };
-            
+
             // Perform element-wise minimum
             let mut result = [0u128; 2];
-            
+
             for half in 0..2 {
                 let mut float_results = [0u32; 4];
                 for i in 0..4 {
                     let offset = i * 32;
                     let a_bits = ((src1_data[half] >> offset) & 0xFFFFFFFF) as u32;
                     let b_bits = ((src2_data[half] >> offset) & 0xFFFFFFFF) as u32;
-                    
+
                     let a = f32::from_bits(a_bits);
                     let b = f32::from_bits(b_bits);
                     // Handle NaN propagation: if either is NaN, result is second operand
@@ -3099,20 +3088,20 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
                     };
                     float_results[i] = min_val.to_bits();
                 }
-                
-                result[half] = (float_results[0] as u128) |
-                              ((float_results[1] as u128) << 32) |
-                              ((float_results[2] as u128) << 64) |
-                              ((float_results[3] as u128) << 96);
+
+                result[half] = (float_results[0] as u128)
+                    | ((float_results[1] as u128) << 32)
+                    | ((float_results[2] as u128) << 64)
+                    | ((float_results[3] as u128) << 96);
             }
-            
+
             let dst_reg = self.convert_register(inst.op_register(0))?;
             self.engine.cpu.write_ymm(dst_reg, result);
         } else {
             // 128-bit XMM operation
             let src1_reg = self.convert_register(inst.op_register(1))?;
             let src1_data = self.engine.cpu.read_xmm(src1_reg);
-            
+
             let src2_data = match inst.op_kind(2) {
                 OpKind::Register => {
                     let src2_reg = self.convert_register(inst.op_register(2))?;
@@ -3123,18 +3112,19 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
                     self.read_memory_128(addr)?
                 }
                 _ => {
-                    return Err(EmulatorError::UnsupportedInstruction(
-                        format!("Unsupported VMINPS source operand type: {:?}", inst.op_kind(2))
-                    ));
+                    return Err(EmulatorError::UnsupportedInstruction(format!(
+                        "Unsupported VMINPS source operand type: {:?}",
+                        inst.op_kind(2)
+                    )));
                 }
             };
-            
+
             let mut float_results = [0u32; 4];
             for i in 0..4 {
                 let offset = i * 32;
                 let a_bits = ((src1_data >> offset) & 0xFFFFFFFF) as u32;
                 let b_bits = ((src2_data >> offset) & 0xFFFFFFFF) as u32;
-                
+
                 let a = f32::from_bits(a_bits);
                 let b = f32::from_bits(b_bits);
                 let min_val = if a.is_nan() || b.is_nan() {
@@ -3144,16 +3134,16 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
                 };
                 float_results[i] = min_val.to_bits();
             }
-            
-            let result = (float_results[0] as u128) |
-                        ((float_results[1] as u128) << 32) |
-                        ((float_results[2] as u128) << 64) |
-                        ((float_results[3] as u128) << 96);
-            
+
+            let result = (float_results[0] as u128)
+                | ((float_results[1] as u128) << 32)
+                | ((float_results[2] as u128) << 64)
+                | ((float_results[3] as u128) << 96);
+
             let dst_reg = self.convert_register(inst.op_register(0))?;
             self.engine.cpu.write_xmm(dst_reg, result);
         }
-        
+
         Ok(())
     }
 
@@ -3161,9 +3151,9 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         // VMINPD - Minimum of Packed Double-Precision Floating-Point Values
         // VEX.256: VMINPD ymm1, ymm2, ymm3/m256
         // VEX.128: VMINPD xmm1, xmm2, xmm3/m128
-        
+
         let is_256bit = inst.op_register(0).is_ymm();
-        
+
         if inst.op_count() != 3 {
             return Err(EmulatorError::UnsupportedInstruction(
                 "VMINPD requires exactly 3 operands".to_string(),
@@ -3174,31 +3164,30 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             // 256-bit YMM operation
             let src1_reg = self.convert_register(inst.op_register(1))?;
             let src1_data = self.engine.cpu.read_ymm(src1_reg);
-            
+
             let src2_data = match inst.op_kind(2) {
                 OpKind::Register => {
                     let src2_reg = self.convert_register(inst.op_register(2))?;
                     self.engine.cpu.read_ymm(src2_reg)
                 }
-                OpKind::Memory => {
-                    self.read_ymm_memory(inst, 2)?
-                }
+                OpKind::Memory => self.read_ymm_memory(inst, 2)?,
                 _ => {
-                    return Err(EmulatorError::UnsupportedInstruction(
-                        format!("Unsupported VMINPD source operand type: {:?}", inst.op_kind(2))
-                    ));
+                    return Err(EmulatorError::UnsupportedInstruction(format!(
+                        "Unsupported VMINPD source operand type: {:?}",
+                        inst.op_kind(2)
+                    )));
                 }
             };
-            
+
             let mut result = [0u128; 2];
-            
+
             for half in 0..2 {
                 let mut double_results = [0u64; 2];
                 for i in 0..2 {
                     let offset = i * 64;
                     let a_bits = ((src1_data[half] >> offset) & 0xFFFFFFFFFFFFFFFF) as u64;
                     let b_bits = ((src2_data[half] >> offset) & 0xFFFFFFFFFFFFFFFF) as u64;
-                    
+
                     let a = f64::from_bits(a_bits);
                     let b = f64::from_bits(b_bits);
                     let min_val = if a.is_nan() || b.is_nan() {
@@ -3208,18 +3197,17 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
                     };
                     double_results[i] = min_val.to_bits();
                 }
-                
-                result[half] = (double_results[0] as u128) |
-                              ((double_results[1] as u128) << 64);
+
+                result[half] = (double_results[0] as u128) | ((double_results[1] as u128) << 64);
             }
-            
+
             let dst_reg = self.convert_register(inst.op_register(0))?;
             self.engine.cpu.write_ymm(dst_reg, result);
         } else {
             // 128-bit XMM operation
             let src1_reg = self.convert_register(inst.op_register(1))?;
             let src1_data = self.engine.cpu.read_xmm(src1_reg);
-            
+
             let src2_data = match inst.op_kind(2) {
                 OpKind::Register => {
                     let src2_reg = self.convert_register(inst.op_register(2))?;
@@ -3230,18 +3218,19 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
                     self.read_memory_128(addr)?
                 }
                 _ => {
-                    return Err(EmulatorError::UnsupportedInstruction(
-                        format!("Unsupported VMINPD source operand type: {:?}", inst.op_kind(2))
-                    ));
+                    return Err(EmulatorError::UnsupportedInstruction(format!(
+                        "Unsupported VMINPD source operand type: {:?}",
+                        inst.op_kind(2)
+                    )));
                 }
             };
-            
+
             let mut double_results = [0u64; 2];
             for i in 0..2 {
                 let offset = i * 64;
                 let a_bits = ((src1_data >> offset) & 0xFFFFFFFFFFFFFFFF) as u64;
                 let b_bits = ((src2_data >> offset) & 0xFFFFFFFFFFFFFFFF) as u64;
-                
+
                 let a = f64::from_bits(a_bits);
                 let b = f64::from_bits(b_bits);
                 let min_val = if a.is_nan() || b.is_nan() {
@@ -3251,14 +3240,13 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
                 };
                 double_results[i] = min_val.to_bits();
             }
-            
-            let result = (double_results[0] as u128) |
-                        ((double_results[1] as u128) << 64);
-            
+
+            let result = (double_results[0] as u128) | ((double_results[1] as u128) << 64);
+
             let dst_reg = self.convert_register(inst.op_register(0))?;
             self.engine.cpu.write_xmm(dst_reg, result);
         }
-        
+
         Ok(())
     }
 
@@ -7169,23 +7157,27 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         // RCL: Rotate through carry left
         let dst_value = self.read_operand(inst, 0)?;
         let count = (self.read_operand(inst, 1)? & 0x3F) as u32; // Modulo 64
-        
+
         if count == 0 {
             return Ok(());
         }
-        
+
         let size = self.get_operand_size_from_instruction(inst, 0)?;
         let bit_count = size * 8;
-        
+
         // For RCL, we rotate through CF, making the rotation count be bit_count + 1
         let mod_count = count % (bit_count as u32 + 1);
-        
+
         if mod_count == 0 {
             return Ok(());
         }
-        
-        let old_cf = if self.engine.cpu.rflags.contains(Flags::CF) { 1u64 } else { 0u64 };
-        
+
+        let old_cf = if self.engine.cpu.rflags.contains(Flags::CF) {
+            1u64
+        } else {
+            0u64
+        };
+
         let (result, new_cf) = match size {
             1 => {
                 let val = dst_value as u8;
@@ -7215,7 +7207,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
                 // For 64-bit, we need to handle this carefully
                 let mut result = dst_value;
                 let mut cf = old_cf != 0;
-                
+
                 for _ in 0..mod_count {
                     let new_cf = (result >> 63) & 1 != 0;
                     result = (result << 1) | (if cf { 1 } else { 0 });
@@ -7230,14 +7222,14 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
                 )));
             }
         };
-        
+
         // Update CF
         if new_cf {
             self.engine.cpu.rflags.insert(Flags::CF);
         } else {
             self.engine.cpu.rflags.remove(Flags::CF);
         }
-        
+
         // Update OF if count == 1
         if count == 1 {
             // OF = MSB XOR CF after rotation
@@ -7248,32 +7240,36 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
                 self.engine.cpu.rflags.remove(Flags::OF);
             }
         }
-        
+
         self.write_operand(inst, 0, result)?;
         Ok(())
     }
-    
+
     fn execute_rcr(&mut self, inst: &Instruction) -> Result<()> {
         // RCR: Rotate through carry right
         let dst_value = self.read_operand(inst, 0)?;
         let count = (self.read_operand(inst, 1)? & 0x3F) as u32; // Modulo 64
-        
+
         if count == 0 {
             return Ok(());
         }
-        
+
         let size = self.get_operand_size_from_instruction(inst, 0)?;
         let bit_count = size * 8;
-        
+
         // For RCR, we rotate through CF, making the rotation count be bit_count + 1
         let mod_count = count % (bit_count as u32 + 1);
-        
+
         if mod_count == 0 {
             return Ok(());
         }
-        
-        let old_cf = if self.engine.cpu.rflags.contains(Flags::CF) { 1u64 } else { 0u64 };
-        
+
+        let old_cf = if self.engine.cpu.rflags.contains(Flags::CF) {
+            1u64
+        } else {
+            0u64
+        };
+
         let (result, new_cf) = match size {
             1 => {
                 let val = dst_value as u8;
@@ -7303,7 +7299,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
                 // For 64-bit, we need to handle this carefully
                 let mut result = dst_value;
                 let mut cf = old_cf != 0;
-                
+
                 for _ in 0..mod_count {
                     let new_cf = result & 1 != 0;
                     result = (result >> 1) | ((if cf { 1 } else { 0 }) << 63);
@@ -7318,14 +7314,14 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
                 )));
             }
         };
-        
+
         // Update CF
         if new_cf {
             self.engine.cpu.rflags.insert(Flags::CF);
         } else {
             self.engine.cpu.rflags.remove(Flags::CF);
         }
-        
+
         // Update OF if count == 1
         if count == 1 {
             // OF = two most significant bits XOR after rotation
@@ -7337,7 +7333,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
                 self.engine.cpu.rflags.remove(Flags::OF);
             }
         }
-        
+
         self.write_operand(inst, 0, result)?;
         Ok(())
     }
@@ -7347,13 +7343,13 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         self.engine.cpu.rflags.insert(Flags::CF);
         Ok(())
     }
-    
+
     fn execute_clc(&mut self, _inst: &Instruction) -> Result<()> {
         // CLC: Clear carry flag
         self.engine.cpu.rflags.remove(Flags::CF);
         Ok(())
     }
-    
+
     fn execute_cmc(&mut self, _inst: &Instruction) -> Result<()> {
         // CMC: Complement carry flag
         if self.engine.cpu.rflags.contains(Flags::CF) {
@@ -7363,54 +7359,54 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         }
         Ok(())
     }
-    
+
     fn execute_xlat(&mut self, _inst: &Instruction) -> Result<()> {
         // XLAT: Table lookup translation
         // AL = [DS:RBX + AL] (64-bit mode)
-        // AL = [DS:EBX + AL] (32-bit mode)  
+        // AL = [DS:EBX + AL] (32-bit mode)
         // AL = [DS:BX + AL] (16-bit mode)
-        
+
         // Get AL value as index
         let al = self.engine.cpu.read_reg(Register::AL) as u8;
-        
+
         // In 64-bit mode, use RBX as base
         // TODO: Handle 32-bit and 16-bit modes when needed
         let base_addr = self.engine.cpu.read_reg(Register::RBX);
-        
+
         // Calculate effective address: base + zero-extended AL
         let effective_addr = base_addr.wrapping_add(al as u64);
-        
+
         // Read byte from memory at effective address
         let value = self.read_memory_sized(effective_addr, 1)? as u8;
-        
+
         // Get current RAX value and preserve upper bits
         let rax = self.engine.cpu.read_reg(Register::RAX);
         let new_rax = (rax & 0xFFFFFFFFFFFFFF00) | (value as u64);
-        
+
         // Store result, preserving upper bits of RAX
         self.engine.cpu.write_reg(Register::RAX, new_rax);
-        
+
         // XLAT doesn't affect flags
         Ok(())
     }
-    
+
     fn execute_pause(&mut self, _inst: &Instruction) -> Result<()> {
         // PAUSE: Spin-wait loop hint
         // This is a hint to the processor that the code is in a spin-wait loop
         // In emulation, we don't need to do anything special
         // Real processors use this to improve power consumption and performance
         // when one logical processor is waiting for another
-        
+
         // PAUSE doesn't affect registers or flags
         // It's essentially a NOP with a hint for the processor
         Ok(())
     }
-    
+
     fn execute_ud2(&mut self, _inst: &Instruction) -> Result<()> {
         // UD2: Undefined instruction
         // Guaranteed to raise an invalid opcode exception
         // Often used for marking unreachable code or debugging
-        
+
         // Raise an invalid opcode error
         Err(EmulatorError::InvalidOpcode)
     }
@@ -7801,7 +7797,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         // LZCNT: Leading Zero Count - Count number of leading zero bits
         let source = self.read_operand(inst, 1)?;
         let size = self.get_operand_size_from_instruction(inst, 1)?;
-        
+
         // Count leading zeros based on operand size
         let count = match size {
             1 => (source as u8).leading_zeros() as u64,
@@ -7821,8 +7817,11 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
 
         // Update flags
         // LZCNT clears all flags except CF and ZF
-        self.engine.cpu.rflags.remove(Flags::SF | Flags::OF | Flags::AF | Flags::PF);
-        
+        self.engine
+            .cpu
+            .rflags
+            .remove(Flags::SF | Flags::OF | Flags::AF | Flags::PF);
+
         // CF is set if source is zero (indicating the destination holds operand size in bits)
         if source == 0 {
             self.engine.cpu.rflags.insert(Flags::CF);
@@ -7839,7 +7838,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         // TZCNT: Trailing Zero Count - Count number of trailing zero bits
         let source = self.read_operand(inst, 1)?;
         let size = self.get_operand_size_from_instruction(inst, 1)?;
-        
+
         // Count trailing zeros based on operand size
         let count = if source == 0 {
             // If source is 0, return the operand size in bits
@@ -7864,8 +7863,11 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
 
         // Update flags
         // TZCNT clears all flags except CF and ZF
-        self.engine.cpu.rflags.remove(Flags::SF | Flags::OF | Flags::AF | Flags::PF);
-        
+        self.engine
+            .cpu
+            .rflags
+            .remove(Flags::SF | Flags::OF | Flags::AF | Flags::PF);
+
         // CF is set if source is zero
         if source == 0 {
             self.engine.cpu.rflags.insert(Flags::CF);
@@ -7883,25 +7885,28 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         // dest = ~src1 & src2
         // This instruction performs a bitwise AND of the complement of the first source operand
         // with the second source operand and stores the result in the destination.
-        
+
         // ANDN has 3 operands: dest, src1, src2
         // In VEX encoding: ANDN dest, src1, src2 means dest = ~src1 & src2
         let src1 = self.read_operand(inst, 1)?;
         let src2 = self.read_operand(inst, 2)?;
-        
+
         // Perform AND NOT operation
         let result = !src1 & src2;
-        
+
         // Write result to destination
         self.write_operand(inst, 0, result)?;
-        
+
         // Update flags according to Intel manual
         // ANDN sets SF, ZF based on result
         // Clears OF and CF
         // AF is undefined (we'll clear it)
         // PF is undefined (we'll set it based on low byte)
-        self.engine.cpu.rflags.remove(Flags::OF | Flags::CF | Flags::AF);
-        
+        self.engine
+            .cpu
+            .rflags
+            .remove(Flags::OF | Flags::CF | Flags::AF);
+
         // Set SF based on sign bit of result
         let size = self.get_operand_size_from_instruction(inst, 0)?;
         let sign_bit = match size {
@@ -7911,28 +7916,28 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             8 => (result & 0x8000000000000000) != 0,
             _ => false,
         };
-        
+
         if sign_bit {
             self.engine.cpu.rflags.insert(Flags::SF);
         } else {
             self.engine.cpu.rflags.remove(Flags::SF);
         }
-        
+
         // Set ZF if result is zero
         if result == 0 {
             self.engine.cpu.rflags.insert(Flags::ZF);
         } else {
             self.engine.cpu.rflags.remove(Flags::ZF);
         }
-        
+
         // Set PF based on low byte
         let low_byte = (result & 0xFF) as u8;
-        if low_byte.count_ones() % 2 == 0 {
+        if low_byte.count_ones().is_multiple_of(2) {
             self.engine.cpu.rflags.insert(Flags::PF);
         } else {
             self.engine.cpu.rflags.remove(Flags::PF);
         }
-        
+
         Ok(())
     }
 
@@ -7940,20 +7945,20 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         // BEXTR: Bit Field Extract
         // Extracts contiguous bits from the first source operand using index and length
         // specified in the second source operand
-        
+
         // BEXTR has 3 operands: dest, src1, src2
         // src2 contains: bits[7:0] = starting bit index, bits[15:8] = length
         let src1 = self.read_operand(inst, 1)?;
         let src2 = self.read_operand(inst, 2)?;
-        
+
         // Extract start position and length from src2
         let start = (src2 & 0xFF) as u32;
         let length = ((src2 >> 8) & 0xFF) as u32;
-        
+
         // Get operand size for masking
         let size = self.get_operand_size_from_instruction(inst, 0)?;
         let max_bits = size * 8;
-        
+
         // If start position is >= operand size in bits, result is 0
         let result = if start >= max_bits as u32 {
             0u64
@@ -7963,37 +7968,40 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             // Calculate how many bits we can actually extract
             let available_bits = (max_bits as u32).saturating_sub(start);
             let actual_length = length.min(available_bits).min(64);
-            
+
             // Shift right to move the desired bits to position 0
             let shifted = src1 >> start;
-            
+
             // Create a mask for the desired number of bits
             let mask = if actual_length >= 64 {
                 !0u64
             } else {
                 (1u64 << actual_length) - 1
             };
-            
+
             // Extract the bits
             shifted & mask
         };
-        
+
         // Write result to destination
         self.write_operand(inst, 0, result)?;
-        
+
         // Update flags according to Intel manual
         // BEXTR clears OF and CF
         // Sets ZF based on result
         // AF, SF, PF are undefined (we'll clear AF, set SF/PF based on result)
-        self.engine.cpu.rflags.remove(Flags::OF | Flags::CF | Flags::AF);
-        
+        self.engine
+            .cpu
+            .rflags
+            .remove(Flags::OF | Flags::CF | Flags::AF);
+
         // Set ZF if result is zero
         if result == 0 {
             self.engine.cpu.rflags.insert(Flags::ZF);
         } else {
             self.engine.cpu.rflags.remove(Flags::ZF);
         }
-        
+
         // Set SF based on sign bit of result (even though it's undefined)
         let sign_bit = match size {
             1 => (result & 0x80) != 0,
@@ -8002,21 +8010,21 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             8 => (result & 0x8000000000000000) != 0,
             _ => false,
         };
-        
+
         if sign_bit {
             self.engine.cpu.rflags.insert(Flags::SF);
         } else {
             self.engine.cpu.rflags.remove(Flags::SF);
         }
-        
+
         // Set PF based on low byte
         let low_byte = (result & 0xFF) as u8;
-        if low_byte.count_ones() % 2 == 0 {
+        if low_byte.count_ones().is_multiple_of(2) {
             self.engine.cpu.rflags.insert(Flags::PF);
         } else {
             self.engine.cpu.rflags.remove(Flags::PF);
         }
-        
+
         Ok(())
     }
 
@@ -8025,26 +8033,26 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         // Extracts the lowest set bit from the source operand and stores it in the destination
         // Operation: dest = src & -src
         // This isolates the rightmost 1 bit (if any) in the source operand
-        
+
         // BLSI has 2 operands: dest, src
         // For VEX encoding, operand 0 is destination, operand 1 is source
         let src = self.read_operand(inst, 1)?;
-        
+
         // Perform the operation: src & -src
         // In two's complement, -src = ~src + 1
         let neg_src = (!src).wrapping_add(1);
         let result = src & neg_src;
-        
+
         // Write result to destination
         self.write_operand(inst, 0, result)?;
-        
+
         // Update flags according to Intel manual
         // BLSI sets SF, CF, OF based on result
         // ZF is set if src is zero (result would be zero)
         // PF is undefined (we'll set it based on low byte)
         // AF is undefined (we'll clear it)
         self.engine.cpu.rflags.remove(Flags::AF);
-        
+
         // Set ZF if source is zero (result would be zero)
         if src == 0 {
             self.engine.cpu.rflags.insert(Flags::ZF);
@@ -8055,7 +8063,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             // CF is set when src is not zero
             self.engine.cpu.rflags.insert(Flags::CF);
         }
-        
+
         // SF is set to the MSB of the result
         let size = self.get_operand_size_from_instruction(inst, 0)?;
         let sign_bit = match size {
@@ -8065,42 +8073,42 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             8 => (result & 0x8000000000000000) != 0,
             _ => false,
         };
-        
+
         if sign_bit {
             self.engine.cpu.rflags.insert(Flags::SF);
         } else {
             self.engine.cpu.rflags.remove(Flags::SF);
         }
-        
+
         // OF is cleared
         self.engine.cpu.rflags.remove(Flags::OF);
-        
+
         // Set PF based on low byte
         let low_byte = (result & 0xFF) as u8;
-        if low_byte.count_ones() % 2 == 0 {
+        if low_byte.count_ones().is_multiple_of(2) {
             self.engine.cpu.rflags.insert(Flags::PF);
         } else {
             self.engine.cpu.rflags.remove(Flags::PF);
         }
-        
+
         Ok(())
     }
 
     fn execute_blsmsk(&mut self, inst: &Instruction) -> Result<()> {
         // BLSMSK: Get Mask Up to Lowest Set Bit
-        // Creates a mask with all bits set from bit 0 up to and including 
+        // Creates a mask with all bits set from bit 0 up to and including
         // the lowest set bit in the source operand
         // Operation: dest = src ^ (src - 1)
-        
+
         // BLSMSK has 2 operands: dest, src
         let src = self.read_operand(inst, 1)?;
-        
+
         // Perform the operation: src ^ (src - 1)
         let result = src ^ src.wrapping_sub(1);
-        
+
         // Write result to destination
         self.write_operand(inst, 0, result)?;
-        
+
         // Update flags according to Intel manual
         // BLSMSK sets SF based on result
         // CF is set if src is NOT zero
@@ -8108,7 +8116,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         // OF and AF are undefined (we'll clear them)
         // PF is undefined (we'll set it based on low byte)
         self.engine.cpu.rflags.remove(Flags::OF | Flags::AF);
-        
+
         // Set CF if source is not zero
         if src != 0 {
             self.engine.cpu.rflags.insert(Flags::CF);
@@ -8119,7 +8127,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             // ZF is set when src == 0 (result would be 0)
             self.engine.cpu.rflags.insert(Flags::ZF);
         }
-        
+
         // SF is set to the MSB of the result
         let size = self.get_operand_size_from_instruction(inst, 0)?;
         let sign_bit = match size {
@@ -8129,21 +8137,21 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             8 => (result & 0x8000000000000000) != 0,
             _ => false,
         };
-        
+
         if sign_bit {
             self.engine.cpu.rflags.insert(Flags::SF);
         } else {
             self.engine.cpu.rflags.remove(Flags::SF);
         }
-        
+
         // Set PF based on low byte
         let low_byte = (result & 0xFF) as u8;
-        if low_byte.count_ones() % 2 == 0 {
+        if low_byte.count_ones().is_multiple_of(2) {
             self.engine.cpu.rflags.insert(Flags::PF);
         } else {
             self.engine.cpu.rflags.remove(Flags::PF);
         }
-        
+
         Ok(())
     }
 
@@ -8151,16 +8159,16 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         // BLSR: Reset Lowest Set Bit
         // Clears the lowest set bit in the source operand
         // Operation: dest = src & (src - 1)
-        
+
         // BLSR has 2 operands: dest, src
         let src = self.read_operand(inst, 1)?;
-        
+
         // Perform the operation: src & (src - 1)
         let result = src & src.wrapping_sub(1);
-        
+
         // Write result to destination
         self.write_operand(inst, 0, result)?;
-        
+
         // Update flags according to Intel manual
         // BLSR sets SF, ZF based on result
         // CF is set if src is NOT zero
@@ -8168,21 +8176,21 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         // AF is undefined (we'll clear it)
         // PF is undefined (we'll set it based on low byte)
         self.engine.cpu.rflags.remove(Flags::OF | Flags::AF);
-        
+
         // Set CF if source is not zero
         if src != 0 {
             self.engine.cpu.rflags.insert(Flags::CF);
         } else {
             self.engine.cpu.rflags.remove(Flags::CF);
         }
-        
+
         // Set ZF if result is zero
         if result == 0 {
             self.engine.cpu.rflags.insert(Flags::ZF);
         } else {
             self.engine.cpu.rflags.remove(Flags::ZF);
         }
-        
+
         // SF is set to the MSB of the result
         let size = self.get_operand_size_from_instruction(inst, 0)?;
         let sign_bit = match size {
@@ -8192,21 +8200,21 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             8 => (result & 0x8000000000000000) != 0,
             _ => false,
         };
-        
+
         if sign_bit {
             self.engine.cpu.rflags.insert(Flags::SF);
         } else {
             self.engine.cpu.rflags.remove(Flags::SF);
         }
-        
+
         // Set PF based on low byte
         let low_byte = (result & 0xFF) as u8;
-        if low_byte.count_ones() % 2 == 0 {
+        if low_byte.count_ones().is_multiple_of(2) {
             self.engine.cpu.rflags.insert(Flags::PF);
         } else {
             self.engine.cpu.rflags.remove(Flags::PF);
         }
-        
+
         Ok(())
     }
 
@@ -8214,18 +8222,18 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         // BZHI: Zero High Bits Starting with Specified Bit Position
         // Takes bits from source1[0..index-1] where index is in source2[7:0]
         // Zeroes all bits from index and higher
-        
+
         // BZHI has 3 operands: dest, src1, src2
         let src1 = self.read_operand(inst, 1)?;
         let src2 = self.read_operand(inst, 2)?;
-        
+
         // Extract the bit index from bits 7:0 of src2
         let index = (src2 & 0xFF) as u32;
-        
+
         // Get operand size in bits
         let size = inst.op0_register().size();
         let size_bits = (size * 8) as u32;
-        
+
         // Compute result
         let result = if index >= size_bits {
             // If index >= operand size, result is src1 unchanged
@@ -8239,21 +8247,21 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             let mask = (1u64 << index) - 1;
             src1 & mask
         };
-        
+
         // Write result to destination
         self.write_operand(inst, 0, result)?;
-        
+
         // Update flags according to Intel manual
         // BZHI clears CF and OF
         self.engine.cpu.rflags.remove(Flags::CF | Flags::OF);
-        
+
         // Set ZF if result is zero
         if result == 0 {
             self.engine.cpu.rflags.insert(Flags::ZF);
         } else {
             self.engine.cpu.rflags.remove(Flags::ZF);
         }
-        
+
         // Set SF based on sign bit of result
         let sign_bit = match size {
             1 => (result & 0x80) != 0,
@@ -8262,24 +8270,24 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             8 => (result & 0x8000000000000000) != 0,
             _ => false,
         };
-        
+
         if sign_bit {
             self.engine.cpu.rflags.insert(Flags::SF);
         } else {
             self.engine.cpu.rflags.remove(Flags::SF);
         }
-        
+
         // PF is undefined - we'll set it based on low byte for consistency
         let low_byte = (result & 0xFF) as u8;
-        if low_byte.count_ones() % 2 == 0 {
+        if low_byte.count_ones().is_multiple_of(2) {
             self.engine.cpu.rflags.insert(Flags::PF);
         } else {
             self.engine.cpu.rflags.remove(Flags::PF);
         }
-        
+
         // AF is undefined - we'll clear it
         self.engine.cpu.rflags.remove(Flags::AF);
-        
+
         Ok(())
     }
 
@@ -8288,26 +8296,26 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         // Performs unsigned multiplication of RDX/EDX with source operand
         // Results go to two destination registers - high bits in dest1, low bits in dest2
         // Does NOT affect any flags
-        
+
         // MULX encoding is special in VEX instructions
         // In Intel syntax: MULX r32a, r32b, r/m32
         // But iced-x86 seems to decode it as having EDX as both source and sometimes dest
         // We need to handle the VEX.vvvv encoded destination specially
-        
+
         // Get the source operand (should be op2 in iced-x86)
         let src = self.read_operand(inst, 2)?;
-        
+
         // Get operand size to determine which register and operation size
         let size = inst.op0_register().size();
-        
+
         let (high, low) = match size {
             4 => {
                 // 32-bit mode: EDX * src -> 64-bit result
                 let edx_value = (self.engine.cpu.read_reg(Register::RDX) & 0xFFFFFFFF) as u32;
                 let src32 = (src & 0xFFFFFFFF) as u32;
                 let result = edx_value as u64 * src32 as u64;
-                let high = (result >> 32) as u64;
-                let low = (result & 0xFFFFFFFF) as u64;
+                let high = (result >> 32);
+                let low = (result & 0xFFFFFFFF);
                 (high, low)
             }
             8 => {
@@ -8319,81 +8327,89 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
                 let low = (result & 0xFFFFFFFFFFFFFFFF) as u64;
                 (high, low)
             }
-            _ => return Err(EmulatorError::InvalidInstruction(self.engine.cpu.read_reg(Register::RIP))),
+            _ => {
+                return Err(EmulatorError::InvalidInstruction(
+                    self.engine.cpu.read_reg(Register::RIP),
+                ));
+            }
         };
-        
+
         // Write results to destinations
         // MULX has a quirk in iced-x86 where the VEX.vvvv destination register
-        // isn't properly exposed in the operand list. 
+        // isn't properly exposed in the operand list.
         // For now, we'll write to the registers that iced-x86 provides:
         // Op0 gets high bits (this should be correct)
         // Op1 seems to be EDX in iced-x86, but this is actually where low bits go
-        
+
         self.write_operand(inst, 0, high)?;
-        
+
         // For the low bits destination, we need special handling
         // In the original Intel encoding, this would come from VEX.vvvv
         // But iced-x86 seems to treat EDX as both source and a destination
         // So we write low bits to op1 (which iced-x86 says is EDX)
         self.write_operand(inst, 1, low)?;
-        
+
         // MULX does not modify any flags - this is its key difference from MUL
-        
+
         Ok(())
     }
 
     fn execute_pdep(&mut self, inst: &Instruction) -> Result<()> {
         // PDEP: Parallel Bits Deposit
-        // Takes bits from source1 and deposits them at bit positions 
+        // Takes bits from source1 and deposits them at bit positions
         // marked by 1s in source2 (mask)
         // Bits from source1 are taken from LSB to MSB
         // Result bits at positions marked by 0s in mask are cleared
-        
+
         // PDEP has 3 operands: dest, src1, src2 (mask)
         let src1 = self.read_operand(inst, 1)?;
         let mask = self.read_operand(inst, 2)?;
-        
+
         // Get operand size to handle 32-bit vs 64-bit operations
         let size = inst.op0_register().size();
-        
+
         // Mask operands to appropriate size
         let (src1_masked, mask_masked) = match size {
             4 => ((src1 & 0xFFFFFFFF), (mask & 0xFFFFFFFF)),
             8 => (src1, mask),
-            _ => return Err(EmulatorError::InvalidInstruction(self.engine.cpu.read_reg(Register::RIP))),
+            _ => {
+                return Err(EmulatorError::InvalidInstruction(
+                    self.engine.cpu.read_reg(Register::RIP),
+                ));
+            }
         };
-        
+
         let mut result = 0u64;
         let mut src_bits = src1_masked;
         let mut mask_copy = mask_masked;
-        
+
         // For each bit position in the mask
         while mask_copy != 0 {
             // Find the lowest set bit in the mask
             let bit_pos = mask_copy.trailing_zeros();
-            
+
             // Deposit the next bit from source at this position
             if src_bits & 1 != 0 {
                 result |= 1u64 << bit_pos;
             }
-            
+
             // Move to next source bit
             src_bits >>= 1;
-            
+
             // Clear this bit from the mask
             mask_copy &= mask_copy - 1;
         }
-        
+
         // Mask result to appropriate size for 32-bit operations
         if size == 4 {
             result &= 0xFFFFFFFF;
         }
-        
+
         // Write result to destination
         self.write_operand(inst, 0, result)?;
-        
+
         // PDEP does not modify any flags
-        
+
         Ok(())
     }
 
@@ -8402,47 +8418,51 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         // Extracts bits from source at positions marked by 1s in mask
         // and packs them into consecutive low bits of result
         // This is the inverse of PDEP
-        
+
         // PEXT has 3 operands: dest, src, mask
         let src = self.read_operand(inst, 1)?;
         let mask = self.read_operand(inst, 2)?;
-        
+
         // Get operand size to handle 32-bit vs 64-bit operations
         let size = inst.op0_register().size();
-        
+
         // Mask operands to appropriate size
         let (src_masked, mask_masked) = match size {
             4 => ((src & 0xFFFFFFFF), (mask & 0xFFFFFFFF)),
             8 => (src, mask),
-            _ => return Err(EmulatorError::InvalidInstruction(self.engine.cpu.read_reg(Register::RIP))),
+            _ => {
+                return Err(EmulatorError::InvalidInstruction(
+                    self.engine.cpu.read_reg(Register::RIP),
+                ));
+            }
         };
-        
+
         let mut result = 0u64;
         let mut result_bit = 0;
         let mut mask_copy = mask_masked;
-        
+
         // For each set bit in the mask
         while mask_copy != 0 {
             // Find the lowest set bit in the mask
             let bit_pos = mask_copy.trailing_zeros();
-            
+
             // Extract the bit at this position from source
             if (src_masked >> bit_pos) & 1 != 0 {
                 result |= 1u64 << result_bit;
             }
-            
+
             // Move to next result bit position
             result_bit += 1;
-            
+
             // Clear this bit from the mask
             mask_copy &= mask_copy - 1;
         }
-        
+
         // Write result to destination
         self.write_operand(inst, 0, result)?;
-        
+
         // PEXT does not modify any flags
-        
+
         Ok(())
     }
 
@@ -8451,14 +8471,14 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         // Rotates the source operand right by the specified immediate count
         // and stores the result in the destination without modifying flags
         // This is a BMI2 instruction
-        
+
         // RORX has 3 operands: dest, src, imm8
         let src = self.read_operand(inst, 1)?;
         let count = self.read_operand(inst, 2)? as u32;
-        
+
         // Get operand size to determine rotation width
         let size = self.get_operand_size_from_instruction(inst, 0)?;
-        
+
         let result = match size {
             4 => {
                 // 32-bit rotation
@@ -8472,14 +8492,18 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
                 let rotate_count = count & 0x3F; // Modulo 64
                 src.rotate_right(rotate_count)
             }
-            _ => return Err(EmulatorError::InvalidInstruction(self.engine.cpu.read_reg(Register::RIP))),
+            _ => {
+                return Err(EmulatorError::InvalidInstruction(
+                    self.engine.cpu.read_reg(Register::RIP),
+                ));
+            }
         };
-        
+
         // Write result to destination
         self.write_operand(inst, 0, result)?;
-        
+
         // RORX does not modify any flags - this is its key advantage
-        
+
         Ok(())
     }
 
@@ -8487,14 +8511,14 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         // SARX: Shift Arithmetic Right Without Affecting Flags
         // Performs arithmetic right shift (sign-extending) without modifying flags
         // This is a BMI2 instruction
-        
+
         // SARX has 3 operands: dest, src, shift_count
         let src = self.read_operand(inst, 1)?;
         let count = self.read_operand(inst, 2)?;
-        
+
         // Get operand size
         let size = self.get_operand_size_from_instruction(inst, 0)?;
-        
+
         let result = match size {
             4 => {
                 // 32-bit arithmetic shift
@@ -8509,14 +8533,18 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
                 let shift_count = (count & 0x3F) as u32; // Modulo 64
                 (src64 >> shift_count) as u64
             }
-            _ => return Err(EmulatorError::InvalidInstruction(self.engine.cpu.read_reg(Register::RIP))),
+            _ => {
+                return Err(EmulatorError::InvalidInstruction(
+                    self.engine.cpu.read_reg(Register::RIP),
+                ));
+            }
         };
-        
+
         // Write result to destination
         self.write_operand(inst, 0, result)?;
-        
+
         // SARX does not modify any flags
-        
+
         Ok(())
     }
 
@@ -8524,14 +8552,14 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         // SHLX: Shift Logical Left Without Affecting Flags
         // Performs logical left shift without modifying flags
         // This is a BMI2 instruction
-        
+
         // SHLX has 3 operands: dest, src, shift_count
         let src = self.read_operand(inst, 1)?;
         let count = self.read_operand(inst, 2)?;
-        
+
         // Get operand size
         let size = self.get_operand_size_from_instruction(inst, 0)?;
-        
+
         let result = match size {
             4 => {
                 // 32-bit logical shift left
@@ -8545,14 +8573,18 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
                 let shift_count = (count & 0x3F) as u32; // Modulo 64
                 src << shift_count
             }
-            _ => return Err(EmulatorError::InvalidInstruction(self.engine.cpu.read_reg(Register::RIP))),
+            _ => {
+                return Err(EmulatorError::InvalidInstruction(
+                    self.engine.cpu.read_reg(Register::RIP),
+                ));
+            }
         };
-        
+
         // Write result to destination
         self.write_operand(inst, 0, result)?;
-        
+
         // SHLX does not modify any flags
-        
+
         Ok(())
     }
 
@@ -8560,14 +8592,14 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         // SHRX: Shift Logical Right Without Affecting Flags
         // Performs logical right shift without modifying flags
         // This is a BMI2 instruction
-        
+
         // SHRX has 3 operands: dest, src, shift_count
         let src = self.read_operand(inst, 1)?;
         let count = self.read_operand(inst, 2)?;
-        
+
         // Get operand size
         let size = self.get_operand_size_from_instruction(inst, 0)?;
-        
+
         let result = match size {
             4 => {
                 // 32-bit logical shift right
@@ -8581,14 +8613,18 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
                 let shift_count = (count & 0x3F) as u32; // Modulo 64
                 src >> shift_count
             }
-            _ => return Err(EmulatorError::InvalidInstruction(self.engine.cpu.read_reg(Register::RIP))),
+            _ => {
+                return Err(EmulatorError::InvalidInstruction(
+                    self.engine.cpu.read_reg(Register::RIP),
+                ));
+            }
         };
-        
+
         // Write result to destination
         self.write_operand(inst, 0, result)?;
-        
+
         // SHRX does not modify any flags
-        
+
         Ok(())
     }
 
@@ -11429,48 +11465,48 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
     fn execute_int(&mut self, inst: &Instruction) -> Result<()> {
         // INT: Software Interrupt
         let intno = self.read_operand(inst, 0)?;
-        
+
         // Call interrupt hook
-        self.hooks.on_interrupt(self.engine, intno, inst.len() as usize)?;
-        
+        self.hooks.on_interrupt(self.engine, intno, inst.len())?;
+
         // In a real system, this would trigger an interrupt handler
         // For emulation, we just call the hook and continue
         // The hook implementation can decide what to do (e.g., emulate syscalls)
-        
+
         Ok(())
     }
 
     fn execute_int3(&mut self, inst: &Instruction) -> Result<()> {
         // INT3: Breakpoint (single-byte INT 3)
         // Call interrupt hook with interrupt number 3
-        self.hooks.on_interrupt(self.engine, 3, inst.len() as usize)?;
-        
+        self.hooks.on_interrupt(self.engine, 3, inst.len())?;
+
         // INT3 is typically used for debugging breakpoints
         // The debugger/hook can decide how to handle it
-        
+
         Ok(())
     }
 
     fn execute_syscall(&mut self, inst: &Instruction) -> Result<()> {
         // SYSCALL: Fast System Call
         // In x86-64, SYSCALL is used for system calls instead of INT 0x80
-        
+
         // Save return address (next instruction) in RCX
         let return_addr = inst.next_ip();
         self.engine.cpu.write_reg(Register::RCX, return_addr);
-        
+
         // Save RFLAGS in R11 (masked according to IA32_FMASK MSR, but we'll save all for simplicity)
         let rflags = self.engine.cpu.rflags.bits();
         self.engine.cpu.write_reg(Register::R11, rflags);
-        
+
         // The syscall number is typically in RAX, parameters in RDI, RSI, RDX, R10, R8, R9
         // Call the interrupt hook with a special interrupt number for SYSCALL (e.g., 0x80 for Linux compatibility)
         // The actual syscall number is in RAX, so the hook can read it from there
-        self.hooks.on_interrupt(self.engine, 0x80, inst.len() as usize)?;
-        
+        self.hooks.on_interrupt(self.engine, 0x80, inst.len())?;
+
         // Note: The actual kernel entry point would be loaded from MSR registers
         // For emulation purposes, the hook handles the syscall and we continue
-        
+
         Ok(())
     }
 
@@ -11479,11 +11515,11 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         // Serializes all load and store operations that occurred prior to the MFENCE instruction
         // In emulation, this is essentially a no-op since we're single-threaded
         // But for completeness, we could flush any pending memory operations here
-        
+
         // In a real CPU, this ensures:
         // - All loads and stores before the fence are globally visible before any after
         // - Used for strong memory ordering guarantees
-        
+
         Ok(())
     }
 
@@ -11491,40 +11527,42 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         // SFENCE: Store Fence
         // Serializes all store operations that occurred prior to the SFENCE instruction
         // Stores before SFENCE are guaranteed to be globally visible before stores after
-        
+
         // In emulation, this is a no-op since we execute instructions sequentially
         // In real hardware, ensures store ordering for weakly-ordered memory types
-        
+
         Ok(())
     }
 
     fn execute_lfence(&mut self, _inst: &Instruction) -> Result<()> {
-        // LFENCE: Load Fence  
+        // LFENCE: Load Fence
         // Serializes all load operations that occurred prior to the LFENCE instruction
         // Loads before LFENCE are guaranteed to be globally visible before loads after
-        
+
         // In emulation, this is a no-op since we execute instructions sequentially
         // In real hardware, ensures load ordering and can prevent speculative execution
-        
+
         Ok(())
     }
-    
+
     fn execute_clflush(&mut self, inst: &Instruction) -> Result<()> {
         // CLFLUSH: Cache Line Flush
         // Flushes the cache line containing the linear address from all levels of the processor cache hierarchy
         // CLFLUSHOPT is an optimized version but functionally the same for emulation
-        
+
         // In real hardware, this instruction:
         // 1. Invalidates the cache line from all processor caches
         // 2. Writes back modified data to memory if the cache line is dirty
         // 3. Does not affect the TLBs
-        
+
         // Get the memory address to flush
         // CLFLUSH takes a memory operand (m8)
         if inst.op_count() != 1 {
-            return Err(EmulatorError::InvalidArgument("CLFLUSH requires exactly one operand".to_string()));
+            return Err(EmulatorError::InvalidArgument(
+                "CLFLUSH requires exactly one operand".to_string(),
+            ));
         }
-        
+
         // Calculate the effective address
         let _address = match inst.op_kind(0) {
             OpKind::Memory => {
@@ -11551,11 +11589,11 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             }
             _ => return Err(EmulatorError::InvalidOperand),
         };
-        
+
         // In emulation, we don't have actual CPU caches to flush
         // This is effectively a no-op for correctness of execution
         // Real implementations would interact with the cache subsystem here
-        
+
         // CLFLUSH does not affect RFLAGS
         Ok(())
     }
@@ -11564,9 +11602,9 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         // VANDPS - Bitwise AND of Packed Single-Precision Floating-Point Values
         // VEX.256: VANDPS ymm1, ymm2, ymm3/m256
         // VEX.128: VANDPS xmm1, xmm2, xmm3/m128
-        
+
         let is_256bit = inst.op_register(0).is_ymm();
-        
+
         if inst.op_count() != 3 {
             return Err(EmulatorError::UnsupportedInstruction(
                 "VANDPS requires exactly 3 operands".to_string(),
@@ -11577,35 +11615,31 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             // 256-bit YMM operation
             let src1_reg = self.convert_register(inst.op_register(1))?;
             let src1_data = self.engine.cpu.read_ymm(src1_reg);
-            
+
             let src2_data = match inst.op_kind(2) {
                 OpKind::Register => {
                     let src2_reg = self.convert_register(inst.op_register(2))?;
                     self.engine.cpu.read_ymm(src2_reg)
                 }
-                OpKind::Memory => {
-                    self.read_ymm_memory(inst, 2)?
-                }
+                OpKind::Memory => self.read_ymm_memory(inst, 2)?,
                 _ => {
-                    return Err(EmulatorError::UnsupportedInstruction(
-                        format!("Unsupported VANDPS source operand type: {:?}", inst.op_kind(2))
-                    ));
+                    return Err(EmulatorError::UnsupportedInstruction(format!(
+                        "Unsupported VANDPS source operand type: {:?}",
+                        inst.op_kind(2)
+                    )));
                 }
             };
-            
+
             // Perform bitwise AND on both 128-bit halves
-            let result = [
-                src1_data[0] & src2_data[0],
-                src1_data[1] & src2_data[1],
-            ];
-            
+            let result = [src1_data[0] & src2_data[0], src1_data[1] & src2_data[1]];
+
             let dst_reg = self.convert_register(inst.op_register(0))?;
             self.engine.cpu.write_ymm(dst_reg, result);
         } else {
             // 128-bit XMM operation
             let src1_reg = self.convert_register(inst.op_register(1))?;
             let src1_data = self.engine.cpu.read_xmm(src1_reg);
-            
+
             let src2_data = match inst.op_kind(2) {
                 OpKind::Register => {
                     let src2_reg = self.convert_register(inst.op_register(2))?;
@@ -11616,19 +11650,20 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
                     self.read_memory_128(addr)?
                 }
                 _ => {
-                    return Err(EmulatorError::UnsupportedInstruction(
-                        format!("Unsupported VANDPS source operand type: {:?}", inst.op_kind(2))
-                    ));
+                    return Err(EmulatorError::UnsupportedInstruction(format!(
+                        "Unsupported VANDPS source operand type: {:?}",
+                        inst.op_kind(2)
+                    )));
                 }
             };
-            
+
             // Perform bitwise AND
             let result = src1_data & src2_data;
-            
+
             let dst_reg = self.convert_register(inst.op_register(0))?;
             self.engine.cpu.write_xmm(dst_reg, result);
         }
-        
+
         Ok(())
     }
 
@@ -11636,9 +11671,9 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         // VANDPD - Bitwise AND of Packed Double-Precision Floating-Point Values
         // VEX.256: VANDPD ymm1, ymm2, ymm3/m256
         // VEX.128: VANDPD xmm1, xmm2, xmm3/m128
-        
+
         let is_256bit = inst.op_register(0).is_ymm();
-        
+
         if inst.op_count() != 3 {
             return Err(EmulatorError::UnsupportedInstruction(
                 "VANDPD requires exactly 3 operands".to_string(),
@@ -11649,35 +11684,31 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             // 256-bit YMM operation
             let src1_reg = self.convert_register(inst.op_register(1))?;
             let src1_data = self.engine.cpu.read_ymm(src1_reg);
-            
+
             let src2_data = match inst.op_kind(2) {
                 OpKind::Register => {
                     let src2_reg = self.convert_register(inst.op_register(2))?;
                     self.engine.cpu.read_ymm(src2_reg)
                 }
-                OpKind::Memory => {
-                    self.read_ymm_memory(inst, 2)?
-                }
+                OpKind::Memory => self.read_ymm_memory(inst, 2)?,
                 _ => {
-                    return Err(EmulatorError::UnsupportedInstruction(
-                        format!("Unsupported VANDPD source operand type: {:?}", inst.op_kind(2))
-                    ));
+                    return Err(EmulatorError::UnsupportedInstruction(format!(
+                        "Unsupported VANDPD source operand type: {:?}",
+                        inst.op_kind(2)
+                    )));
                 }
             };
-            
+
             // Perform bitwise AND on both 128-bit halves
-            let result = [
-                src1_data[0] & src2_data[0],
-                src1_data[1] & src2_data[1],
-            ];
-            
+            let result = [src1_data[0] & src2_data[0], src1_data[1] & src2_data[1]];
+
             let dst_reg = self.convert_register(inst.op_register(0))?;
             self.engine.cpu.write_ymm(dst_reg, result);
         } else {
             // 128-bit XMM operation
             let src1_reg = self.convert_register(inst.op_register(1))?;
             let src1_data = self.engine.cpu.read_xmm(src1_reg);
-            
+
             let src2_data = match inst.op_kind(2) {
                 OpKind::Register => {
                     let src2_reg = self.convert_register(inst.op_register(2))?;
@@ -11688,19 +11719,20 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
                     self.read_memory_128(addr)?
                 }
                 _ => {
-                    return Err(EmulatorError::UnsupportedInstruction(
-                        format!("Unsupported VANDPD source operand type: {:?}", inst.op_kind(2))
-                    ));
+                    return Err(EmulatorError::UnsupportedInstruction(format!(
+                        "Unsupported VANDPD source operand type: {:?}",
+                        inst.op_kind(2)
+                    )));
                 }
             };
-            
+
             // Perform bitwise AND
             let result = src1_data & src2_data;
-            
+
             let dst_reg = self.convert_register(inst.op_register(0))?;
             self.engine.cpu.write_xmm(dst_reg, result);
         }
-        
+
         Ok(())
     }
 
@@ -11708,9 +11740,9 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         // VORPS - Bitwise OR of Packed Single-Precision Floating-Point Values
         // VEX.256: VORPS ymm1, ymm2, ymm3/m256
         // VEX.128: VORPS xmm1, xmm2, xmm3/m128
-        
+
         let is_256bit = inst.op_register(0).is_ymm();
-        
+
         if inst.op_count() != 3 {
             return Err(EmulatorError::UnsupportedInstruction(
                 "VORPS requires exactly 3 operands".to_string(),
@@ -11721,35 +11753,31 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             // 256-bit YMM operation
             let src1_reg = self.convert_register(inst.op_register(1))?;
             let src1_data = self.engine.cpu.read_ymm(src1_reg);
-            
+
             let src2_data = match inst.op_kind(2) {
                 OpKind::Register => {
                     let src2_reg = self.convert_register(inst.op_register(2))?;
                     self.engine.cpu.read_ymm(src2_reg)
                 }
-                OpKind::Memory => {
-                    self.read_ymm_memory(inst, 2)?
-                }
+                OpKind::Memory => self.read_ymm_memory(inst, 2)?,
                 _ => {
-                    return Err(EmulatorError::UnsupportedInstruction(
-                        format!("Unsupported VORPS source operand type: {:?}", inst.op_kind(2))
-                    ));
+                    return Err(EmulatorError::UnsupportedInstruction(format!(
+                        "Unsupported VORPS source operand type: {:?}",
+                        inst.op_kind(2)
+                    )));
                 }
             };
-            
+
             // Perform bitwise OR on both 128-bit halves
-            let result = [
-                src1_data[0] | src2_data[0],
-                src1_data[1] | src2_data[1],
-            ];
-            
+            let result = [src1_data[0] | src2_data[0], src1_data[1] | src2_data[1]];
+
             let dst_reg = self.convert_register(inst.op_register(0))?;
             self.engine.cpu.write_ymm(dst_reg, result);
         } else {
             // 128-bit XMM operation
             let src1_reg = self.convert_register(inst.op_register(1))?;
             let src1_data = self.engine.cpu.read_xmm(src1_reg);
-            
+
             let src2_data = match inst.op_kind(2) {
                 OpKind::Register => {
                     let src2_reg = self.convert_register(inst.op_register(2))?;
@@ -11760,19 +11788,20 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
                     self.read_memory_128(addr)?
                 }
                 _ => {
-                    return Err(EmulatorError::UnsupportedInstruction(
-                        format!("Unsupported VORPS source operand type: {:?}", inst.op_kind(2))
-                    ));
+                    return Err(EmulatorError::UnsupportedInstruction(format!(
+                        "Unsupported VORPS source operand type: {:?}",
+                        inst.op_kind(2)
+                    )));
                 }
             };
-            
+
             // Perform bitwise OR
             let result = src1_data | src2_data;
-            
+
             let dst_reg = self.convert_register(inst.op_register(0))?;
             self.engine.cpu.write_xmm(dst_reg, result);
         }
-        
+
         Ok(())
     }
 
@@ -11780,9 +11809,9 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         // VORPD - Bitwise OR of Packed Double-Precision Floating-Point Values
         // VEX.256: VORPD ymm1, ymm2, ymm3/m256
         // VEX.128: VORPD xmm1, xmm2, xmm3/m128
-        
+
         let is_256bit = inst.op_register(0).is_ymm();
-        
+
         if inst.op_count() != 3 {
             return Err(EmulatorError::UnsupportedInstruction(
                 "VORPD requires exactly 3 operands".to_string(),
@@ -11793,35 +11822,31 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             // 256-bit YMM operation
             let src1_reg = self.convert_register(inst.op_register(1))?;
             let src1_data = self.engine.cpu.read_ymm(src1_reg);
-            
+
             let src2_data = match inst.op_kind(2) {
                 OpKind::Register => {
                     let src2_reg = self.convert_register(inst.op_register(2))?;
                     self.engine.cpu.read_ymm(src2_reg)
                 }
-                OpKind::Memory => {
-                    self.read_ymm_memory(inst, 2)?
-                }
+                OpKind::Memory => self.read_ymm_memory(inst, 2)?,
                 _ => {
-                    return Err(EmulatorError::UnsupportedInstruction(
-                        format!("Unsupported VORPD source operand type: {:?}", inst.op_kind(2))
-                    ));
+                    return Err(EmulatorError::UnsupportedInstruction(format!(
+                        "Unsupported VORPD source operand type: {:?}",
+                        inst.op_kind(2)
+                    )));
                 }
             };
-            
+
             // Perform bitwise OR on both 128-bit halves
-            let result = [
-                src1_data[0] | src2_data[0],
-                src1_data[1] | src2_data[1],
-            ];
-            
+            let result = [src1_data[0] | src2_data[0], src1_data[1] | src2_data[1]];
+
             let dst_reg = self.convert_register(inst.op_register(0))?;
             self.engine.cpu.write_ymm(dst_reg, result);
         } else {
             // 128-bit XMM operation
             let src1_reg = self.convert_register(inst.op_register(1))?;
             let src1_data = self.engine.cpu.read_xmm(src1_reg);
-            
+
             let src2_data = match inst.op_kind(2) {
                 OpKind::Register => {
                     let src2_reg = self.convert_register(inst.op_register(2))?;
@@ -11832,19 +11857,20 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
                     self.read_memory_128(addr)?
                 }
                 _ => {
-                    return Err(EmulatorError::UnsupportedInstruction(
-                        format!("Unsupported VORPD source operand type: {:?}", inst.op_kind(2))
-                    ));
+                    return Err(EmulatorError::UnsupportedInstruction(format!(
+                        "Unsupported VORPD source operand type: {:?}",
+                        inst.op_kind(2)
+                    )));
                 }
             };
-            
+
             // Perform bitwise OR
             let result = src1_data | src2_data;
-            
+
             let dst_reg = self.convert_register(inst.op_register(0))?;
             self.engine.cpu.write_xmm(dst_reg, result);
         }
-        
+
         Ok(())
     }
 
@@ -11852,9 +11878,9 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         // VXORPS - Bitwise XOR of Packed Single-Precision Floating-Point Values
         // VEX.256: VXORPS ymm1, ymm2, ymm3/m256
         // VEX.128: VXORPS xmm1, xmm2, xmm3/m128
-        
+
         let is_256bit = inst.op_register(0).is_ymm();
-        
+
         if inst.op_count() != 3 {
             return Err(EmulatorError::UnsupportedInstruction(
                 "VXORPS requires exactly 3 operands".to_string(),
@@ -11865,35 +11891,31 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             // 256-bit YMM operation
             let src1_reg = self.convert_register(inst.op_register(1))?;
             let src1_data = self.engine.cpu.read_ymm(src1_reg);
-            
+
             let src2_data = match inst.op_kind(2) {
                 OpKind::Register => {
                     let src2_reg = self.convert_register(inst.op_register(2))?;
                     self.engine.cpu.read_ymm(src2_reg)
                 }
-                OpKind::Memory => {
-                    self.read_ymm_memory(inst, 2)?
-                }
+                OpKind::Memory => self.read_ymm_memory(inst, 2)?,
                 _ => {
-                    return Err(EmulatorError::UnsupportedInstruction(
-                        format!("Unsupported VXORPS source operand type: {:?}", inst.op_kind(2))
-                    ));
+                    return Err(EmulatorError::UnsupportedInstruction(format!(
+                        "Unsupported VXORPS source operand type: {:?}",
+                        inst.op_kind(2)
+                    )));
                 }
             };
-            
+
             // Perform bitwise XOR on both 128-bit halves
-            let result = [
-                src1_data[0] ^ src2_data[0],
-                src1_data[1] ^ src2_data[1],
-            ];
-            
+            let result = [src1_data[0] ^ src2_data[0], src1_data[1] ^ src2_data[1]];
+
             let dst_reg = self.convert_register(inst.op_register(0))?;
             self.engine.cpu.write_ymm(dst_reg, result);
         } else {
             // 128-bit XMM operation
             let src1_reg = self.convert_register(inst.op_register(1))?;
             let src1_data = self.engine.cpu.read_xmm(src1_reg);
-            
+
             let src2_data = match inst.op_kind(2) {
                 OpKind::Register => {
                     let src2_reg = self.convert_register(inst.op_register(2))?;
@@ -11904,19 +11926,20 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
                     self.read_memory_128(addr)?
                 }
                 _ => {
-                    return Err(EmulatorError::UnsupportedInstruction(
-                        format!("Unsupported VXORPS source operand type: {:?}", inst.op_kind(2))
-                    ));
+                    return Err(EmulatorError::UnsupportedInstruction(format!(
+                        "Unsupported VXORPS source operand type: {:?}",
+                        inst.op_kind(2)
+                    )));
                 }
             };
-            
+
             // Perform bitwise XOR
             let result = src1_data ^ src2_data;
-            
+
             let dst_reg = self.convert_register(inst.op_register(0))?;
             self.engine.cpu.write_xmm(dst_reg, result);
         }
-        
+
         Ok(())
     }
 
@@ -11924,9 +11947,9 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         // VXORPD - Bitwise XOR of Packed Double-Precision Floating-Point Values
         // VEX.256: VXORPD ymm1, ymm2, ymm3/m256
         // VEX.128: VXORPD xmm1, xmm2, xmm3/m128
-        
+
         let is_256bit = inst.op_register(0).is_ymm();
-        
+
         if inst.op_count() != 3 {
             return Err(EmulatorError::UnsupportedInstruction(
                 "VXORPD requires exactly 3 operands".to_string(),
@@ -11937,35 +11960,31 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             // 256-bit YMM operation
             let src1_reg = self.convert_register(inst.op_register(1))?;
             let src1_data = self.engine.cpu.read_ymm(src1_reg);
-            
+
             let src2_data = match inst.op_kind(2) {
                 OpKind::Register => {
                     let src2_reg = self.convert_register(inst.op_register(2))?;
                     self.engine.cpu.read_ymm(src2_reg)
                 }
-                OpKind::Memory => {
-                    self.read_ymm_memory(inst, 2)?
-                }
+                OpKind::Memory => self.read_ymm_memory(inst, 2)?,
                 _ => {
-                    return Err(EmulatorError::UnsupportedInstruction(
-                        format!("Unsupported VXORPD source operand type: {:?}", inst.op_kind(2))
-                    ));
+                    return Err(EmulatorError::UnsupportedInstruction(format!(
+                        "Unsupported VXORPD source operand type: {:?}",
+                        inst.op_kind(2)
+                    )));
                 }
             };
-            
+
             // Perform bitwise XOR on both 128-bit halves
-            let result = [
-                src1_data[0] ^ src2_data[0],
-                src1_data[1] ^ src2_data[1],
-            ];
-            
+            let result = [src1_data[0] ^ src2_data[0], src1_data[1] ^ src2_data[1]];
+
             let dst_reg = self.convert_register(inst.op_register(0))?;
             self.engine.cpu.write_ymm(dst_reg, result);
         } else {
             // 128-bit XMM operation
             let src1_reg = self.convert_register(inst.op_register(1))?;
             let src1_data = self.engine.cpu.read_xmm(src1_reg);
-            
+
             let src2_data = match inst.op_kind(2) {
                 OpKind::Register => {
                     let src2_reg = self.convert_register(inst.op_register(2))?;
@@ -11976,19 +11995,20 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
                     self.read_memory_128(addr)?
                 }
                 _ => {
-                    return Err(EmulatorError::UnsupportedInstruction(
-                        format!("Unsupported VXORPD source operand type: {:?}", inst.op_kind(2))
-                    ));
+                    return Err(EmulatorError::UnsupportedInstruction(format!(
+                        "Unsupported VXORPD source operand type: {:?}",
+                        inst.op_kind(2)
+                    )));
                 }
             };
-            
+
             // Perform bitwise XOR
             let result = src1_data ^ src2_data;
-            
+
             let dst_reg = self.convert_register(inst.op_register(0))?;
             self.engine.cpu.write_xmm(dst_reg, result);
         }
-        
+
         Ok(())
     }
 
@@ -11996,68 +12016,67 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         // VCMPPS - Compare Packed Single-Precision Floating-Point Values
         // VEX.256: VCMPPS ymm1, ymm2, ymm3/m256, imm8
         // VEX.128: VCMPPS xmm1, xmm2, xmm3/m128, imm8
-        
+
         let is_256bit = inst.op_register(0).is_ymm();
-        
+
         if inst.op_count() != 4 {
             return Err(EmulatorError::UnsupportedInstruction(
                 "VCMPPS requires exactly 4 operands".to_string(),
             ));
         }
-        
+
         let imm = inst.immediate(3) as u8;
-        
+
         if is_256bit {
             // 256-bit YMM operation - compare 8 floats
             let src1_reg = self.convert_register(inst.op_register(1))?;
             let src1_data = self.engine.cpu.read_ymm(src1_reg);
-            
+
             let src2_data = match inst.op_kind(2) {
                 OpKind::Register => {
                     let src2_reg = self.convert_register(inst.op_register(2))?;
                     self.engine.cpu.read_ymm(src2_reg)
                 }
-                OpKind::Memory => {
-                    self.read_ymm_memory(inst, 2)?
-                }
+                OpKind::Memory => self.read_ymm_memory(inst, 2)?,
                 _ => {
-                    return Err(EmulatorError::UnsupportedInstruction(
-                        format!("Unsupported VCMPPS source operand type: {:?}", inst.op_kind(2))
-                    ));
+                    return Err(EmulatorError::UnsupportedInstruction(format!(
+                        "Unsupported VCMPPS source operand type: {:?}",
+                        inst.op_kind(2)
+                    )));
                 }
             };
-            
+
             let mut result = [0u128; 2];
-            
+
             // Process lower 128 bits (4 floats)
             for i in 0..4 {
                 let offset = i * 32;
                 let a = f32::from_bits(((src1_data[0] >> offset) & 0xFFFFFFFF) as u32);
                 let b = f32::from_bits(((src2_data[0] >> offset) & 0xFFFFFFFF) as u32);
-                
+
                 if self.compare_floats_avx(a, b, imm) {
                     result[0] |= 0xFFFFFFFFu128 << offset;
                 }
             }
-            
+
             // Process upper 128 bits (4 floats)
             for i in 0..4 {
                 let offset = i * 32;
                 let a = f32::from_bits(((src1_data[1] >> offset) & 0xFFFFFFFF) as u32);
                 let b = f32::from_bits(((src2_data[1] >> offset) & 0xFFFFFFFF) as u32);
-                
+
                 if self.compare_floats_avx(a, b, imm) {
                     result[1] |= 0xFFFFFFFFu128 << offset;
                 }
             }
-            
+
             let dst_reg = self.convert_register(inst.op_register(0))?;
             self.engine.cpu.write_ymm(dst_reg, result);
         } else {
             // 128-bit XMM operation - compare 4 floats
             let src1_reg = self.convert_register(inst.op_register(1))?;
             let src1_data = self.engine.cpu.read_xmm(src1_reg);
-            
+
             let src2_data = match inst.op_kind(2) {
                 OpKind::Register => {
                     let src2_reg = self.convert_register(inst.op_register(2))?;
@@ -12068,28 +12087,29 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
                     self.read_memory_128(addr)?
                 }
                 _ => {
-                    return Err(EmulatorError::UnsupportedInstruction(
-                        format!("Unsupported VCMPPS source operand type: {:?}", inst.op_kind(2))
-                    ));
+                    return Err(EmulatorError::UnsupportedInstruction(format!(
+                        "Unsupported VCMPPS source operand type: {:?}",
+                        inst.op_kind(2)
+                    )));
                 }
             };
-            
+
             let mut result = 0u128;
-            
+
             for i in 0..4 {
                 let offset = i * 32;
                 let a = f32::from_bits(((src1_data >> offset) & 0xFFFFFFFF) as u32);
                 let b = f32::from_bits(((src2_data >> offset) & 0xFFFFFFFF) as u32);
-                
+
                 if self.compare_floats_avx(a, b, imm) {
                     result |= 0xFFFFFFFFu128 << offset;
                 }
             }
-            
+
             let dst_reg = self.convert_register(inst.op_register(0))?;
             self.engine.cpu.write_xmm(dst_reg, result);
         }
-        
+
         Ok(())
     }
 
@@ -12097,68 +12117,67 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         // VCMPPD - Compare Packed Double-Precision Floating-Point Values
         // VEX.256: VCMPPD ymm1, ymm2, ymm3/m256, imm8
         // VEX.128: VCMPPD xmm1, xmm2, xmm3/m128, imm8
-        
+
         let is_256bit = inst.op_register(0).is_ymm();
-        
+
         if inst.op_count() != 4 {
             return Err(EmulatorError::UnsupportedInstruction(
                 "VCMPPD requires exactly 4 operands".to_string(),
             ));
         }
-        
+
         let imm = inst.immediate(3) as u8;
-        
+
         if is_256bit {
             // 256-bit YMM operation - compare 4 doubles
             let src1_reg = self.convert_register(inst.op_register(1))?;
             let src1_data = self.engine.cpu.read_ymm(src1_reg);
-            
+
             let src2_data = match inst.op_kind(2) {
                 OpKind::Register => {
                     let src2_reg = self.convert_register(inst.op_register(2))?;
                     self.engine.cpu.read_ymm(src2_reg)
                 }
-                OpKind::Memory => {
-                    self.read_ymm_memory(inst, 2)?
-                }
+                OpKind::Memory => self.read_ymm_memory(inst, 2)?,
                 _ => {
-                    return Err(EmulatorError::UnsupportedInstruction(
-                        format!("Unsupported VCMPPD source operand type: {:?}", inst.op_kind(2))
-                    ));
+                    return Err(EmulatorError::UnsupportedInstruction(format!(
+                        "Unsupported VCMPPD source operand type: {:?}",
+                        inst.op_kind(2)
+                    )));
                 }
             };
-            
+
             let mut result = [0u128; 2];
-            
+
             // Process lower 128 bits (2 doubles)
             for i in 0..2 {
                 let offset = i * 64;
                 let a = f64::from_bits((src1_data[0] >> offset) as u64);
                 let b = f64::from_bits((src2_data[0] >> offset) as u64);
-                
+
                 if self.compare_doubles_avx(a, b, imm) {
                     result[0] |= 0xFFFFFFFFFFFFFFFFu128 << offset;
                 }
             }
-            
+
             // Process upper 128 bits (2 doubles)
             for i in 0..2 {
                 let offset = i * 64;
                 let a = f64::from_bits((src1_data[1] >> offset) as u64);
                 let b = f64::from_bits((src2_data[1] >> offset) as u64);
-                
+
                 if self.compare_doubles_avx(a, b, imm) {
                     result[1] |= 0xFFFFFFFFFFFFFFFFu128 << offset;
                 }
             }
-            
+
             let dst_reg = self.convert_register(inst.op_register(0))?;
             self.engine.cpu.write_ymm(dst_reg, result);
         } else {
             // 128-bit XMM operation - compare 2 doubles
             let src1_reg = self.convert_register(inst.op_register(1))?;
             let src1_data = self.engine.cpu.read_xmm(src1_reg);
-            
+
             let src2_data = match inst.op_kind(2) {
                 OpKind::Register => {
                     let src2_reg = self.convert_register(inst.op_register(2))?;
@@ -12169,36 +12188,37 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
                     self.read_memory_128(addr)?
                 }
                 _ => {
-                    return Err(EmulatorError::UnsupportedInstruction(
-                        format!("Unsupported VCMPPD source operand type: {:?}", inst.op_kind(2))
-                    ));
+                    return Err(EmulatorError::UnsupportedInstruction(format!(
+                        "Unsupported VCMPPD source operand type: {:?}",
+                        inst.op_kind(2)
+                    )));
                 }
             };
-            
+
             let mut result = 0u128;
-            
+
             for i in 0..2 {
                 let offset = i * 64;
                 let a = f64::from_bits((src1_data >> offset) as u64);
                 let b = f64::from_bits((src2_data >> offset) as u64);
-                
+
                 if self.compare_doubles_avx(a, b, imm) {
                     result |= 0xFFFFFFFFFFFFFFFFu128 << offset;
                 }
             }
-            
+
             let dst_reg = self.convert_register(inst.op_register(0))?;
             self.engine.cpu.write_xmm(dst_reg, result);
         }
-        
+
         Ok(())
     }
-    
+
     fn execute_vshufps(&mut self, inst: &Instruction) -> Result<()> {
         // VSHUFPS - Shuffle Packed Single-Precision Floating-Point Values
         // VEX.256: VSHUFPS ymm1, ymm2, ymm3/m256, imm8
         // VEX.128: VSHUFPS xmm1, xmm2, xmm3/m128, imm8
-        
+
         if inst.op_count() != 4 {
             return Err(EmulatorError::UnsupportedInstruction(
                 "VSHUFPS requires exactly 4 operands".to_string(),
@@ -12206,13 +12226,13 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         }
 
         let imm8 = inst.immediate8() as usize;
-        
+
         // Check if we're dealing with YMM (256-bit) or XMM (128-bit) registers
         if inst.op_register(0).is_ymm() {
             // YMM version (256-bit)
             let src1_reg = self.convert_register(inst.op_register(1))?;
             let src1 = self.engine.cpu.read_ymm(src1_reg);
-            
+
             let src2 = match inst.op_kind(2) {
                 OpKind::Register => {
                     let src2_reg = self.convert_register(inst.op_register(2))?;
@@ -12223,57 +12243,64 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
                     self.read_ymm_memory(inst, 2)?
                 }
                 _ => {
-                    return Err(EmulatorError::UnsupportedInstruction(
-                        format!("Unsupported VSHUFPS source operand type: {:?}", inst.op_kind(2))
-                    ));
+                    return Err(EmulatorError::UnsupportedInstruction(format!(
+                        "Unsupported VSHUFPS source operand type: {:?}",
+                        inst.op_kind(2)
+                    )));
                 }
             };
 
             // Process each 128-bit lane separately
             let mut result = [0u128; 2];
-            
+
             for lane in 0..2 {
                 let src1_lane = src1[lane];
                 let src2_lane = src2[lane];
-                
+
                 // Extract the 4 floats from each source
                 let src1_bytes = src1_lane.to_le_bytes();
                 let src2_bytes = src2_lane.to_le_bytes();
-                
+
                 let mut src1_floats = [0f32; 4];
                 let mut src2_floats = [0f32; 4];
                 for i in 0..4 {
                     src1_floats[i] = f32::from_le_bytes([
-                        src1_bytes[i*4], src1_bytes[i*4+1], src1_bytes[i*4+2], src1_bytes[i*4+3]
+                        src1_bytes[i * 4],
+                        src1_bytes[i * 4 + 1],
+                        src1_bytes[i * 4 + 2],
+                        src1_bytes[i * 4 + 3],
                     ]);
                     src2_floats[i] = f32::from_le_bytes([
-                        src2_bytes[i*4], src2_bytes[i*4+1], src2_bytes[i*4+2], src2_bytes[i*4+3]
+                        src2_bytes[i * 4],
+                        src2_bytes[i * 4 + 1],
+                        src2_bytes[i * 4 + 2],
+                        src2_bytes[i * 4 + 3],
                     ]);
                 }
-                
+
                 // Shuffle according to imm8
                 let mut result_floats = [0f32; 4];
-                result_floats[0] = src1_floats[(imm8 >> 0) & 0x3];
+                result_floats[0] = src1_floats[imm8 & 0x3];
                 result_floats[1] = src1_floats[(imm8 >> 2) & 0x3];
                 result_floats[2] = src2_floats[(imm8 >> 4) & 0x3];
                 result_floats[3] = src2_floats[(imm8 >> 6) & 0x3];
-                
+
                 // Build result for this lane
                 let mut lane_bytes = [0u8; 16];
                 for i in 0..4 {
                     let bytes = result_floats[i].to_le_bytes();
-                    lane_bytes[i*4..i*4+4].copy_from_slice(&bytes);
+                    lane_bytes[i * 4..i * 4 + 4].copy_from_slice(&bytes);
                 }
                 result[lane] = u128::from_le_bytes(lane_bytes);
             }
-            
+
             let dst_reg = self.convert_register(inst.op_register(0))?;
             self.engine.cpu.write_ymm(dst_reg, result);
         } else {
             // XMM version (128-bit)
             let src1_reg = self.convert_register(inst.op_register(1))?;
             let src1 = self.engine.cpu.read_xmm(src1_reg);
-            
+
             let src2 = match inst.op_kind(2) {
                 OpKind::Register => {
                     let src2_reg = self.convert_register(inst.op_register(2))?;
@@ -12284,46 +12311,53 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
                     self.read_memory_128(addr)?
                 }
                 _ => {
-                    return Err(EmulatorError::UnsupportedInstruction(
-                        format!("Unsupported VSHUFPS source operand type: {:?}", inst.op_kind(2))
-                    ));
+                    return Err(EmulatorError::UnsupportedInstruction(format!(
+                        "Unsupported VSHUFPS source operand type: {:?}",
+                        inst.op_kind(2)
+                    )));
                 }
             };
 
             // Extract the 4 floats from each source
             let src1_bytes = src1.to_le_bytes();
             let src2_bytes = src2.to_le_bytes();
-            
+
             let mut src1_floats = [0f32; 4];
             let mut src2_floats = [0f32; 4];
             for i in 0..4 {
                 src1_floats[i] = f32::from_le_bytes([
-                    src1_bytes[i*4], src1_bytes[i*4+1], src1_bytes[i*4+2], src1_bytes[i*4+3]
+                    src1_bytes[i * 4],
+                    src1_bytes[i * 4 + 1],
+                    src1_bytes[i * 4 + 2],
+                    src1_bytes[i * 4 + 3],
                 ]);
                 src2_floats[i] = f32::from_le_bytes([
-                    src2_bytes[i*4], src2_bytes[i*4+1], src2_bytes[i*4+2], src2_bytes[i*4+3]
+                    src2_bytes[i * 4],
+                    src2_bytes[i * 4 + 1],
+                    src2_bytes[i * 4 + 2],
+                    src2_bytes[i * 4 + 3],
                 ]);
             }
-            
+
             // Shuffle according to imm8
             let mut result_floats = [0f32; 4];
-            result_floats[0] = src1_floats[(imm8 >> 0) & 0x3];
+            result_floats[0] = src1_floats[imm8 & 0x3];
             result_floats[1] = src1_floats[(imm8 >> 2) & 0x3];
             result_floats[2] = src2_floats[(imm8 >> 4) & 0x3];
             result_floats[3] = src2_floats[(imm8 >> 6) & 0x3];
-            
+
             // Build result
             let mut result_bytes = [0u8; 16];
             for i in 0..4 {
                 let bytes = result_floats[i].to_le_bytes();
-                result_bytes[i*4..i*4+4].copy_from_slice(&bytes);
+                result_bytes[i * 4..i * 4 + 4].copy_from_slice(&bytes);
             }
-            
+
             let result = u128::from_le_bytes(result_bytes);
             let dst_reg = self.convert_register(inst.op_register(0))?;
             self.engine.cpu.write_xmm(dst_reg, result);
         }
-        
+
         Ok(())
     }
 
@@ -12331,7 +12365,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         // VSHUFPD - Shuffle Packed Double-Precision Floating-Point Values
         // VEX.256: VSHUFPD ymm1, ymm2, ymm3/m256, imm8
         // VEX.128: VSHUFPD xmm1, xmm2, xmm3/m128, imm8
-        
+
         if inst.op_count() != 4 {
             return Err(EmulatorError::UnsupportedInstruction(
                 "VSHUFPD requires exactly 4 operands".to_string(),
@@ -12339,13 +12373,13 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         }
 
         let imm8 = inst.immediate8() as usize;
-        
+
         // Check if we're dealing with YMM (256-bit) or XMM (128-bit) registers
         if inst.op_register(0).is_ymm() {
             // YMM version (256-bit) - contains 4 doubles
             let src1_reg = self.convert_register(inst.op_register(1))?;
             let src1 = self.engine.cpu.read_ymm(src1_reg);
-            
+
             let src2 = match inst.op_kind(2) {
                 OpKind::Register => {
                     let src2_reg = self.convert_register(inst.op_register(2))?;
@@ -12356,65 +12390,90 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
                     self.read_ymm_memory(inst, 2)?
                 }
                 _ => {
-                    return Err(EmulatorError::UnsupportedInstruction(
-                        format!("Unsupported VSHUFPD source operand type: {:?}", inst.op_kind(2))
-                    ));
+                    return Err(EmulatorError::UnsupportedInstruction(format!(
+                        "Unsupported VSHUFPD source operand type: {:?}",
+                        inst.op_kind(2)
+                    )));
                 }
             };
 
             // Process each 128-bit lane separately
             let mut result = [0u128; 2];
-            
+
             for lane in 0..2 {
                 let src1_lane = src1[lane];
                 let src2_lane = src2[lane];
-                
+
                 // Extract the 2 doubles from each source
                 let src1_bytes = src1_lane.to_le_bytes();
                 let src2_bytes = src2_lane.to_le_bytes();
-                
+
                 let src1_doubles = [
                     f64::from_le_bytes([
-                        src1_bytes[0], src1_bytes[1], src1_bytes[2], src1_bytes[3],
-                        src1_bytes[4], src1_bytes[5], src1_bytes[6], src1_bytes[7]
+                        src1_bytes[0],
+                        src1_bytes[1],
+                        src1_bytes[2],
+                        src1_bytes[3],
+                        src1_bytes[4],
+                        src1_bytes[5],
+                        src1_bytes[6],
+                        src1_bytes[7],
                     ]),
                     f64::from_le_bytes([
-                        src1_bytes[8], src1_bytes[9], src1_bytes[10], src1_bytes[11],
-                        src1_bytes[12], src1_bytes[13], src1_bytes[14], src1_bytes[15]
-                    ])
+                        src1_bytes[8],
+                        src1_bytes[9],
+                        src1_bytes[10],
+                        src1_bytes[11],
+                        src1_bytes[12],
+                        src1_bytes[13],
+                        src1_bytes[14],
+                        src1_bytes[15],
+                    ]),
                 ];
                 let src2_doubles = [
                     f64::from_le_bytes([
-                        src2_bytes[0], src2_bytes[1], src2_bytes[2], src2_bytes[3],
-                        src2_bytes[4], src2_bytes[5], src2_bytes[6], src2_bytes[7]
+                        src2_bytes[0],
+                        src2_bytes[1],
+                        src2_bytes[2],
+                        src2_bytes[3],
+                        src2_bytes[4],
+                        src2_bytes[5],
+                        src2_bytes[6],
+                        src2_bytes[7],
                     ]),
                     f64::from_le_bytes([
-                        src2_bytes[8], src2_bytes[9], src2_bytes[10], src2_bytes[11],
-                        src2_bytes[12], src2_bytes[13], src2_bytes[14], src2_bytes[15]
-                    ])
+                        src2_bytes[8],
+                        src2_bytes[9],
+                        src2_bytes[10],
+                        src2_bytes[11],
+                        src2_bytes[12],
+                        src2_bytes[13],
+                        src2_bytes[14],
+                        src2_bytes[15],
+                    ]),
                 ];
-                
+
                 // Shuffle according to imm8 bits for this lane
                 let bit_offset = lane * 2;
                 let result_doubles = [
                     src1_doubles[(imm8 >> bit_offset) & 0x1],
                     src2_doubles[(imm8 >> (bit_offset + 1)) & 0x1],
                 ];
-                
+
                 // Build result for this lane
                 let mut lane_bytes = [0u8; 16];
                 lane_bytes[0..8].copy_from_slice(&result_doubles[0].to_le_bytes());
                 lane_bytes[8..16].copy_from_slice(&result_doubles[1].to_le_bytes());
                 result[lane] = u128::from_le_bytes(lane_bytes);
             }
-            
+
             let dst_reg = self.convert_register(inst.op_register(0))?;
             self.engine.cpu.write_ymm(dst_reg, result);
         } else {
             // XMM version (128-bit) - contains 2 doubles
             let src1_reg = self.convert_register(inst.op_register(1))?;
             let src1 = self.engine.cpu.read_xmm(src1_reg);
-            
+
             let src2 = match inst.op_kind(2) {
                 OpKind::Register => {
                     let src2_reg = self.convert_register(inst.op_register(2))?;
@@ -12425,53 +12484,78 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
                     self.read_memory_128(addr)?
                 }
                 _ => {
-                    return Err(EmulatorError::UnsupportedInstruction(
-                        format!("Unsupported VSHUFPD source operand type: {:?}", inst.op_kind(2))
-                    ));
+                    return Err(EmulatorError::UnsupportedInstruction(format!(
+                        "Unsupported VSHUFPD source operand type: {:?}",
+                        inst.op_kind(2)
+                    )));
                 }
             };
 
             // Extract the 2 doubles from each source
             let src1_bytes = src1.to_le_bytes();
             let src2_bytes = src2.to_le_bytes();
-            
+
             let src1_doubles = [
                 f64::from_le_bytes([
-                    src1_bytes[0], src1_bytes[1], src1_bytes[2], src1_bytes[3],
-                    src1_bytes[4], src1_bytes[5], src1_bytes[6], src1_bytes[7]
+                    src1_bytes[0],
+                    src1_bytes[1],
+                    src1_bytes[2],
+                    src1_bytes[3],
+                    src1_bytes[4],
+                    src1_bytes[5],
+                    src1_bytes[6],
+                    src1_bytes[7],
                 ]),
                 f64::from_le_bytes([
-                    src1_bytes[8], src1_bytes[9], src1_bytes[10], src1_bytes[11],
-                    src1_bytes[12], src1_bytes[13], src1_bytes[14], src1_bytes[15]
-                ])
+                    src1_bytes[8],
+                    src1_bytes[9],
+                    src1_bytes[10],
+                    src1_bytes[11],
+                    src1_bytes[12],
+                    src1_bytes[13],
+                    src1_bytes[14],
+                    src1_bytes[15],
+                ]),
             ];
             let src2_doubles = [
                 f64::from_le_bytes([
-                    src2_bytes[0], src2_bytes[1], src2_bytes[2], src2_bytes[3],
-                    src2_bytes[4], src2_bytes[5], src2_bytes[6], src2_bytes[7]
+                    src2_bytes[0],
+                    src2_bytes[1],
+                    src2_bytes[2],
+                    src2_bytes[3],
+                    src2_bytes[4],
+                    src2_bytes[5],
+                    src2_bytes[6],
+                    src2_bytes[7],
                 ]),
                 f64::from_le_bytes([
-                    src2_bytes[8], src2_bytes[9], src2_bytes[10], src2_bytes[11],
-                    src2_bytes[12], src2_bytes[13], src2_bytes[14], src2_bytes[15]
-                ])
+                    src2_bytes[8],
+                    src2_bytes[9],
+                    src2_bytes[10],
+                    src2_bytes[11],
+                    src2_bytes[12],
+                    src2_bytes[13],
+                    src2_bytes[14],
+                    src2_bytes[15],
+                ]),
             ];
-            
+
             // Shuffle according to imm8
             let result_doubles = [
-                src1_doubles[(imm8 >> 0) & 0x1],  // Bit 0 selects from src1
-                src2_doubles[(imm8 >> 1) & 0x1],  // Bit 1 selects from src2
+                src1_doubles[imm8 & 0x1],        // Bit 0 selects from src1
+                src2_doubles[(imm8 >> 1) & 0x1], // Bit 1 selects from src2
             ];
-            
+
             // Build result
             let mut result_bytes = [0u8; 16];
             result_bytes[0..8].copy_from_slice(&result_doubles[0].to_le_bytes());
             result_bytes[8..16].copy_from_slice(&result_doubles[1].to_le_bytes());
-            
+
             let result = u128::from_le_bytes(result_bytes);
             let dst_reg = self.convert_register(inst.op_register(0))?;
             self.engine.cpu.write_xmm(dst_reg, result);
         }
-        
+
         Ok(())
     }
 
@@ -12480,40 +12564,40 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         match imm & 0x1F {
             0 => a == b,                                    // EQ_OQ (Equal, Ordered, Quiet)
             1 => a < b,                                     // LT_OS (Less Than, Ordered, Signaling)
-            2 => a <= b,                                    // LE_OS (Less Than or Equal, Ordered, Signaling)
-            3 => a.is_nan() || b.is_nan(),                  // UNORD_Q (Unordered, Quiet)
-            4 => !(a == b),                                 // NEQ_UQ (Not Equal, Unordered, Quiet)
-            5 => !(a < b),                                  // NLT_US (Not Less Than, Unordered, Signaling)
-            6 => !(a <= b),                                 // NLE_US (Not Less Than or Equal, Unordered, Signaling)
-            7 => !(a.is_nan() || b.is_nan()),               // ORD_Q (Ordered, Quiet)
-            8 => a == b || (a.is_nan() || b.is_nan()),      // EQ_UQ (Equal, Unordered, Quiet)
-            9 => !(a >= b),                                 // NGE_US (Not Greater Than or Equal, Unordered, Signaling)
-            10 => !(a > b),                                 // NGT_US (Not Greater Than, Unordered, Signaling)
-            11 => false,                                    // FALSE_OQ (Always False, Ordered, Quiet)
+            2 => a <= b, // LE_OS (Less Than or Equal, Ordered, Signaling)
+            3 => a.is_nan() || b.is_nan(), // UNORD_Q (Unordered, Quiet)
+            4 => !(a == b), // NEQ_UQ (Not Equal, Unordered, Quiet)
+            5 => !(a < b), // NLT_US (Not Less Than, Unordered, Signaling)
+            6 => !(a <= b), // NLE_US (Not Less Than or Equal, Unordered, Signaling)
+            7 => !(a.is_nan() || b.is_nan()), // ORD_Q (Ordered, Quiet)
+            8 => a == b || (a.is_nan() || b.is_nan()), // EQ_UQ (Equal, Unordered, Quiet)
+            9 => !(a >= b), // NGE_US (Not Greater Than or Equal, Unordered, Signaling)
+            10 => !(a > b), // NGT_US (Not Greater Than, Unordered, Signaling)
+            11 => false, // FALSE_OQ (Always False, Ordered, Quiet)
             12 => !(a == b) && !(a.is_nan() || b.is_nan()), // NEQ_OQ (Not Equal, Ordered, Quiet)
-            13 => a >= b,                                   // GE_OS (Greater Than or Equal, Ordered, Signaling)
-            14 => a > b,                                    // GT_OS (Greater Than, Ordered, Signaling)
-            15 => true,                                     // TRUE_UQ (Always True, Unordered, Quiet)
-            16 => a == b && !(a.is_nan() || b.is_nan()),    // EQ_OS (Equal, Ordered, Signaling)
-            17 => a < b && !(a.is_nan() || b.is_nan()),     // LT_OQ (Less Than, Ordered, Quiet)
-            18 => a <= b && !(a.is_nan() || b.is_nan()),    // LE_OQ (Less Than or Equal, Ordered, Quiet)
-            19 => a.is_nan() || b.is_nan(),                 // UNORD_S (Unordered, Signaling)
-            20 => a != b || (a.is_nan() || b.is_nan()),     // NEQ_US (Not Equal, Unordered, Signaling)
-            21 => !(a < b) || (a.is_nan() || b.is_nan()),   // NLT_UQ (Not Less Than, Unordered, Quiet)
-            22 => !(a <= b) || (a.is_nan() || b.is_nan()),  // NLE_UQ (Not Less Than or Equal, Unordered, Quiet)
-            23 => !(a.is_nan() || b.is_nan()),              // ORD_S (Ordered, Signaling)
-            24 => a == b,                                    // EQ_US (Equal, Unordered, Signaling)
-            25 => !(a >= b) || (a.is_nan() || b.is_nan()),  // NGE_UQ (Not Greater Than or Equal, Unordered, Quiet)
-            26 => !(a > b) || (a.is_nan() || b.is_nan()),   // NGT_UQ (Not Greater Than, Unordered, Quiet)
-            27 => false,                                    // FALSE_OS (Always False, Ordered, Signaling)
-            28 => a != b && !(a.is_nan() || b.is_nan()),    // NEQ_OS (Not Equal, Ordered, Signaling)
-            29 => a >= b && !(a.is_nan() || b.is_nan()),    // GE_OQ (Greater Than or Equal, Ordered, Quiet)
-            30 => a > b && !(a.is_nan() || b.is_nan()),     // GT_OQ (Greater Than, Ordered, Quiet)
-            31 => true,                                     // TRUE_US (Always True, Unordered, Signaling)
+            13 => a >= b, // GE_OS (Greater Than or Equal, Ordered, Signaling)
+            14 => a > b, // GT_OS (Greater Than, Ordered, Signaling)
+            15 => true,  // TRUE_UQ (Always True, Unordered, Quiet)
+            16 => a == b && !(a.is_nan() || b.is_nan()), // EQ_OS (Equal, Ordered, Signaling)
+            17 => a < b && !(a.is_nan() || b.is_nan()), // LT_OQ (Less Than, Ordered, Quiet)
+            18 => a <= b && !(a.is_nan() || b.is_nan()), // LE_OQ (Less Than or Equal, Ordered, Quiet)
+            19 => a.is_nan() || b.is_nan(),              // UNORD_S (Unordered, Signaling)
+            20 => a != b || (a.is_nan() || b.is_nan()),  // NEQ_US (Not Equal, Unordered, Signaling)
+            21 => !(a < b) || (a.is_nan() || b.is_nan()), // NLT_UQ (Not Less Than, Unordered, Quiet)
+            22 => !(a <= b) || (a.is_nan() || b.is_nan()), // NLE_UQ (Not Less Than or Equal, Unordered, Quiet)
+            23 => !(a.is_nan() || b.is_nan()),             // ORD_S (Ordered, Signaling)
+            24 => a == b,                                  // EQ_US (Equal, Unordered, Signaling)
+            25 => !(a >= b) || (a.is_nan() || b.is_nan()), // NGE_UQ (Not Greater Than or Equal, Unordered, Quiet)
+            26 => !(a > b) || (a.is_nan() || b.is_nan()), // NGT_UQ (Not Greater Than, Unordered, Quiet)
+            27 => false, // FALSE_OS (Always False, Ordered, Signaling)
+            28 => a != b && !(a.is_nan() || b.is_nan()), // NEQ_OS (Not Equal, Ordered, Signaling)
+            29 => a >= b && !(a.is_nan() || b.is_nan()), // GE_OQ (Greater Than or Equal, Ordered, Quiet)
+            30 => a > b && !(a.is_nan() || b.is_nan()),  // GT_OQ (Greater Than, Ordered, Quiet)
+            31 => true, // TRUE_US (Always True, Unordered, Signaling)
             _ => false,
         }
     }
-    
+
     fn compare_doubles_avx(&self, a: f64, b: f64, imm: u8) -> bool {
         // AVX comparison predicates (0-31) - same logic as floats but with f64
         match imm & 0x1F {
@@ -12541,7 +12625,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             21 => !(a < b) || (a.is_nan() || b.is_nan()),   // NLT_UQ
             22 => !(a <= b) || (a.is_nan() || b.is_nan()),  // NLE_UQ
             23 => !(a.is_nan() || b.is_nan()),              // ORD_S
-            24 => a == b,                                    // EQ_US
+            24 => a == b,                                   // EQ_US
             25 => !(a >= b) || (a.is_nan() || b.is_nan()),  // NGE_UQ
             26 => !(a > b) || (a.is_nan() || b.is_nan()),   // NGT_UQ
             27 => false,                                    // FALSE_OS

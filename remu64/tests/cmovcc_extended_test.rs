@@ -4,166 +4,227 @@ use remu64::{Engine, EngineMode, Permission, Register, memory::MemoryTrait};
 fn test_cmovae() {
     let mut engine = Engine::new(EngineMode::Mode64);
     engine.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
-    
+
     let code = vec![
         // Test CMOVAE with CF=0 (should move)
         0x48, 0xc7, 0xc0, 0x05, 0x00, 0x00, 0x00, // mov rax, 5
         0x48, 0xc7, 0xc3, 0x03, 0x00, 0x00, 0x00, // mov rbx, 3
-        0x48, 0x39, 0xd8,                          // cmp rax, rbx (5 >= 3, CF=0)
+        0x48, 0x39, 0xd8, // cmp rax, rbx (5 >= 3, CF=0)
         0x48, 0xc7, 0xc1, 0xFF, 0x00, 0x00, 0x00, // mov rcx, 0xFF
         0x48, 0xc7, 0xc2, 0xAA, 0x00, 0x00, 0x00, // mov rdx, 0xAA
-        0x48, 0x0f, 0x43, 0xca,                    // cmovae rcx, rdx (should move 0xAA to rcx)
-        
+        0x48, 0x0f, 0x43, 0xca, // cmovae rcx, rdx (should move 0xAA to rcx)
         // Test CMOVAE with CF=1 (should not move)
         0x48, 0xc7, 0xc0, 0x03, 0x00, 0x00, 0x00, // mov rax, 3
         0x48, 0xc7, 0xc3, 0x05, 0x00, 0x00, 0x00, // mov rbx, 5
-        0x48, 0x39, 0xd8,                          // cmp rax, rbx (3 < 5, CF=1)
+        0x48, 0x39, 0xd8, // cmp rax, rbx (3 < 5, CF=1)
         0x48, 0xc7, 0xc6, 0xFF, 0x00, 0x00, 0x00, // mov rsi, 0xFF
         0x48, 0xc7, 0xc7, 0xBB, 0x00, 0x00, 0x00, // mov rdi, 0xBB
-        0x48, 0x0f, 0x43, 0xf7,                    // cmovae rsi, rdi (should NOT move)
+        0x48, 0x0f, 0x43, 0xf7, // cmovae rsi, rdi (should NOT move)
     ];
-    
+
     engine.memory.write(0x1000, &code).unwrap();
-    engine.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0).unwrap();
-    
-    assert_eq!(engine.reg_read(Register::RCX), 0xAA, "CMOVAE should move when CF=0");
-    assert_eq!(engine.reg_read(Register::RSI), 0xFF, "CMOVAE should not move when CF=1");
+    engine
+        .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
+        .unwrap();
+
+    assert_eq!(
+        engine.reg_read(Register::RCX),
+        0xAA,
+        "CMOVAE should move when CF=0"
+    );
+    assert_eq!(
+        engine.reg_read(Register::RSI),
+        0xFF,
+        "CMOVAE should not move when CF=1"
+    );
 }
 
 #[test]
 fn test_cmovge() {
     let mut engine = Engine::new(EngineMode::Mode64);
     engine.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
-    
+
     let code = vec![
         // Test CMOVGE with signed comparison 5 >= 3 (SF=OF)
         0x48, 0xc7, 0xc0, 0x05, 0x00, 0x00, 0x00, // mov rax, 5
         0x48, 0xc7, 0xc3, 0x03, 0x00, 0x00, 0x00, // mov rbx, 3
-        0x48, 0x39, 0xd8,                          // cmp rax, rbx (SF=0, OF=0)
+        0x48, 0x39, 0xd8, // cmp rax, rbx (SF=0, OF=0)
         0x48, 0xc7, 0xc1, 0xFF, 0x00, 0x00, 0x00, // mov rcx, 0xFF
         0x48, 0xc7, 0xc2, 0xAA, 0x00, 0x00, 0x00, // mov rdx, 0xAA
-        0x48, 0x0f, 0x4d, 0xca,                    // cmovge rcx, rdx (should move)
-        
+        0x48, 0x0f, 0x4d, 0xca, // cmovge rcx, rdx (should move)
         // Test CMOVGE with -5 < 3 (SF!=OF)
         0x48, 0xc7, 0xc0, 0xfb, 0xff, 0xff, 0xff, // mov rax, -5
         0x48, 0xc7, 0xc3, 0x03, 0x00, 0x00, 0x00, // mov rbx, 3
-        0x48, 0x39, 0xd8,                          // cmp rax, rbx (SF=1, OF=0)
+        0x48, 0x39, 0xd8, // cmp rax, rbx (SF=1, OF=0)
         0x48, 0xc7, 0xc6, 0xFF, 0x00, 0x00, 0x00, // mov rsi, 0xFF
         0x48, 0xc7, 0xc7, 0xBB, 0x00, 0x00, 0x00, // mov rdi, 0xBB
-        0x48, 0x0f, 0x4d, 0xf7,                    // cmovge rsi, rdi (should NOT move)
+        0x48, 0x0f, 0x4d, 0xf7, // cmovge rsi, rdi (should NOT move)
     ];
-    
+
     engine.memory.write(0x1000, &code).unwrap();
-    engine.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0).unwrap();
-    
-    assert_eq!(engine.reg_read(Register::RCX), 0xAA, "CMOVGE should move for 5 >= 3");
-    assert_eq!(engine.reg_read(Register::RSI), 0xFF, "CMOVGE should not move for -5 < 3");
+    engine
+        .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
+        .unwrap();
+
+    assert_eq!(
+        engine.reg_read(Register::RCX),
+        0xAA,
+        "CMOVGE should move for 5 >= 3"
+    );
+    assert_eq!(
+        engine.reg_read(Register::RSI),
+        0xFF,
+        "CMOVGE should not move for -5 < 3"
+    );
 }
 
 #[test]
 fn test_cmovs() {
     let mut engine = Engine::new(EngineMode::Mode64);
     engine.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
-    
+
     let code = vec![
         // Test CMOVS with negative result (SF=1)
         0x48, 0xc7, 0xc0, 0x00, 0x00, 0x00, 0x00, // mov rax, 0
-        0x48, 0xff, 0xc8,                          // dec rax (result = -1, SF=1)
+        0x48, 0xff, 0xc8, // dec rax (result = -1, SF=1)
         0x48, 0xc7, 0xc1, 0xFF, 0x00, 0x00, 0x00, // mov rcx, 0xFF
         0x48, 0xc7, 0xc2, 0xAA, 0x00, 0x00, 0x00, // mov rdx, 0xAA
-        0x48, 0x0f, 0x48, 0xca,                    // cmovs rcx, rdx (should move)
-        
+        0x48, 0x0f, 0x48, 0xca, // cmovs rcx, rdx (should move)
         // Test CMOVS with positive result (SF=0)
         0x48, 0xc7, 0xc0, 0x05, 0x00, 0x00, 0x00, // mov rax, 5
-        0x48, 0xff, 0xc0,                          // inc rax (result = 6, SF=0)
+        0x48, 0xff, 0xc0, // inc rax (result = 6, SF=0)
         0x48, 0xc7, 0xc6, 0xFF, 0x00, 0x00, 0x00, // mov rsi, 0xFF
         0x48, 0xc7, 0xc7, 0xBB, 0x00, 0x00, 0x00, // mov rdi, 0xBB
-        0x48, 0x0f, 0x48, 0xf7,                    // cmovs rsi, rdi (should NOT move)
+        0x48, 0x0f, 0x48, 0xf7, // cmovs rsi, rdi (should NOT move)
     ];
-    
+
     engine.memory.write(0x1000, &code).unwrap();
-    engine.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0).unwrap();
-    
-    assert_eq!(engine.reg_read(Register::RCX), 0xAA, "CMOVS should move when SF=1");
-    assert_eq!(engine.reg_read(Register::RSI), 0xFF, "CMOVS should not move when SF=0");
+    engine
+        .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
+        .unwrap();
+
+    assert_eq!(
+        engine.reg_read(Register::RCX),
+        0xAA,
+        "CMOVS should move when SF=1"
+    );
+    assert_eq!(
+        engine.reg_read(Register::RSI),
+        0xFF,
+        "CMOVS should not move when SF=0"
+    );
 }
 
 #[test]
 fn test_cmovo_cmovno() {
     let mut engine = Engine::new(EngineMode::Mode64);
     engine.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
-    
+
     let code = vec![
         // Test with overflow
-        0xb0, 0x7f,                                // mov al, 127
-        0xb3, 0x01,                                // mov bl, 1
-        0x00, 0xd8,                                // add al, bl (127 + 1 = -128, OF=1)
+        0xb0, 0x7f, // mov al, 127
+        0xb3, 0x01, // mov bl, 1
+        0x00, 0xd8, // add al, bl (127 + 1 = -128, OF=1)
         0x48, 0xc7, 0xc1, 0xFF, 0x00, 0x00, 0x00, // mov rcx, 0xFF
         0x48, 0xc7, 0xc2, 0xAA, 0x00, 0x00, 0x00, // mov rdx, 0xAA
-        0x48, 0x0f, 0x40, 0xca,                    // cmovo rcx, rdx (should move)
+        0x48, 0x0f, 0x40, 0xca, // cmovo rcx, rdx (should move)
         0x48, 0xc7, 0xc6, 0xFF, 0x00, 0x00, 0x00, // mov rsi, 0xFF
         0x48, 0xc7, 0xc7, 0xBB, 0x00, 0x00, 0x00, // mov rdi, 0xBB
-        0x48, 0x0f, 0x41, 0xf7,                    // cmovno rsi, rdi (should NOT move)
-        
+        0x48, 0x0f, 0x41, 0xf7, // cmovno rsi, rdi (should NOT move)
         // Test without overflow
-        0xb0, 0x05,                                // mov al, 5
-        0xb3, 0x03,                                // mov bl, 3
-        0x00, 0xd8,                                // add al, bl (5 + 3 = 8, OF=0)
+        0xb0, 0x05, // mov al, 5
+        0xb3, 0x03, // mov bl, 3
+        0x00, 0xd8, // add al, bl (5 + 3 = 8, OF=0)
         0x48, 0xc7, 0xc0, 0xFF, 0x00, 0x00, 0x00, // mov rax, 0xFF (using rax for storage)
         0x48, 0xc7, 0xc3, 0xCC, 0x00, 0x00, 0x00, // mov rbx, 0xCC
-        0x48, 0x0f, 0x40, 0xc3,                    // cmovo rax, rbx (should NOT move)
+        0x48, 0x0f, 0x40, 0xc3, // cmovo rax, rbx (should NOT move)
         0x49, 0xc7, 0xc0, 0xFF, 0x00, 0x00, 0x00, // mov r8, 0xFF
         0x49, 0xc7, 0xc1, 0xDD, 0x00, 0x00, 0x00, // mov r9, 0xDD
-        0x4d, 0x0f, 0x41, 0xc1,                    // cmovno r8, r9 (should move)
+        0x4d, 0x0f, 0x41, 0xc1, // cmovno r8, r9 (should move)
     ];
-    
+
     engine.memory.write(0x1000, &code).unwrap();
-    engine.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0).unwrap();
-    
+    engine
+        .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
+        .unwrap();
+
     // Test with overflow
-    assert_eq!(engine.reg_read(Register::RCX), 0xAA, "CMOVO should move when OF=1");
-    assert_eq!(engine.reg_read(Register::RSI), 0xFF, "CMOVNO should not move when OF=1");
-    
+    assert_eq!(
+        engine.reg_read(Register::RCX),
+        0xAA,
+        "CMOVO should move when OF=1"
+    );
+    assert_eq!(
+        engine.reg_read(Register::RSI),
+        0xFF,
+        "CMOVNO should not move when OF=1"
+    );
+
     // Test without overflow
-    assert_eq!(engine.reg_read(Register::RAX), 0xFF, "CMOVO should not move when OF=0");
-    assert_eq!(engine.reg_read(Register::R8), 0xDD, "CMOVNO should move when OF=0");
+    assert_eq!(
+        engine.reg_read(Register::RAX),
+        0xFF,
+        "CMOVO should not move when OF=0"
+    );
+    assert_eq!(
+        engine.reg_read(Register::R8),
+        0xDD,
+        "CMOVNO should move when OF=0"
+    );
 }
 
 #[test]
 fn test_cmovp_cmovnp() {
     let mut engine = Engine::new(EngineMode::Mode64);
     engine.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
-    
+
     let code = vec![
         // Test with even parity (PF=1)
-        0xb0, 0x03,                                // mov al, 0x03 (00000011 - 2 bits set)
-        0x84, 0xc0,                                // test al, al
+        0xb0, 0x03, // mov al, 0x03 (00000011 - 2 bits set)
+        0x84, 0xc0, // test al, al
         0x48, 0xc7, 0xc1, 0xFF, 0x00, 0x00, 0x00, // mov rcx, 0xFF
         0x48, 0xc7, 0xc2, 0xAA, 0x00, 0x00, 0x00, // mov rdx, 0xAA
-        0x48, 0x0f, 0x4a, 0xca,                    // cmovp rcx, rdx (should move)
+        0x48, 0x0f, 0x4a, 0xca, // cmovp rcx, rdx (should move)
         0x48, 0xc7, 0xc6, 0xFF, 0x00, 0x00, 0x00, // mov rsi, 0xFF
         0x48, 0xc7, 0xc7, 0xBB, 0x00, 0x00, 0x00, // mov rdi, 0xBB
-        0x48, 0x0f, 0x4b, 0xf7,                    // cmovnp rsi, rdi (should NOT move)
-        
+        0x48, 0x0f, 0x4b, 0xf7, // cmovnp rsi, rdi (should NOT move)
         // Test with odd parity (PF=0)
-        0xb0, 0x07,                                // mov al, 0x07 (00000111 - 3 bits set)
-        0x84, 0xc0,                                // test al, al
+        0xb0, 0x07, // mov al, 0x07 (00000111 - 3 bits set)
+        0x84, 0xc0, // test al, al
         0x48, 0xc7, 0xc0, 0xFF, 0x00, 0x00, 0x00, // mov rax, 0xFF
         0x48, 0xc7, 0xc3, 0xCC, 0x00, 0x00, 0x00, // mov rbx, 0xCC
-        0x48, 0x0f, 0x4a, 0xc3,                    // cmovp rax, rbx (should NOT move)
+        0x48, 0x0f, 0x4a, 0xc3, // cmovp rax, rbx (should NOT move)
         0x49, 0xc7, 0xc0, 0xFF, 0x00, 0x00, 0x00, // mov r8, 0xFF
         0x49, 0xc7, 0xc1, 0xDD, 0x00, 0x00, 0x00, // mov r9, 0xDD
-        0x4d, 0x0f, 0x4b, 0xc1,                    // cmovnp r8, r9 (should move)
+        0x4d, 0x0f, 0x4b, 0xc1, // cmovnp r8, r9 (should move)
     ];
-    
+
     engine.memory.write(0x1000, &code).unwrap();
-    engine.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0).unwrap();
-    
+    engine
+        .emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0)
+        .unwrap();
+
     // Test with even parity
-    assert_eq!(engine.reg_read(Register::RCX), 0xAA, "CMOVP should move when PF=1");
-    assert_eq!(engine.reg_read(Register::RSI), 0xFF, "CMOVNP should not move when PF=1");
-    
+    assert_eq!(
+        engine.reg_read(Register::RCX),
+        0xAA,
+        "CMOVP should move when PF=1"
+    );
+    assert_eq!(
+        engine.reg_read(Register::RSI),
+        0xFF,
+        "CMOVNP should not move when PF=1"
+    );
+
     // Test with odd parity
-    assert_eq!(engine.reg_read(Register::RAX), 0xFF, "CMOVP should not move when PF=0");
-    assert_eq!(engine.reg_read(Register::R8), 0xDD, "CMOVNP should move when PF=0");
+    assert_eq!(
+        engine.reg_read(Register::RAX),
+        0xFF,
+        "CMOVP should not move when PF=0"
+    );
+    assert_eq!(
+        engine.reg_read(Register::R8),
+        0xDD,
+        "CMOVNP should move when PF=0"
+    );
 }
