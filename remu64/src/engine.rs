@@ -12200,7 +12200,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         // VEX.128: VSHUFPS xmm1, xmm2, xmm3/m128, imm8
         
         if inst.op_count() != 4 {
-            return Err(EmulatorError::InvalidInstruction(
+            return Err(EmulatorError::UnsupportedInstruction(
                 "VSHUFPS requires exactly 4 operands".to_string(),
             ));
         }
@@ -12333,7 +12333,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         // VEX.128: VSHUFPD xmm1, xmm2, xmm3/m128, imm8
         
         if inst.op_count() != 4 {
-            return Err(EmulatorError::InvalidInstruction(
+            return Err(EmulatorError::UnsupportedInstruction(
                 "VSHUFPD requires exactly 4 operands".to_string(),
             ));
         }
