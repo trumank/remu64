@@ -348,6 +348,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             Mnemonic::Tzcnt => self.execute_tzcnt(inst),
             Mnemonic::Andn => self.execute_andn(inst),
             Mnemonic::Bextr => self.execute_bextr(inst),
+            Mnemonic::Blsi => self.execute_blsi(inst),
             Mnemonic::Cqo => self.execute_cqo(inst),
             Mnemonic::Xadd => self.execute_xadd(inst),
             Mnemonic::Cpuid => self.execute_cpuid(inst),
@@ -6507,6 +6508,70 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         } else {
             self.engine.cpu.rflags.remove(Flags::SF);
         }
+        
+        // Set PF based on low byte
+        let low_byte = (result & 0xFF) as u8;
+        if low_byte.count_ones() % 2 == 0 {
+            self.engine.cpu.rflags.insert(Flags::PF);
+        } else {
+            self.engine.cpu.rflags.remove(Flags::PF);
+        }
+        
+        Ok(())
+    }
+
+    fn execute_blsi(&mut self, inst: &Instruction) -> Result<()> {
+        // BLSI: Extract Lowest Set Isolated Bit
+        // Extracts the lowest set bit from the source operand and stores it in the destination
+        // Operation: dest = src & -src
+        // This isolates the rightmost 1 bit (if any) in the source operand
+        
+        // BLSI has 2 operands: dest, src
+        let src = self.read_operand(inst, 1)?;
+        
+        // Perform the operation: src & -src
+        // In two's complement, -src = ~src + 1
+        let result = src & (!src).wrapping_add(1);
+        
+        // Write result to destination
+        self.write_operand(inst, 0, result)?;
+        
+        // Update flags according to Intel manual
+        // BLSI sets SF, CF, OF based on result
+        // ZF is set if src is zero (result would be zero)
+        // PF is undefined (we'll set it based on low byte)
+        // AF is undefined (we'll clear it)
+        self.engine.cpu.rflags.remove(Flags::AF);
+        
+        // Set ZF if source is zero (result would be zero)
+        if src == 0 {
+            self.engine.cpu.rflags.insert(Flags::ZF);
+            // CF is cleared when src is zero
+            self.engine.cpu.rflags.remove(Flags::CF);
+        } else {
+            self.engine.cpu.rflags.remove(Flags::ZF);
+            // CF is set when src is not zero
+            self.engine.cpu.rflags.insert(Flags::CF);
+        }
+        
+        // SF is set to the MSB of the result
+        let size = self.get_operand_size_from_instruction(inst, 0)?;
+        let sign_bit = match size {
+            1 => (result & 0x80) != 0,
+            2 => (result & 0x8000) != 0,
+            4 => (result & 0x80000000) != 0,
+            8 => (result & 0x8000000000000000) != 0,
+            _ => false,
+        };
+        
+        if sign_bit {
+            self.engine.cpu.rflags.insert(Flags::SF);
+        } else {
+            self.engine.cpu.rflags.remove(Flags::SF);
+        }
+        
+        // OF is cleared
+        self.engine.cpu.rflags.remove(Flags::OF);
         
         // Set PF based on low byte
         let low_byte = (result & 0xFF) as u8;
