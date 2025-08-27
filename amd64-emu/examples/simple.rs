@@ -1,8 +1,6 @@
 use amd64_emu::{memory::MemoryTrait as _, Engine, EngineMode, Permission, Register};
 
 fn main() {
-    env_logger::init();
-
     let mut engine = Engine::new(EngineMode::Mode64);
 
     engine.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();

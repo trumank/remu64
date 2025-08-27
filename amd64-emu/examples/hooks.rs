@@ -65,8 +65,6 @@ impl<M: MemoryTrait> HookManager<M> for CustomHooks {
 }
 
 fn main() {
-    env_logger::init();
-
     let mut engine = Engine::new(EngineMode::Mode64);
     let mut hooks = CustomHooks::new();
 

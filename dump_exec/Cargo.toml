@@ -9,7 +9,6 @@ license.workspace = true
 amd64-emu = { version = "0.1.0", path = "../amd64-emu" }
 minidump = "0.21"
 anyhow = "1.0"
-thiserror = "1.0"
 memmap2 = "0.9"
 iced-x86 = "1.21"
 clap = { version = "4.0", features = ["derive"] }

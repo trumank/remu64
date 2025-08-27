@@ -10,11 +10,3 @@ description = "Pure Rust AMD64 emulator with Unicorn Engine-like API"
 license = "MIT OR Apache-2.0"
 keywords = ["emulator", "x86-64", "amd64", "cpu", "unicorn"]
 categories = ["emulators", "simulation"]
-
-[profile.release]
-opt-level = 3
-lto = true
-codegen-units = 1
-
-[profile.bench]
-inherits = "release"
