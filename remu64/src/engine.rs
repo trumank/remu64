@@ -171,18 +171,14 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             Err(e) => return Err(e), // Other errors are fatal
         }
 
-        let mut inst_bytes = vec![0u8; 15];
-        self.mem_read_with_hooks(rip, &mut inst_bytes)?;
-
-        // Create iced_x86 decoder for this instruction
+        // Decode instruction with page boundary awareness
         let bitness = match self.engine.mode {
             EngineMode::Mode16 => 16,
             EngineMode::Mode32 => 32,
             EngineMode::Mode64 => 64,
         };
-        let mut decoder = Decoder::with_ip(bitness, &inst_bytes, rip, DecoderOptions::NONE);
 
-        let inst = decoder.decode();
+        let inst = self.decode_instruction_with_page_boundaries(rip, bitness)?;
 
         self.hooks.on_code(self.engine, rip, inst.len())?;
 
@@ -230,6 +226,55 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
                 }
             }
             Err(e) => Err(e),
+        }
+    }
+
+    fn decode_instruction_with_page_boundaries(
+        &mut self,
+        rip: u64,
+        bitness: u32,
+    ) -> Result<Instruction> {
+        const PAGE_SIZE: u64 = 4096;
+        const CHUNK_SIZE: usize = 16;
+
+        let mut inst_bytes = vec![];
+        let mut chunk = [0u8; CHUNK_SIZE];
+
+        loop {
+            // Calculate the next address to read from
+            let next_addr = rip + inst_bytes.len() as u64;
+
+            // Calculate how many bytes we can read until the next page boundary
+            let page_start = next_addr & !(PAGE_SIZE - 1);
+            let page_end = page_start + PAGE_SIZE;
+            let bytes_until_page_boundary = (page_end - next_addr) as usize;
+
+            // Read either 16 bytes or until page boundary, whichever is smaller
+            let chunk = &mut chunk[0..bytes_until_page_boundary.min(CHUNK_SIZE)];
+
+            // Read more bytes
+            self.mem_read_with_hooks(next_addr, chunk)?;
+
+            // Check execute permissions (memory read already handled page faults)
+            let perms = self.engine.memory.permissions(next_addr)?;
+            if !perms.contains(Permission::EXEC) {
+                return Err(EmulatorError::PermissionDenied(next_addr));
+            }
+
+            inst_bytes.extend_from_slice(&chunk);
+
+            // Try to decode with current bytes
+            let mut decoder = Decoder::with_ip(bitness, &inst_bytes, rip, DecoderOptions::NONE);
+            let inst = decoder.decode();
+
+            match decoder.last_error() {
+                iced_x86::DecoderError::None => return Ok(inst),
+                iced_x86::DecoderError::InvalidInstruction => {
+                    return Err(EmulatorError::InvalidInstruction(rip));
+                }
+                iced_x86::DecoderError::NoMoreBytes => {}
+                err => unreachable!("Unhandled iced_x86 error {err:?}"),
+            }
         }
     }
 
