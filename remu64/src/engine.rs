@@ -351,6 +351,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             Mnemonic::Blsi => self.execute_blsi(inst),
             Mnemonic::Blsmsk => self.execute_blsmsk(inst),
             Mnemonic::Blsr => self.execute_blsr(inst),
+            Mnemonic::Bzhi => self.execute_bzhi(inst),
             Mnemonic::Cqo => self.execute_cqo(inst),
             Mnemonic::Xadd => self.execute_xadd(inst),
             Mnemonic::Cpuid => self.execute_cpuid(inst),
@@ -6706,6 +6707,79 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         } else {
             self.engine.cpu.rflags.remove(Flags::PF);
         }
+        
+        Ok(())
+    }
+
+    fn execute_bzhi(&mut self, inst: &Instruction) -> Result<()> {
+        // BZHI: Zero High Bits Starting with Specified Bit Position
+        // Takes bits from source1[0..index-1] where index is in source2[7:0]
+        // Zeroes all bits from index and higher
+        
+        // BZHI has 3 operands: dest, src1, src2
+        let src1 = self.read_operand(inst, 1)?;
+        let src2 = self.read_operand(inst, 2)?;
+        
+        // Extract the bit index from bits 7:0 of src2
+        let index = (src2 & 0xFF) as u32;
+        
+        // Get operand size in bits
+        let size = inst.op0_register().size();
+        let size_bits = (size * 8) as u32;
+        
+        // Compute result
+        let result = if index >= size_bits {
+            // If index >= operand size, result is src1 unchanged
+            src1
+        } else if index == 0 {
+            // If index is 0, result is 0
+            0
+        } else {
+            // Otherwise, mask off high bits starting at index
+            // Create mask with 'index' low bits set
+            let mask = (1u64 << index) - 1;
+            src1 & mask
+        };
+        
+        // Write result to destination
+        self.write_operand(inst, 0, result)?;
+        
+        // Update flags according to Intel manual
+        // BZHI clears CF and OF
+        self.engine.cpu.rflags.remove(Flags::CF | Flags::OF);
+        
+        // Set ZF if result is zero
+        if result == 0 {
+            self.engine.cpu.rflags.insert(Flags::ZF);
+        } else {
+            self.engine.cpu.rflags.remove(Flags::ZF);
+        }
+        
+        // Set SF based on sign bit of result
+        let sign_bit = match size {
+            1 => (result & 0x80) != 0,
+            2 => (result & 0x8000) != 0,
+            4 => (result & 0x80000000) != 0,
+            8 => (result & 0x8000000000000000) != 0,
+            _ => false,
+        };
+        
+        if sign_bit {
+            self.engine.cpu.rflags.insert(Flags::SF);
+        } else {
+            self.engine.cpu.rflags.remove(Flags::SF);
+        }
+        
+        // PF is undefined - we'll set it based on low byte for consistency
+        let low_byte = (result & 0xFF) as u8;
+        if low_byte.count_ones() % 2 == 0 {
+            self.engine.cpu.rflags.insert(Flags::PF);
+        } else {
+            self.engine.cpu.rflags.remove(Flags::PF);
+        }
+        
+        // AF is undefined - we'll clear it
+        self.engine.cpu.rflags.remove(Flags::AF);
         
         Ok(())
     }
