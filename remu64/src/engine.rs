@@ -352,6 +352,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             Mnemonic::Blsmsk => self.execute_blsmsk(inst),
             Mnemonic::Blsr => self.execute_blsr(inst),
             Mnemonic::Bzhi => self.execute_bzhi(inst),
+            Mnemonic::Mulx => self.execute_mulx(inst),
             Mnemonic::Cqo => self.execute_cqo(inst),
             Mnemonic::Xadd => self.execute_xadd(inst),
             Mnemonic::Cpuid => self.execute_cpuid(inst),
@@ -6780,6 +6781,51 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         
         // AF is undefined - we'll clear it
         self.engine.cpu.rflags.remove(Flags::AF);
+        
+        Ok(())
+    }
+
+    fn execute_mulx(&mut self, inst: &Instruction) -> Result<()> {
+        // MULX: Unsigned Multiply Without Affecting Flags
+        // Performs unsigned multiplication of RDX/EDX with source operand
+        // Results go to two destination registers - high bits in dest1, low bits in dest2
+        // Does NOT affect any flags
+        
+        // MULX has 3 operands: dest1 (high), dest2 (low), src
+        // The implicit multiplicand is in RDX (64-bit) or EDX (32-bit)
+        let src = self.read_operand(inst, 2)?;
+        
+        // Get operand size to determine which register and operation size
+        let size = inst.op0_register().size();
+        
+        let (high, low) = match size {
+            4 => {
+                // 32-bit mode: EDX * src -> 64-bit result
+                let edx_value = (self.engine.cpu.read_reg(Register::RDX) & 0xFFFFFFFF) as u32;
+                let src32 = (src & 0xFFFFFFFF) as u32;
+                let result = edx_value as u64 * src32 as u64;
+                let high = (result >> 32) as u64;
+                let low = (result & 0xFFFFFFFF) as u64;
+                (high, low)
+            }
+            8 => {
+                // 64-bit mode: RDX * src -> 128-bit result
+                let rdx_value = self.engine.cpu.read_reg(Register::RDX);
+                // Perform 128-bit multiplication
+                let result = (rdx_value as u128) * (src as u128);
+                let high = (result >> 64) as u64;
+                let low = (result & 0xFFFFFFFFFFFFFFFF) as u64;
+                (high, low)
+            }
+            _ => return Err(Error::InvalidInstruction),
+        };
+        
+        // Write results to destinations
+        // Operand 0 gets high bits, operand 1 gets low bits
+        self.write_operand(inst, 0, high)?;
+        self.write_operand(inst, 1, low)?;
+        
+        // MULX does not modify any flags - this is its key difference from MUL
         
         Ok(())
     }
