@@ -312,6 +312,13 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             Mnemonic::Cmovle => self.execute_cmovle(inst),
             Mnemonic::Cmove => self.execute_cmove(inst),
             Mnemonic::Cmovne => self.execute_cmovne(inst),
+            Mnemonic::Cmovae => self.execute_cmovae(inst),
+            Mnemonic::Cmovge => self.execute_cmovge(inst),
+            Mnemonic::Cmovs => self.execute_cmovs(inst),
+            Mnemonic::Cmovo => self.execute_cmovo(inst),
+            Mnemonic::Cmovno => self.execute_cmovno(inst),
+            Mnemonic::Cmovp => self.execute_cmovp(inst),
+            Mnemonic::Cmovnp => self.execute_cmovnp(inst),
             Mnemonic::Vmovdqu => self.execute_vmovdqu(inst),
             Mnemonic::Vmovdqa => self.execute_vmovdqa(inst),
             Mnemonic::Movups => self.execute_movups(inst),
@@ -1387,6 +1394,91 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         }
         // If condition is false, no move occurs
 
+        Ok(())
+    }
+    
+    fn execute_cmovae(&mut self, inst: &Instruction) -> Result<()> {
+        // CMOVAE: Conditional move if above or equal (CF=0)
+        let cf = self.engine.cpu.rflags.contains(Flags::CF);
+        
+        if !cf {
+            let src_value = self.read_operand(inst, 1)?;
+            self.write_operand(inst, 0, src_value)?;
+        }
+        
+        Ok(())
+    }
+    
+    fn execute_cmovge(&mut self, inst: &Instruction) -> Result<()> {
+        // CMOVGE: Conditional move if greater or equal (SF=OF)
+        let sf = self.engine.cpu.rflags.contains(Flags::SF);
+        let of = self.engine.cpu.rflags.contains(Flags::OF);
+        
+        if sf == of {
+            let src_value = self.read_operand(inst, 1)?;
+            self.write_operand(inst, 0, src_value)?;
+        }
+        
+        Ok(())
+    }
+    
+    fn execute_cmovs(&mut self, inst: &Instruction) -> Result<()> {
+        // CMOVS: Conditional move if sign (SF=1)
+        let sf = self.engine.cpu.rflags.contains(Flags::SF);
+        
+        if sf {
+            let src_value = self.read_operand(inst, 1)?;
+            self.write_operand(inst, 0, src_value)?;
+        }
+        
+        Ok(())
+    }
+    
+    fn execute_cmovo(&mut self, inst: &Instruction) -> Result<()> {
+        // CMOVO: Conditional move if overflow (OF=1)
+        let of = self.engine.cpu.rflags.contains(Flags::OF);
+        
+        if of {
+            let src_value = self.read_operand(inst, 1)?;
+            self.write_operand(inst, 0, src_value)?;
+        }
+        
+        Ok(())
+    }
+    
+    fn execute_cmovno(&mut self, inst: &Instruction) -> Result<()> {
+        // CMOVNO: Conditional move if not overflow (OF=0)
+        let of = self.engine.cpu.rflags.contains(Flags::OF);
+        
+        if !of {
+            let src_value = self.read_operand(inst, 1)?;
+            self.write_operand(inst, 0, src_value)?;
+        }
+        
+        Ok(())
+    }
+    
+    fn execute_cmovp(&mut self, inst: &Instruction) -> Result<()> {
+        // CMOVP: Conditional move if parity (PF=1)
+        let pf = self.engine.cpu.rflags.contains(Flags::PF);
+        
+        if pf {
+            let src_value = self.read_operand(inst, 1)?;
+            self.write_operand(inst, 0, src_value)?;
+        }
+        
+        Ok(())
+    }
+    
+    fn execute_cmovnp(&mut self, inst: &Instruction) -> Result<()> {
+        // CMOVNP: Conditional move if not parity (PF=0)
+        let pf = self.engine.cpu.rflags.contains(Flags::PF);
+        
+        if !pf {
+            let src_value = self.read_operand(inst, 1)?;
+            self.write_operand(inst, 0, src_value)?;
+        }
+        
         Ok(())
     }
 
