@@ -427,6 +427,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             Mnemonic::Stc => self.execute_stc(inst),
             Mnemonic::Clc => self.execute_clc(inst),
             Mnemonic::Cmc => self.execute_cmc(inst),
+            Mnemonic::Xlatb => self.execute_xlat(inst),
             Mnemonic::Shufps => self.execute_shufps(inst),
             Mnemonic::Unpcklps => self.execute_unpcklps(inst),
             Mnemonic::Unpckhps => self.execute_unpckhps(inst),
@@ -5646,6 +5647,36 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         } else {
             self.engine.cpu.rflags.insert(Flags::CF);
         }
+        Ok(())
+    }
+    
+    fn execute_xlat(&mut self, _inst: &Instruction) -> Result<()> {
+        // XLAT: Table lookup translation
+        // AL = [DS:RBX + AL] (64-bit mode)
+        // AL = [DS:EBX + AL] (32-bit mode)  
+        // AL = [DS:BX + AL] (16-bit mode)
+        
+        // Get AL value as index
+        let al = self.engine.cpu.read_reg(Register::AL) as u8;
+        
+        // In 64-bit mode, use RBX as base
+        // TODO: Handle 32-bit and 16-bit modes when needed
+        let base_addr = self.engine.cpu.read_reg(Register::RBX);
+        
+        // Calculate effective address: base + zero-extended AL
+        let effective_addr = base_addr.wrapping_add(al as u64);
+        
+        // Read byte from memory at effective address
+        let value = self.read_memory_sized(effective_addr, 1)? as u8;
+        
+        // Get current RAX value and preserve upper bits
+        let rax = self.engine.cpu.read_reg(Register::RAX);
+        let new_rax = (rax & 0xFFFFFFFFFFFFFF00) | (value as u64);
+        
+        // Store result, preserving upper bits of RAX
+        self.engine.cpu.write_reg(Register::RAX, new_rax);
+        
+        // XLAT doesn't affect flags
         Ok(())
     }
 
