@@ -346,6 +346,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             Mnemonic::Popcnt => self.execute_popcnt(inst),
             Mnemonic::Lzcnt => self.execute_lzcnt(inst),
             Mnemonic::Tzcnt => self.execute_tzcnt(inst),
+            Mnemonic::Andn => self.execute_andn(inst),
             Mnemonic::Cqo => self.execute_cqo(inst),
             Mnemonic::Xadd => self.execute_xadd(inst),
             Mnemonic::Cpuid => self.execute_cpuid(inst),
@@ -6372,6 +6373,64 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             self.engine.cpu.rflags.remove(Flags::ZF);
         }
 
+        Ok(())
+    }
+
+    fn execute_andn(&mut self, inst: &Instruction) -> Result<()> {
+        // ANDN: Logical AND NOT
+        // dest = ~src1 & src2
+        // This instruction performs a bitwise AND of the complement of the first source operand
+        // with the second source operand and stores the result in the destination.
+        
+        // ANDN has 3 operands: dest, src1, src2
+        // In VEX encoding: ANDN dest, src1, src2 means dest = ~src1 & src2
+        let src1 = self.read_operand(inst, 1)?;
+        let src2 = self.read_operand(inst, 2)?;
+        
+        // Perform AND NOT operation
+        let result = !src1 & src2;
+        
+        // Write result to destination
+        self.write_operand(inst, 0, result)?;
+        
+        // Update flags according to Intel manual
+        // ANDN sets SF, ZF based on result
+        // Clears OF and CF
+        // AF is undefined (we'll clear it)
+        // PF is undefined (we'll set it based on low byte)
+        self.engine.cpu.rflags.remove(Flags::OF | Flags::CF | Flags::AF);
+        
+        // Set SF based on sign bit of result
+        let size = self.get_operand_size_from_instruction(inst, 0)?;
+        let sign_bit = match size {
+            1 => (result & 0x80) != 0,
+            2 => (result & 0x8000) != 0,
+            4 => (result & 0x80000000) != 0,
+            8 => (result & 0x8000000000000000) != 0,
+            _ => false,
+        };
+        
+        if sign_bit {
+            self.engine.cpu.rflags.insert(Flags::SF);
+        } else {
+            self.engine.cpu.rflags.remove(Flags::SF);
+        }
+        
+        // Set ZF if result is zero
+        if result == 0 {
+            self.engine.cpu.rflags.insert(Flags::ZF);
+        } else {
+            self.engine.cpu.rflags.remove(Flags::ZF);
+        }
+        
+        // Set PF based on low byte
+        let low_byte = (result & 0xFF) as u8;
+        if low_byte.count_ones() % 2 == 0 {
+            self.engine.cpu.rflags.insert(Flags::PF);
+        } else {
+            self.engine.cpu.rflags.remove(Flags::PF);
+        }
+        
         Ok(())
     }
 
