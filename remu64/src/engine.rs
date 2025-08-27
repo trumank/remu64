@@ -6791,8 +6791,12 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         // Results go to two destination registers - high bits in dest1, low bits in dest2
         // Does NOT affect any flags
         
-        // MULX has 3 operands: dest1 (high), dest2 (low), src
-        // The implicit multiplicand is in RDX (64-bit) or EDX (32-bit)
+        // MULX encoding is special in VEX instructions
+        // In Intel syntax: MULX r32a, r32b, r/m32
+        // But iced-x86 seems to decode it as having EDX as both source and sometimes dest
+        // We need to handle the VEX.vvvv encoded destination specially
+        
+        // Get the source operand (should be op2 in iced-x86)
         let src = self.read_operand(inst, 2)?;
         
         // Get operand size to determine which register and operation size
@@ -6817,12 +6821,22 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
                 let low = (result & 0xFFFFFFFFFFFFFFFF) as u64;
                 (high, low)
             }
-            _ => return Err(Error::InvalidInstruction),
+            _ => return Err(EmulatorError::InvalidInstruction(self.engine.cpu.read_reg(Register::RIP))),
         };
         
         // Write results to destinations
-        // Operand 0 gets high bits, operand 1 gets low bits
+        // MULX has a quirk in iced-x86 where the VEX.vvvv destination register
+        // isn't properly exposed in the operand list. 
+        // For now, we'll write to the registers that iced-x86 provides:
+        // Op0 gets high bits (this should be correct)
+        // Op1 seems to be EDX in iced-x86, but this is actually where low bits go
+        
         self.write_operand(inst, 0, high)?;
+        
+        // For the low bits destination, we need special handling
+        // In the original Intel encoding, this would come from VEX.vvvv
+        // But iced-x86 seems to treat EDX as both source and a destination
+        // So we write low bits to op1 (which iced-x86 says is EDX)
         self.write_operand(inst, 1, low)?;
         
         // MULX does not modify any flags - this is its key difference from MUL
