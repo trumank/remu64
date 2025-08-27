@@ -259,3 +259,143 @@ fn test_vaddps_ymm() {
     assert_eq!((result[1] >> 64) & 0xFFFFFFFF, 9.0_f32.to_bits() as u128);
     assert_eq!((result[1] >> 96) & 0xFFFFFFFF, 10.0_f32.to_bits() as u128);
 }
+
+#[test]
+fn test_vmulpd_xmm() {
+    let mut engine = Engine::new(EngineMode::Mode64);
+    engine.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
+
+    // XMM1 = [3.0, 4.0] (packed double-precision)
+    let xmm1_data: u128 = 
+        (3.0_f64.to_bits() as u128) |
+        ((4.0_f64.to_bits() as u128) << 64);
+    
+    // XMM2 = [2.0, 5.0]
+    let xmm2_data: u128 = 
+        (2.0_f64.to_bits() as u128) |
+        ((5.0_f64.to_bits() as u128) << 64);
+    
+    engine.xmm_write(Register::XMM1, xmm1_data);
+    engine.xmm_write(Register::XMM2, xmm2_data);
+
+    // vmulpd xmm0, xmm1, xmm2
+    // C5 F1 59 C2
+    let code = vec![0xC5, 0xF1, 0x59, 0xC2];
+    
+    engine.memory.write(0x1000, &code).unwrap();
+    engine.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0).unwrap();
+
+    // Expected: XMM0 = [6.0, 20.0]
+    let result = engine.xmm_read(Register::XMM0);
+    assert_eq!(result & 0xFFFFFFFFFFFFFFFF, 6.0_f64.to_bits() as u128);
+    assert_eq!((result >> 64) & 0xFFFFFFFFFFFFFFFF, 20.0_f64.to_bits() as u128);
+}
+
+#[test]
+fn test_vdivpd_xmm() {
+    let mut engine = Engine::new(EngineMode::Mode64);
+    engine.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
+
+    // XMM1 = [20.0, 15.0] (packed double-precision)
+    let xmm1_data: u128 = 
+        (20.0_f64.to_bits() as u128) |
+        ((15.0_f64.to_bits() as u128) << 64);
+    
+    // XMM2 = [4.0, 3.0]
+    let xmm2_data: u128 = 
+        (4.0_f64.to_bits() as u128) |
+        ((3.0_f64.to_bits() as u128) << 64);
+    
+    engine.xmm_write(Register::XMM1, xmm1_data);
+    engine.xmm_write(Register::XMM2, xmm2_data);
+
+    // vdivpd xmm0, xmm1, xmm2
+    // C5 F1 5E C2
+    let code = vec![0xC5, 0xF1, 0x5E, 0xC2];
+    
+    engine.memory.write(0x1000, &code).unwrap();
+    engine.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0).unwrap();
+
+    // Expected: XMM0 = [5.0, 5.0]
+    let result = engine.xmm_read(Register::XMM0);
+    assert_eq!(result & 0xFFFFFFFFFFFFFFFF, 5.0_f64.to_bits() as u128);
+    assert_eq!((result >> 64) & 0xFFFFFFFFFFFFFFFF, 5.0_f64.to_bits() as u128);
+}
+
+#[test]
+fn test_vmulpd_ymm() {
+    let mut engine = Engine::new(EngineMode::Mode64);
+    engine.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
+
+    // YMM1 = [1.5, 2.5, 3.5, 4.5]
+    let ymm1_low: u128 = 
+        (1.5_f64.to_bits() as u128) |
+        ((2.5_f64.to_bits() as u128) << 64);
+    let ymm1_high: u128 = 
+        (3.5_f64.to_bits() as u128) |
+        ((4.5_f64.to_bits() as u128) << 64);
+    
+    // YMM2 = [2.0, 3.0, 4.0, 2.0]
+    let ymm2_low: u128 = 
+        (2.0_f64.to_bits() as u128) |
+        ((3.0_f64.to_bits() as u128) << 64);
+    let ymm2_high: u128 = 
+        (4.0_f64.to_bits() as u128) |
+        ((2.0_f64.to_bits() as u128) << 64);
+    
+    engine.ymm_write(Register::YMM1, [ymm1_low, ymm1_high]);
+    engine.ymm_write(Register::YMM2, [ymm2_low, ymm2_high]);
+
+    // vmulpd ymm0, ymm1, ymm2
+    // C5 F5 59 C2  
+    let code = vec![0xC5, 0xF5, 0x59, 0xC2];
+    
+    engine.memory.write(0x1000, &code).unwrap();
+    engine.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0).unwrap();
+
+    // Expected: YMM0 = [3.0, 7.5, 14.0, 9.0]
+    let result = engine.ymm_read(Register::YMM0);
+    assert_eq!(result[0] & 0xFFFFFFFFFFFFFFFF, 3.0_f64.to_bits() as u128);
+    assert_eq!((result[0] >> 64) & 0xFFFFFFFFFFFFFFFF, 7.5_f64.to_bits() as u128);
+    assert_eq!(result[1] & 0xFFFFFFFFFFFFFFFF, 14.0_f64.to_bits() as u128);
+    assert_eq!((result[1] >> 64) & 0xFFFFFFFFFFFFFFFF, 9.0_f64.to_bits() as u128);
+}
+
+#[test]
+fn test_vdivpd_ymm() {
+    let mut engine = Engine::new(EngineMode::Mode64);
+    engine.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
+
+    // YMM1 = [15.0, 21.0, 14.0, 18.0]
+    let ymm1_low: u128 = 
+        (15.0_f64.to_bits() as u128) |
+        ((21.0_f64.to_bits() as u128) << 64);
+    let ymm1_high: u128 = 
+        (14.0_f64.to_bits() as u128) |
+        ((18.0_f64.to_bits() as u128) << 64);
+    
+    // YMM2 = [3.0, 7.0, 2.0, 6.0]
+    let ymm2_low: u128 = 
+        (3.0_f64.to_bits() as u128) |
+        ((7.0_f64.to_bits() as u128) << 64);
+    let ymm2_high: u128 = 
+        (2.0_f64.to_bits() as u128) |
+        ((6.0_f64.to_bits() as u128) << 64);
+    
+    engine.ymm_write(Register::YMM1, [ymm1_low, ymm1_high]);
+    engine.ymm_write(Register::YMM2, [ymm2_low, ymm2_high]);
+
+    // vdivpd ymm0, ymm1, ymm2
+    // C5 F5 5E C2  
+    let code = vec![0xC5, 0xF5, 0x5E, 0xC2];
+    
+    engine.memory.write(0x1000, &code).unwrap();
+    engine.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0).unwrap();
+
+    // Expected: YMM0 = [5.0, 3.0, 7.0, 3.0]
+    let result = engine.ymm_read(Register::YMM0);
+    assert_eq!(result[0] & 0xFFFFFFFFFFFFFFFF, 5.0_f64.to_bits() as u128);
+    assert_eq!((result[0] >> 64) & 0xFFFFFFFFFFFFFFFF, 3.0_f64.to_bits() as u128);
+    assert_eq!(result[1] & 0xFFFFFFFFFFFFFFFF, 7.0_f64.to_bits() as u128);
+    assert_eq!((result[1] >> 64) & 0xFFFFFFFFFFFFFFFF, 3.0_f64.to_bits() as u128);
+}
