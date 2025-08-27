@@ -12341,6 +12341,177 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         Ok(())
     }
 
+    fn execute_vshufpd(&mut self, inst: &Instruction) -> Result<()> {
+        // VSHUFPD - Shuffle Packed Double-Precision Floating-Point Values
+        // VEX.256: VSHUFPD ymm1, ymm2, ymm3/m256, imm8
+        // VEX.128: VSHUFPD xmm1, xmm2, xmm3/m128, imm8
+        
+        if inst.op_count() != 4 {
+            return Err(Error::InvalidInstruction(
+                "VSHUFPD requires exactly 4 operands".to_string(),
+            ));
+        }
+
+        let imm8 = inst.immediate8() as usize;
+        
+        // Check if we're dealing with YMM (256-bit) or XMM (128-bit) registers
+        if inst.op_register(0).is_ymm() {
+            // YMM version (256-bit) - contains 4 doubles
+            let src1 = self.read_ymm(inst.op_register(1))?;
+            let src2 = match inst.op_kind(2) {
+                OpKind::Register => self.read_ymm(inst.op_register(2))?,
+                OpKind::Memory => {
+                    let addr = self.calculate_effective_address(inst, 2)?;
+                    let mut result = [0u8; 32];
+                    self.engine.memory.read(addr, &mut result)?;
+                    result
+                }
+                _ => {
+                    return Err(Error::InvalidOperand(
+                        format!("Unsupported VSHUFPD source operand type: {:?}", inst.op_kind(2))
+                    ));
+                }
+            };
+
+            let mut result = [0u8; 32];
+            
+            // Process lower 128 bits (2 doubles)
+            let src1_low = &src1[0..16];
+            let src2_low = &src2[0..16];
+            let mut result_low = [0u8; 16];
+            
+            // Extract the 2 doubles from each source (lower half)
+            let src1_doubles = [
+                f64::from_le_bytes([
+                    src1_low[0], src1_low[1], src1_low[2], src1_low[3],
+                    src1_low[4], src1_low[5], src1_low[6], src1_low[7]
+                ]),
+                f64::from_le_bytes([
+                    src1_low[8], src1_low[9], src1_low[10], src1_low[11],
+                    src1_low[12], src1_low[13], src1_low[14], src1_low[15]
+                ])
+            ];
+            let src2_doubles = [
+                f64::from_le_bytes([
+                    src2_low[0], src2_low[1], src2_low[2], src2_low[3],
+                    src2_low[4], src2_low[5], src2_low[6], src2_low[7]
+                ]),
+                f64::from_le_bytes([
+                    src2_low[8], src2_low[9], src2_low[10], src2_low[11],
+                    src2_low[12], src2_low[13], src2_low[14], src2_low[15]
+                ])
+            ];
+            
+            // Shuffle according to imm8 bits 0-1
+            let result_doubles = [
+                src1_doubles[(imm8 >> 0) & 0x1],  // Bit 0 selects from src1
+                src2_doubles[(imm8 >> 1) & 0x1],  // Bit 1 selects from src2
+            ];
+            
+            // Write result for lower 128 bits
+            result_low[0..8].copy_from_slice(&result_doubles[0].to_le_bytes());
+            result_low[8..16].copy_from_slice(&result_doubles[1].to_le_bytes());
+            result[0..16].copy_from_slice(&result_low);
+            
+            // Process upper 128 bits (2 doubles)
+            let src1_high = &src1[16..32];
+            let src2_high = &src2[16..32];
+            let mut result_high = [0u8; 16];
+            
+            // Extract the 2 doubles from each source (upper half)
+            let src1_doubles = [
+                f64::from_le_bytes([
+                    src1_high[0], src1_high[1], src1_high[2], src1_high[3],
+                    src1_high[4], src1_high[5], src1_high[6], src1_high[7]
+                ]),
+                f64::from_le_bytes([
+                    src1_high[8], src1_high[9], src1_high[10], src1_high[11],
+                    src1_high[12], src1_high[13], src1_high[14], src1_high[15]
+                ])
+            ];
+            let src2_doubles = [
+                f64::from_le_bytes([
+                    src2_high[0], src2_high[1], src2_high[2], src2_high[3],
+                    src2_high[4], src2_high[5], src2_high[6], src2_high[7]
+                ]),
+                f64::from_le_bytes([
+                    src2_high[8], src2_high[9], src2_high[10], src2_high[11],
+                    src2_high[12], src2_high[13], src2_high[14], src2_high[15]
+                ])
+            ];
+            
+            // Shuffle according to imm8 bits 2-3
+            let result_doubles = [
+                src1_doubles[(imm8 >> 2) & 0x1],  // Bit 2 selects from src1
+                src2_doubles[(imm8 >> 3) & 0x1],  // Bit 3 selects from src2
+            ];
+            
+            // Write result for upper 128 bits
+            result_high[0..8].copy_from_slice(&result_doubles[0].to_le_bytes());
+            result_high[8..16].copy_from_slice(&result_doubles[1].to_le_bytes());
+            result[16..32].copy_from_slice(&result_high);
+            
+            let dst_reg = self.convert_register(inst.op_register(0))?;
+            self.engine.cpu.write_ymm(dst_reg, result);
+        } else {
+            // XMM version (128-bit) - contains 2 doubles
+            let src1 = self.read_xmm(inst.op_register(1))?;
+            let src2 = match inst.op_kind(2) {
+                OpKind::Register => self.read_xmm(inst.op_register(2))?,
+                OpKind::Memory => {
+                    let addr = self.calculate_effective_address(inst, 2)?;
+                    let mut result = [0u8; 16];
+                    self.engine.memory.read(addr, &mut result)?;
+                    result
+                }
+                _ => {
+                    return Err(Error::InvalidOperand(
+                        format!("Unsupported VSHUFPD source operand type: {:?}", inst.op_kind(2))
+                    ));
+                }
+            };
+
+            let mut result = [0u8; 16];
+            
+            // Extract the 2 doubles from each source
+            let src1_doubles = [
+                f64::from_le_bytes([
+                    src1[0], src1[1], src1[2], src1[3],
+                    src1[4], src1[5], src1[6], src1[7]
+                ]),
+                f64::from_le_bytes([
+                    src1[8], src1[9], src1[10], src1[11],
+                    src1[12], src1[13], src1[14], src1[15]
+                ])
+            ];
+            let src2_doubles = [
+                f64::from_le_bytes([
+                    src2[0], src2[1], src2[2], src2[3],
+                    src2[4], src2[5], src2[6], src2[7]
+                ]),
+                f64::from_le_bytes([
+                    src2[8], src2[9], src2[10], src2[11],
+                    src2[12], src2[13], src2[14], src2[15]
+                ])
+            ];
+            
+            // Shuffle according to imm8
+            let result_doubles = [
+                src1_doubles[(imm8 >> 0) & 0x1],  // Bit 0 selects from src1
+                src2_doubles[(imm8 >> 1) & 0x1],  // Bit 1 selects from src2
+            ];
+            
+            // Write result
+            result[0..8].copy_from_slice(&result_doubles[0].to_le_bytes());
+            result[8..16].copy_from_slice(&result_doubles[1].to_le_bytes());
+            
+            let dst_reg = self.convert_register(inst.op_register(0))?;
+            self.engine.cpu.write_xmm(dst_reg, result);
+        }
+        
+        Ok(())
+    }
+
     fn compare_floats_avx(&self, a: f32, b: f32, imm: u8) -> bool {
         // AVX comparison predicates (0-31)
         match imm & 0x1F {
