@@ -211,65 +211,59 @@ impl InstructionTracer {
             //     writeln!(self.output, "         XMM{:<2}={:032x} YMM{:<2}={:032x}{:032x}", i, xmm_val, i, ymm_val[1], ymm_val[0])?;
             // }
         } else {
-            // Standard trace mode - show basic registers
+            // Collect only the registers that are actually used by this instruction
+            let mut seen_registers = std::collections::HashSet::new();
+            let mut used_registers = Vec::new();
+
+            // Check each operand to see which registers are involved
+            for i in 0..instruction.op_count() {
+                let reg = instruction.op_register(i);
+
+                let reg_info = match reg {
+                    iced_x86::Register::RAX => Some(("RAX", rax)),
+                    iced_x86::Register::RCX => Some(("RCX", rcx)),
+                    iced_x86::Register::RDX => Some(("RDX", rdx)),
+                    iced_x86::Register::RBX => Some(("RBX", rbx)),
+                    iced_x86::Register::RSP => Some(("RSP", rsp)),
+                    iced_x86::Register::RBP => Some(("RBP", rbp)),
+                    iced_x86::Register::RSI => Some(("RSI", rsi)),
+                    iced_x86::Register::RDI => Some(("RDI", rdi)),
+                    iced_x86::Register::R8 => Some(("R8", r8)),
+                    iced_x86::Register::R9 => Some(("R9", r9)),
+                    iced_x86::Register::R10 => Some(("R10", r10)),
+                    iced_x86::Register::R11 => Some(("R11", r11)),
+                    iced_x86::Register::R12 => Some(("R12", r12)),
+                    iced_x86::Register::R13 => Some(("R13", r13)),
+                    iced_x86::Register::R14 => Some(("R14", r14)),
+                    iced_x86::Register::R15 => Some(("R15", r15)),
+                    _ => None,
+                };
+
+                if let Some((name, value)) = reg_info {
+                    if seen_registers.insert(reg) {
+                        used_registers
+                            .push(format!("{}={:016x}", name, value).bright_blue().to_string());
+                    }
+                }
+            }
+
+            // Standard trace mode - show instruction with only the registers it uses
+            let register_display = if used_registers.is_empty() {
+                String::new()
+            } else {
+                format!(" | {}", used_registers.join(" "))
+            };
+
             writeln!(
                 self.output,
-                "{} {}: {} [{}] ({} bytes) | {} {} {}",
+                "{} {}: {} [{}] ({} bytes){}",
                 format!("[{:06}]", self.instruction_count).bright_black(),
                 address_str,
                 colored_disasm,
                 hex_bytes.bright_magenta(),
                 instruction_bytes.len(),
-                format!("RAX={:016x}", rax).bright_blue(),
-                format!("RCX={:016x}", rcx).bright_blue(),
-                format!("RDX={:016x}", rdx).bright_blue()
+                register_display
             )?;
-
-            // Print additional registers if they're being used by the instruction
-            let uses_rsp_rbp = (0..instruction.op_count()).any(|i| {
-                let reg = instruction.op_register(i);
-                reg == iced_x86::Register::RSP || reg == iced_x86::Register::RBP
-            });
-
-            if uses_rsp_rbp {
-                writeln!(
-                    self.output,
-                    "         {:30} | {} {}",
-                    "",
-                    format!("RSP={:016x}", rsp).bright_blue(),
-                    format!("RBP={:016x}", rbp).bright_blue()
-                )?;
-            }
-
-            let uses_rsi_rdi = (0..instruction.op_count()).any(|i| {
-                let reg = instruction.op_register(i);
-                reg == iced_x86::Register::RSI || reg == iced_x86::Register::RDI
-            });
-
-            if uses_rsi_rdi {
-                writeln!(
-                    self.output,
-                    "         {:30} | {} {}",
-                    "",
-                    format!("RSI={:016x}", rsi).bright_blue(),
-                    format!("RDI={:016x}", rdi).bright_blue()
-                )?;
-            }
-
-            let uses_r8_r9 = (0..instruction.op_count()).any(|i| {
-                let reg = instruction.op_register(i);
-                reg == iced_x86::Register::R8 || reg == iced_x86::Register::R9
-            });
-
-            if uses_r8_r9 {
-                writeln!(
-                    self.output,
-                    "         {:30} | {} {}",
-                    "",
-                    format!("R8={:016x}", r8).bright_blue(),
-                    format!("R9={:016x}", r9).bright_blue()
-                )?;
-            }
         }
 
         Ok(())
