@@ -12200,7 +12200,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         // VEX.128: VSHUFPS xmm1, xmm2, xmm3/m128, imm8
         
         if inst.op_count() != 4 {
-            return Err(Error::InvalidInstruction(
+            return Err(EmulatorError::InvalidInstruction(
                 "VSHUFPS requires exactly 4 operands".to_string(),
             ));
         }
@@ -12220,7 +12220,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
                     result
                 }
                 _ => {
-                    return Err(Error::InvalidOperand(
+                    return Err(EmulatorError::InvalidOperand(
                         format!("Unsupported VSHUFPS source operand type: {:?}", inst.op_kind(2))
                     ));
                 }
@@ -12301,7 +12301,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
                     result
                 }
                 _ => {
-                    return Err(Error::InvalidOperand(
+                    return Err(EmulatorError::InvalidOperand(
                         format!("Unsupported VSHUFPS source operand type: {:?}", inst.op_kind(2))
                     ));
                 }
@@ -12347,7 +12347,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         // VEX.128: VSHUFPD xmm1, xmm2, xmm3/m128, imm8
         
         if inst.op_count() != 4 {
-            return Err(Error::InvalidInstruction(
+            return Err(EmulatorError::InvalidInstruction(
                 "VSHUFPD requires exactly 4 operands".to_string(),
             ));
         }
@@ -12367,7 +12367,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
                     result
                 }
                 _ => {
-                    return Err(Error::InvalidOperand(
+                    return Err(EmulatorError::InvalidOperand(
                         format!("Unsupported VSHUFPD source operand type: {:?}", inst.op_kind(2))
                     ));
                 }
@@ -12465,7 +12465,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
                     result
                 }
                 _ => {
-                    return Err(Error::InvalidOperand(
+                    return Err(EmulatorError::InvalidOperand(
                         format!("Unsupported VSHUFPD source operand type: {:?}", inst.op_kind(2))
                     ));
                 }
