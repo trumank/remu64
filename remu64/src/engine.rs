@@ -404,6 +404,8 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             Mnemonic::Jno => self.execute_jcc(inst, !self.engine.cpu.rflags.contains(Flags::OF)),
             Mnemonic::Jp => self.execute_jcc(inst, self.engine.cpu.rflags.contains(Flags::PF)),
             Mnemonic::Jnp => self.execute_jcc(inst, !self.engine.cpu.rflags.contains(Flags::PF)),
+            Mnemonic::Cld => self.execute_cld(inst),
+            Mnemonic::Std => self.execute_std(inst),
             Mnemonic::Adc => self.execute_adc(inst),
             Mnemonic::Not => self.execute_not(inst),
             Mnemonic::Ror => self.execute_ror(inst),
@@ -8428,6 +8430,18 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         };
 
         self.engine.cpu.write_reg(reg_enum, swapped);
+        Ok(())
+    }
+
+    fn execute_cld(&mut self, _inst: &Instruction) -> Result<()> {
+        // CLD: Clear Direction Flag
+        self.engine.cpu.rflags.remove(Flags::DF);
+        Ok(())
+    }
+
+    fn execute_std(&mut self, _inst: &Instruction) -> Result<()> {
+        // STD: Set Direction Flag
+        self.engine.cpu.rflags.insert(Flags::DF);
         Ok(())
     }
 }
