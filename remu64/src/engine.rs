@@ -329,6 +329,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             Mnemonic::Vaddps => self.execute_vaddps(inst),
             Mnemonic::Vsubps => self.execute_vsubps(inst),
             Mnemonic::Vmulps => self.execute_vmulps(inst),
+            Mnemonic::Vdivps => self.execute_vdivps(inst),
             Mnemonic::Imul => self.execute_imul(inst),
             Mnemonic::Mul => self.execute_mul(inst),
             Mnemonic::Div => self.execute_div(inst),
@@ -2082,6 +2083,113 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
                 let b = f32::from_bits(b_bits);
                 let prod = a * b;
                 float_results[i] = prod.to_bits();
+            }
+            
+            let result = (float_results[0] as u128) |
+                        ((float_results[1] as u128) << 32) |
+                        ((float_results[2] as u128) << 64) |
+                        ((float_results[3] as u128) << 96);
+            
+            let dst_reg = self.convert_register(inst.op_register(0))?;
+            self.engine.cpu.write_xmm(dst_reg, result);
+        }
+        
+        Ok(())
+    }
+
+    fn execute_vdivps(&mut self, inst: &Instruction) -> Result<()> {
+        // VDIVPS - Vector Divide Packed Single-Precision Floating-Point Values
+        // VEX.256: VDIVPS ymm1, ymm2, ymm3/m256
+        // VEX.128: VDIVPS xmm1, xmm2, xmm3/m128
+        
+        // Check if this is 256-bit (YMM) or 128-bit (XMM) operation
+        let is_256bit = inst.op_register(0).is_ymm();
+        
+        if inst.op_count() != 3 {
+            return Err(EmulatorError::UnsupportedInstruction(
+                "VDIVPS requires exactly 3 operands".to_string(),
+            ));
+        }
+
+        if is_256bit {
+            // 256-bit YMM operation
+            let src1_reg = self.convert_register(inst.op_register(1))?;
+            let src1_data = self.engine.cpu.read_ymm(src1_reg);
+            
+            let src2_data = match inst.op_kind(2) {
+                OpKind::Register => {
+                    let src2_reg = self.convert_register(inst.op_register(2))?;
+                    self.engine.cpu.read_ymm(src2_reg)
+                }
+                OpKind::Memory => {
+                    self.read_ymm_memory(inst, 2)?
+                }
+                _ => {
+                    return Err(EmulatorError::UnsupportedInstruction(
+                        format!("Unsupported VDIVPS source operand type: {:?}", inst.op_kind(2))
+                    ));
+                }
+            };
+            
+            // Perform packed single-precision division
+            // Each YMM register contains 8 32-bit floats (4 per 128-bit half)
+            let mut result = [0u128; 2];
+            
+            for half in 0..2 {
+                let mut float_results = [0u32; 4];
+                for i in 0..4 {
+                    let offset = i * 32;
+                    let a_bits = ((src1_data[half] >> offset) & 0xFFFFFFFF) as u32;
+                    let b_bits = ((src2_data[half] >> offset) & 0xFFFFFFFF) as u32;
+                    
+                    // Convert bits to f32, divide, convert back to bits
+                    let a = f32::from_bits(a_bits);
+                    let b = f32::from_bits(b_bits);
+                    let quotient = a / b;
+                    float_results[i] = quotient.to_bits();
+                }
+                
+                // Pack the results back into u128
+                result[half] = (float_results[0] as u128) |
+                              ((float_results[1] as u128) << 32) |
+                              ((float_results[2] as u128) << 64) |
+                              ((float_results[3] as u128) << 96);
+            }
+            
+            let dst_reg = self.convert_register(inst.op_register(0))?;
+            self.engine.cpu.write_ymm(dst_reg, result);
+        } else {
+            // 128-bit XMM operation
+            let src1_reg = self.convert_register(inst.op_register(1))?;
+            let src1_data = self.engine.cpu.read_xmm(src1_reg);
+            
+            let src2_data = match inst.op_kind(2) {
+                OpKind::Register => {
+                    let src2_reg = self.convert_register(inst.op_register(2))?;
+                    self.engine.cpu.read_xmm(src2_reg)
+                }
+                OpKind::Memory => {
+                    let addr = self.calculate_memory_address(inst, 2)?;
+                    self.read_memory_128(addr)?
+                }
+                _ => {
+                    return Err(EmulatorError::UnsupportedInstruction(
+                        format!("Unsupported VDIVPS source operand type: {:?}", inst.op_kind(2))
+                    ));
+                }
+            };
+            
+            // Perform packed single-precision division for XMM (4 floats)
+            let mut float_results = [0u32; 4];
+            for i in 0..4 {
+                let offset = i * 32;
+                let a_bits = ((src1_data >> offset) & 0xFFFFFFFF) as u32;
+                let b_bits = ((src2_data >> offset) & 0xFFFFFFFF) as u32;
+                
+                let a = f32::from_bits(a_bits);
+                let b = f32::from_bits(b_bits);
+                let quotient = a / b;
+                float_results[i] = quotient.to_bits();
             }
             
             let result = (float_results[0] as u128) |
