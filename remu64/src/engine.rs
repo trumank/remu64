@@ -422,6 +422,8 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             Mnemonic::Loopne => self.execute_loopne(inst),
             Mnemonic::Shld => self.execute_shld(inst),
             Mnemonic::Shrd => self.execute_shrd(inst),
+            Mnemonic::Rcl => self.execute_rcl(inst),
+            Mnemonic::Rcr => self.execute_rcr(inst),
             Mnemonic::Shufps => self.execute_shufps(inst),
             Mnemonic::Unpcklps => self.execute_unpcklps(inst),
             Mnemonic::Unpckhps => self.execute_unpckhps(inst),
@@ -5441,6 +5443,183 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             }
         }
 
+        self.write_operand(inst, 0, result)?;
+        Ok(())
+    }
+
+    fn execute_rcl(&mut self, inst: &Instruction) -> Result<()> {
+        // RCL: Rotate through carry left
+        let dst_value = self.read_operand(inst, 0)?;
+        let count = (self.read_operand(inst, 1)? & 0x3F) as u32; // Modulo 64
+        
+        if count == 0 {
+            return Ok(());
+        }
+        
+        let size = self.get_operand_size_from_instruction(inst, 0)?;
+        let bit_count = size * 8;
+        
+        // For RCL, we rotate through CF, making the rotation count be bit_count + 1
+        let mod_count = count % (bit_count as u32 + 1);
+        
+        if mod_count == 0 {
+            return Ok(());
+        }
+        
+        let old_cf = if self.engine.cpu.rflags.contains(Flags::CF) { 1u64 } else { 0u64 };
+        
+        let (result, new_cf) = match size {
+            1 => {
+                let val = dst_value as u8;
+                let extended = (val as u16) | ((old_cf as u16) << 8);
+                let rotated = (extended << mod_count) | (extended >> (9 - mod_count));
+                let result = (rotated & 0xFF) as u64;
+                let cf = (rotated & 0x100) != 0;
+                (result, cf)
+            }
+            2 => {
+                let val = dst_value as u16;
+                let extended = (val as u32) | ((old_cf as u32) << 16);
+                let rotated = (extended << mod_count) | (extended >> (17 - mod_count));
+                let result = (rotated & 0xFFFF) as u64;
+                let cf = (rotated & 0x10000) != 0;
+                (result, cf)
+            }
+            4 => {
+                let val = dst_value as u32;
+                let extended = (val as u64) | (old_cf << 32);
+                let rotated = (extended << mod_count) | (extended >> (33 - mod_count));
+                let result = rotated & 0xFFFFFFFF;
+                let cf = (rotated & 0x100000000) != 0;
+                (result, cf)
+            }
+            8 => {
+                // For 64-bit, we need to handle this carefully
+                let mut result = dst_value;
+                let mut cf = old_cf != 0;
+                
+                for _ in 0..mod_count {
+                    let new_cf = (result >> 63) & 1 != 0;
+                    result = (result << 1) | (if cf { 1 } else { 0 });
+                    cf = new_cf;
+                }
+                (result, cf)
+            }
+            _ => {
+                return Err(EmulatorError::UnsupportedInstruction(format!(
+                    "Unsupported size for RCL: {}",
+                    size
+                )));
+            }
+        };
+        
+        // Update CF
+        if new_cf {
+            self.engine.cpu.rflags.insert(Flags::CF);
+        } else {
+            self.engine.cpu.rflags.remove(Flags::CF);
+        }
+        
+        // Update OF if count == 1
+        if count == 1 {
+            // OF = MSB XOR CF after rotation
+            let msb = (result >> (bit_count - 1)) & 1 != 0;
+            if msb != new_cf {
+                self.engine.cpu.rflags.insert(Flags::OF);
+            } else {
+                self.engine.cpu.rflags.remove(Flags::OF);
+            }
+        }
+        
+        self.write_operand(inst, 0, result)?;
+        Ok(())
+    }
+    
+    fn execute_rcr(&mut self, inst: &Instruction) -> Result<()> {
+        // RCR: Rotate through carry right
+        let dst_value = self.read_operand(inst, 0)?;
+        let count = (self.read_operand(inst, 1)? & 0x3F) as u32; // Modulo 64
+        
+        if count == 0 {
+            return Ok(());
+        }
+        
+        let size = self.get_operand_size_from_instruction(inst, 0)?;
+        let bit_count = size * 8;
+        
+        // For RCR, we rotate through CF, making the rotation count be bit_count + 1
+        let mod_count = count % (bit_count as u32 + 1);
+        
+        if mod_count == 0 {
+            return Ok(());
+        }
+        
+        let old_cf = if self.engine.cpu.rflags.contains(Flags::CF) { 1u64 } else { 0u64 };
+        
+        let (result, new_cf) = match size {
+            1 => {
+                let val = dst_value as u8;
+                let extended = (val as u16) | ((old_cf as u16) << 8);
+                let rotated = (extended >> mod_count) | (extended << (9 - mod_count));
+                let result = (rotated & 0xFF) as u64;
+                let cf = ((extended >> (mod_count - 1)) & 1) != 0;
+                (result, cf)
+            }
+            2 => {
+                let val = dst_value as u16;
+                let extended = (val as u32) | ((old_cf as u32) << 16);
+                let rotated = (extended >> mod_count) | (extended << (17 - mod_count));
+                let result = (rotated & 0xFFFF) as u64;
+                let cf = ((extended >> (mod_count - 1)) & 1) != 0;
+                (result, cf)
+            }
+            4 => {
+                let val = dst_value as u32;
+                let extended = (val as u64) | (old_cf << 32);
+                let rotated = (extended >> mod_count) | (extended << (33 - mod_count));
+                let result = rotated & 0xFFFFFFFF;
+                let cf = ((extended >> (mod_count - 1)) & 1) != 0;
+                (result, cf)
+            }
+            8 => {
+                // For 64-bit, we need to handle this carefully
+                let mut result = dst_value;
+                let mut cf = old_cf != 0;
+                
+                for _ in 0..mod_count {
+                    let new_cf = result & 1 != 0;
+                    result = (result >> 1) | ((if cf { 1 } else { 0 }) << 63);
+                    cf = new_cf;
+                }
+                (result, cf)
+            }
+            _ => {
+                return Err(EmulatorError::UnsupportedInstruction(format!(
+                    "Unsupported size for RCR: {}",
+                    size
+                )));
+            }
+        };
+        
+        // Update CF
+        if new_cf {
+            self.engine.cpu.rflags.insert(Flags::CF);
+        } else {
+            self.engine.cpu.rflags.remove(Flags::CF);
+        }
+        
+        // Update OF if count == 1
+        if count == 1 {
+            // OF = two most significant bits XOR after rotation
+            let msb = (result >> (bit_count - 1)) & 1 != 0;
+            let msb_minus_1 = (result >> (bit_count - 2)) & 1 != 0;
+            if msb != msb_minus_1 {
+                self.engine.cpu.rflags.insert(Flags::OF);
+            } else {
+                self.engine.cpu.rflags.remove(Flags::OF);
+            }
+        }
+        
         self.write_operand(inst, 0, result)?;
         Ok(())
     }
