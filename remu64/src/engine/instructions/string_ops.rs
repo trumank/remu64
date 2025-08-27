@@ -1248,4 +1248,175 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
 
         Ok(())
     }
+
+    pub(crate) fn execute_pcmpistri(&mut self, inst: &Instruction) -> Result<()> {
+        // PCMPISTRI: Packed Compare Implicit Length Strings, Return Index
+        // Compares two null-terminated strings and returns the index of first matching/non-matching character
+        // Format: PCMPISTRI xmm1, xmm2/m128, imm8
+
+        use crate::error::EmulatorError;
+        use iced_x86::OpKind;
+
+        if inst.op_count() != 3 {
+            return Err(EmulatorError::UnsupportedInstruction(
+                "PCMPISTRI requires exactly 3 operands".to_string(),
+            ));
+        }
+
+        let src1_reg = self.convert_register(inst.op_register(0))?;
+        let src1_data = self.engine.cpu.read_xmm(src1_reg);
+
+        let src2_data = match inst.op_kind(1) {
+            OpKind::Register => {
+                let src2_reg = self.convert_register(inst.op_register(1))?;
+                self.engine.cpu.read_xmm(src2_reg)
+            }
+            OpKind::Memory => {
+                let addr = self.calculate_memory_address(inst, 1)?;
+                self.read_memory_128(addr)?
+            }
+            _ => {
+                return Err(EmulatorError::UnsupportedInstruction(
+                    "Invalid PCMPISTRI operand types".to_string(),
+                ));
+            }
+        };
+
+        let control = inst.immediate8();
+
+        // Extract strings from XMM registers (16 bytes each)
+        let mut str1 = Vec::new();
+        let mut str2 = Vec::new();
+
+        // Convert 128-bit values to byte arrays
+        for i in 0..16 {
+            let byte1 = ((src1_data >> (i * 8)) & 0xFF) as u8;
+            let byte2 = ((src2_data >> (i * 8)) & 0xFF) as u8;
+
+            str1.push(byte1);
+            str2.push(byte2);
+
+            // For implicit length strings, stop at null terminator
+            if byte1 == 0 {
+                break;
+            }
+        }
+
+        for i in 0..16 {
+            let byte2 = ((src2_data >> (i * 8)) & 0xFF) as u8;
+            if i >= str2.len() {
+                str2.push(byte2);
+            }
+            if byte2 == 0 {
+                str2.truncate(i + 1);
+                break;
+            }
+        }
+
+        // Perform comparison based on control byte
+        let result_index = match control & 0x0F {
+            0x0C => {
+                // Equal ordered: Find first character in str1 that matches any character in str2
+                let mut index = str1.len() as u32;
+                for (i, &ch1) in str1.iter().enumerate() {
+                    if ch1 == 0 {
+                        break;
+                    }
+                    for &ch2 in &str2 {
+                        if ch2 == 0 {
+                            break;
+                        }
+                        if ch1 == ch2 {
+                            index = i as u32;
+                            break;
+                        }
+                    }
+                    if index != str1.len() as u32 {
+                        break;
+                    }
+                }
+                if index == str1.len() as u32 {
+                    str1.len() as u32
+                } else {
+                    index
+                }
+            }
+            0x0D => {
+                // Ranges: More complex range-based comparison (simplified implementation)
+                let mut index = str1.len() as u32;
+                for (i, &ch1) in str1.iter().enumerate() {
+                    if ch1 == 0 {
+                        break;
+                    }
+                    // Simplified: just check if character is in reasonable ASCII range
+                    if ch1 >= 0x20 && ch1 <= 0x7E {
+                        for &ch2 in &str2 {
+                            if ch2 == 0 {
+                                break;
+                            }
+                            if ch1 == ch2 {
+                                index = i as u32;
+                                break;
+                            }
+                        }
+                    }
+                    if index != str1.len() as u32 {
+                        break;
+                    }
+                }
+                if index == str1.len() as u32 {
+                    str1.len() as u32
+                } else {
+                    index
+                }
+            }
+            _ => {
+                // Default: simple character-by-character comparison
+                let mut index = 0;
+                let min_len = std::cmp::min(str1.len(), str2.len());
+                for i in 0..min_len {
+                    if str1[i] == 0 || str2[i] == 0 {
+                        break;
+                    }
+                    if str1[i] != str2[i] {
+                        index = i as u32;
+                        break;
+                    }
+                    index = (i + 1) as u32;
+                }
+                index
+            }
+        };
+
+        // Store result in ECX register
+        self.engine
+            .cpu
+            .write_reg(Register::RCX, result_index as u64);
+
+        // Set flags based on result
+        if result_index < 16 {
+            self.engine.cpu.rflags.insert(Flags::CF);
+        } else {
+            self.engine.cpu.rflags.remove(Flags::CF);
+        }
+
+        if str1.is_empty() || str1[0] == 0 {
+            self.engine.cpu.rflags.insert(Flags::ZF);
+        } else {
+            self.engine.cpu.rflags.remove(Flags::ZF);
+        }
+
+        if str2.is_empty() || str2[0] == 0 {
+            self.engine.cpu.rflags.insert(Flags::SF);
+        } else {
+            self.engine.cpu.rflags.remove(Flags::SF);
+        }
+
+        // Clear other flags
+        self.engine.cpu.rflags.remove(Flags::OF);
+        self.engine.cpu.rflags.remove(Flags::AF);
+        self.engine.cpu.rflags.remove(Flags::PF);
+
+        Ok(())
+    }
 }

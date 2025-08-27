@@ -520,4 +520,73 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
 
         Ok(())
     }
+
+    pub(crate) fn execute_vpxor(&mut self, inst: &Instruction) -> Result<()> {
+        // VPXOR - Packed Logical XOR (Integer)
+        // VEX.256: VPXOR ymm1, ymm2, ymm3/m256
+        // VEX.128: VPXOR xmm1, xmm2, xmm3/m128
+
+        let is_256bit = inst.op_register(0).is_ymm();
+
+        if inst.op_count() != 3 {
+            return Err(EmulatorError::UnsupportedInstruction(
+                "VPXOR requires exactly 3 operands".to_string(),
+            ));
+        }
+
+        if is_256bit {
+            // 256-bit YMM operation
+            let src1_reg = self.convert_register(inst.op_register(1))?;
+            let src1_data = self.engine.cpu.read_ymm(src1_reg);
+
+            let src2_data = match inst.op_kind(2) {
+                OpKind::Register => {
+                    let src2_reg = self.convert_register(inst.op_register(2))?;
+                    self.engine.cpu.read_ymm(src2_reg)
+                }
+                OpKind::Memory => self.read_ymm_memory(inst, 2)?,
+                _ => {
+                    return Err(EmulatorError::UnsupportedInstruction(format!(
+                        "Unsupported VPXOR source operand type: {:?}",
+                        inst.op_kind(2)
+                    )));
+                }
+            };
+
+            // Perform bitwise XOR on both 128-bit halves
+            let result = [src1_data[0] ^ src2_data[0], src1_data[1] ^ src2_data[1]];
+
+            let dst_reg = self.convert_register(inst.op_register(0))?;
+            self.engine.cpu.write_ymm(dst_reg, result);
+        } else {
+            // 128-bit XMM operation
+            let src1_reg = self.convert_register(inst.op_register(1))?;
+            let src1_data = self.engine.cpu.read_xmm(src1_reg);
+
+            let src2_data = match inst.op_kind(2) {
+                OpKind::Register => {
+                    let src2_reg = self.convert_register(inst.op_register(2))?;
+                    self.engine.cpu.read_xmm(src2_reg)
+                }
+                OpKind::Memory => {
+                    let addr = self.calculate_memory_address(inst, 2)?;
+                    self.read_memory_128(addr)?
+                }
+                _ => {
+                    return Err(EmulatorError::UnsupportedInstruction(format!(
+                        "Unsupported VPXOR source operand type: {:?}",
+                        inst.op_kind(2)
+                    )));
+                }
+            };
+
+            // Perform bitwise XOR
+            let result = src1_data ^ src2_data;
+
+            let dst_reg = self.convert_register(inst.op_register(0))?;
+            self.engine.cpu.write_xmm(dst_reg, result);
+        }
+
+        Ok(())
+    }
 }

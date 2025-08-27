@@ -730,4 +730,93 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         self.engine.cpu.write_xmm(dst_reg, result);
         Ok(())
     }
+
+    pub(crate) fn execute_vpcmpeqw(&mut self, inst: &Instruction) -> Result<()> {
+        // VPCMPEQW - Compare packed words for equality (AVX)
+        // VEX.256: VPCMPEQW ymm1, ymm2, ymm3/m256
+        // VEX.128: VPCMPEQW xmm1, xmm2, xmm3/m128
+
+        let is_256bit = inst.op_register(0).is_ymm();
+
+        if inst.op_count() != 3 {
+            return Err(EmulatorError::UnsupportedInstruction(
+                "VPCMPEQW requires exactly 3 operands".to_string(),
+            ));
+        }
+
+        if is_256bit {
+            // 256-bit YMM operation
+            let src1_reg = self.convert_register(inst.op_register(1))?;
+            let src1_data = self.engine.cpu.read_ymm(src1_reg);
+
+            let src2_data = match inst.op_kind(2) {
+                OpKind::Register => {
+                    let src2_reg = self.convert_register(inst.op_register(2))?;
+                    self.engine.cpu.read_ymm(src2_reg)
+                }
+                OpKind::Memory => self.read_ymm_memory(inst, 2)?,
+                _ => {
+                    return Err(EmulatorError::UnsupportedInstruction(format!(
+                        "Unsupported VPCMPEQW source operand type: {:?}",
+                        inst.op_kind(2)
+                    )));
+                }
+            };
+
+            // Compare both 128-bit halves
+            let mut result = [0u128; 2];
+            for half in 0..2 {
+                let src1_half = src1_data[half];
+                let src2_half = src2_data[half];
+
+                // Compare each 16-bit word in this half
+                for i in 0..8 {
+                    let src1_word = ((src1_half >> (i * 16)) & 0xFFFF) as u16;
+                    let src2_word = ((src2_half >> (i * 16)) & 0xFFFF) as u16;
+                    if src1_word == src2_word {
+                        result[half] |= 0xFFFFu128 << (i * 16);
+                    }
+                }
+            }
+
+            let dst_reg = self.convert_register(inst.op_register(0))?;
+            self.engine.cpu.write_ymm(dst_reg, result);
+        } else {
+            // 128-bit XMM operation
+            let src1_reg = self.convert_register(inst.op_register(1))?;
+            let src1_data = self.engine.cpu.read_xmm(src1_reg);
+
+            let src2_data = match inst.op_kind(2) {
+                OpKind::Register => {
+                    let src2_reg = self.convert_register(inst.op_register(2))?;
+                    self.engine.cpu.read_xmm(src2_reg)
+                }
+                OpKind::Memory => {
+                    let addr = self.calculate_memory_address(inst, 2)?;
+                    self.read_memory_128(addr)?
+                }
+                _ => {
+                    return Err(EmulatorError::UnsupportedInstruction(format!(
+                        "Unsupported VPCMPEQW source operand type: {:?}",
+                        inst.op_kind(2)
+                    )));
+                }
+            };
+
+            // Compare each 16-bit word
+            let mut result = 0u128;
+            for i in 0..8 {
+                let src1_word = ((src1_data >> (i * 16)) & 0xFFFF) as u16;
+                let src2_word = ((src2_data >> (i * 16)) & 0xFFFF) as u16;
+                if src1_word == src2_word {
+                    result |= 0xFFFFu128 << (i * 16);
+                }
+            }
+
+            let dst_reg = self.convert_register(inst.op_register(0))?;
+            self.engine.cpu.write_xmm(dst_reg, result);
+        }
+
+        Ok(())
+    }
 }

@@ -281,4 +281,102 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         // CLFLUSH does not affect RFLAGS
         Ok(())
     }
+
+    pub(crate) fn execute_fnstcw(&mut self, inst: &Instruction) -> Result<()> {
+        // FNSTCW: Store x87 FPU Control Word
+        // Stores the current value of the FPU control word to the specified memory location
+        // Format: FNSTCW m16
+
+        if inst.op_count() != 1 {
+            return Err(EmulatorError::UnsupportedInstruction(
+                "FNSTCW requires exactly 1 operand".to_string(),
+            ));
+        }
+
+        match inst.op_kind(0) {
+            OpKind::Memory => {
+                let addr = self.calculate_memory_address(inst, 0)?;
+
+                // Default x87 FPU control word value
+                // Bit 0-1: Exception masks (precision control)
+                // Bit 2-3: Rounding control (00 = round to nearest)
+                // Bit 4-5: Precision control (11 = 64-bit precision)
+                // Bit 6-11: Exception mask bits (all masked = 1)
+                // Standard default value is 0x037F
+                let fpu_control_word: u16 = 0x037F;
+
+                // Store as 16-bit value
+                self.write_memory_sized(addr, fpu_control_word as u64, 2)?;
+                Ok(())
+            }
+            _ => Err(EmulatorError::UnsupportedInstruction(
+                "FNSTCW requires memory operand".to_string(),
+            )),
+        }
+    }
+
+    pub(crate) fn execute_stmxcsr(&mut self, inst: &Instruction) -> Result<()> {
+        // STMXCSR: Store SSE Control and Status Register (MXCSR)
+        // Stores the current value of the MXCSR register to the specified memory location
+        // Format: STMXCSR m32
+
+        if inst.op_count() != 1 {
+            return Err(EmulatorError::UnsupportedInstruction(
+                "STMXCSR requires exactly 1 operand".to_string(),
+            ));
+        }
+
+        match inst.op_kind(0) {
+            OpKind::Memory => {
+                let addr = self.calculate_memory_address(inst, 0)?;
+
+                // Default MXCSR value
+                // Bit 0-5: Exception flags (sticky)
+                // Bit 6: Denormals are zeros
+                // Bit 7-12: Exception mask bits (all masked = 1)
+                // Bit 13-14: Rounding control (00 = round to nearest)
+                // Bit 15: Flush to zero
+                // Standard default value is 0x1F80 (all exceptions masked, round to nearest)
+                let mxcsr_value: u32 = 0x1F80;
+
+                // Store as 32-bit value
+                self.write_memory_sized(addr, mxcsr_value as u64, 4)?;
+                Ok(())
+            }
+            _ => Err(EmulatorError::UnsupportedInstruction(
+                "STMXCSR requires memory operand".to_string(),
+            )),
+        }
+    }
+
+    pub(crate) fn execute_rdsspq(&mut self, inst: &Instruction) -> Result<()> {
+        // RDSSPQ: Read Shadow Stack Pointer (64-bit)
+        // CET (Control-flow Enforcement Technology) instruction
+        // Reads the current shadow stack pointer and stores it in the destination register
+        // Format: RDSSPQ reg64
+
+        if inst.op_count() != 1 {
+            return Err(EmulatorError::UnsupportedInstruction(
+                "RDSSPQ requires exactly 1 operand".to_string(),
+            ));
+        }
+
+        match inst.op_kind(0) {
+            OpKind::Register => {
+                let dst_reg = self.convert_register(inst.op_register(0))?;
+
+                // In emulation, we don't have a real shadow stack
+                // For compatibility, we'll return a reasonable dummy value
+                // Typically this would be close to but separate from the main stack
+                let rsp = self.engine.cpu.read_reg(Register::RSP);
+                let shadow_stack_ptr = rsp.wrapping_add(0x10000); // Offset from main stack
+
+                self.engine.cpu.write_reg(dst_reg, shadow_stack_ptr);
+                Ok(())
+            }
+            _ => Err(EmulatorError::UnsupportedInstruction(
+                "RDSSPQ requires register operand".to_string(),
+            )),
+        }
+    }
 }

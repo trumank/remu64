@@ -843,4 +843,77 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         self.engine.cpu.write_xmm(dst_reg, result);
         Ok(())
     }
+
+    pub(crate) fn execute_vpmovmskb(&mut self, inst: &Instruction) -> Result<()> {
+        // VPMOVMSKB: Move Byte Mask (AVX)
+        // Creates a mask from the most significant bits of each byte in a YMM/XMM register
+        // VEX.256: VPMOVMSKB reg32, ymm2 (creates 32-bit mask from 32 bytes)
+        // VEX.128: VPMOVMSKB reg32, xmm2 (creates 16-bit mask from 16 bytes)
+
+        if inst.op_count() != 2 {
+            return Err(EmulatorError::UnsupportedInstruction(
+                "VPMOVMSKB requires exactly 2 operands".to_string(),
+            ));
+        }
+
+        match (inst.op_kind(0), inst.op_kind(1)) {
+            (OpKind::Register, OpKind::Register) => {
+                let dst_reg = self.convert_register(inst.op_register(0))?;
+                let src_reg = self.convert_register(inst.op_register(1))?;
+
+                let is_256bit = src_reg.is_ymm();
+
+                if is_256bit {
+                    // 256-bit YMM operation - creates 32-bit mask from 32 bytes
+                    let src_value = self.engine.cpu.read_ymm(src_reg);
+
+                    let mut mask = 0u64;
+
+                    // Extract sign bit from each of 16 bytes in low 128-bit half
+                    for i in 0..16 {
+                        let byte_shift = i * 8 + 7; // Position of sign bit for byte i
+                        let sign_bit = ((src_value[0] >> byte_shift) & 1) as u64;
+                        mask |= sign_bit << i;
+                    }
+
+                    // Extract sign bit from each of 16 bytes in high 128-bit half
+                    for i in 0..16 {
+                        let byte_shift = i * 8 + 7; // Position of sign bit for byte i
+                        let sign_bit = ((src_value[1] >> byte_shift) & 1) as u64;
+                        mask |= sign_bit << (i + 16);
+                    }
+
+                    // Zero-extend and write to general-purpose register
+                    self.engine.cpu.write_reg(dst_reg, mask);
+                } else {
+                    // 128-bit XMM operation - creates 16-bit mask from 16 bytes
+                    if !src_reg.is_xmm() {
+                        return Err(EmulatorError::UnsupportedInstruction(
+                            "VPMOVMSKB requires XMM/YMM register as source".to_string(),
+                        ));
+                    }
+
+                    let src_value = self.engine.cpu.read_xmm(src_reg);
+
+                    // Extract sign bit from each of 16 bytes
+                    let mut mask = 0u64;
+                    for i in 0..16 {
+                        let byte_shift = i * 8 + 7; // Position of sign bit for byte i
+                        let sign_bit = ((src_value >> byte_shift) & 1) as u64;
+                        mask |= sign_bit << i;
+                    }
+
+                    // Zero-extend and write to general-purpose register
+                    self.engine.cpu.write_reg(dst_reg, mask);
+                }
+
+                Ok(())
+            }
+            _ => Err(EmulatorError::UnsupportedInstruction(format!(
+                "Unsupported VPMOVMSKB operand types: {:?}, {:?}",
+                inst.op_kind(0),
+                inst.op_kind(1)
+            ))),
+        }
+    }
 }
