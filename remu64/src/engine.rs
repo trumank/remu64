@@ -12210,14 +12210,17 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         // Check if we're dealing with YMM (256-bit) or XMM (128-bit) registers
         if inst.op_register(0).is_ymm() {
             // YMM version (256-bit)
-            let src1 = self.read_ymm(inst.op_register(1))?;
+            let src1_reg = self.convert_register(inst.op_register(1))?;
+            let src1 = self.engine.cpu.read_ymm(src1_reg);
+            
             let src2 = match inst.op_kind(2) {
-                OpKind::Register => self.read_ymm(inst.op_register(2))?,
+                OpKind::Register => {
+                    let src2_reg = self.convert_register(inst.op_register(2))?;
+                    self.engine.cpu.read_ymm(src2_reg)
+                }
                 OpKind::Memory => {
-                    let addr = self.calculate_effective_address(inst, 2)?;
-                    let mut result = [0u8; 32];
-                    self.engine.memory.read(addr, &mut result)?;
-                    result
+                    let addr = self.calculate_memory_address(inst, 2)?;
+                    self.read_ymm_memory(inst, 2)?
                 }
                 _ => {
                     return Err(EmulatorError::InvalidOperand(
@@ -12226,79 +12229,59 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
                 }
             };
 
-            let mut result = [0u8; 32];
+            // Process each 128-bit lane separately
+            let mut result = [0u128; 2];
             
-            // Process lower 128 bits
-            let src1_low = &src1[0..16];
-            let src2_low = &src2[0..16];
-            let mut result_low = [0u8; 16];
-            
-            // Extract the 4 floats from each source
-            let mut src1_floats = [0f32; 4];
-            let mut src2_floats = [0f32; 4];
-            for i in 0..4 {
-                src1_floats[i] = f32::from_le_bytes([
-                    src1_low[i*4], src1_low[i*4+1], src1_low[i*4+2], src1_low[i*4+3]
-                ]);
-                src2_floats[i] = f32::from_le_bytes([
-                    src2_low[i*4], src2_low[i*4+1], src2_low[i*4+2], src2_low[i*4+3]
-                ]);
+            for lane in 0..2 {
+                let src1_lane = src1[lane];
+                let src2_lane = src2[lane];
+                
+                // Extract the 4 floats from each source
+                let src1_bytes = src1_lane.to_le_bytes();
+                let src2_bytes = src2_lane.to_le_bytes();
+                
+                let mut src1_floats = [0f32; 4];
+                let mut src2_floats = [0f32; 4];
+                for i in 0..4 {
+                    src1_floats[i] = f32::from_le_bytes([
+                        src1_bytes[i*4], src1_bytes[i*4+1], src1_bytes[i*4+2], src1_bytes[i*4+3]
+                    ]);
+                    src2_floats[i] = f32::from_le_bytes([
+                        src2_bytes[i*4], src2_bytes[i*4+1], src2_bytes[i*4+2], src2_bytes[i*4+3]
+                    ]);
+                }
+                
+                // Shuffle according to imm8
+                let mut result_floats = [0f32; 4];
+                result_floats[0] = src1_floats[(imm8 >> 0) & 0x3];
+                result_floats[1] = src1_floats[(imm8 >> 2) & 0x3];
+                result_floats[2] = src2_floats[(imm8 >> 4) & 0x3];
+                result_floats[3] = src2_floats[(imm8 >> 6) & 0x3];
+                
+                // Build result for this lane
+                let mut lane_bytes = [0u8; 16];
+                for i in 0..4 {
+                    let bytes = result_floats[i].to_le_bytes();
+                    lane_bytes[i*4..i*4+4].copy_from_slice(&bytes);
+                }
+                result[lane] = u128::from_le_bytes(lane_bytes);
             }
-            
-            // Shuffle according to imm8
-            let mut result_floats = [0f32; 4];
-            result_floats[0] = src1_floats[(imm8 >> 0) & 0x3];
-            result_floats[1] = src1_floats[(imm8 >> 2) & 0x3];
-            result_floats[2] = src2_floats[(imm8 >> 4) & 0x3];
-            result_floats[3] = src2_floats[(imm8 >> 6) & 0x3];
-            
-            // Write result for lower 128 bits
-            for i in 0..4 {
-                let bytes = result_floats[i].to_le_bytes();
-                result_low[i*4..i*4+4].copy_from_slice(&bytes);
-            }
-            result[0..16].copy_from_slice(&result_low);
-            
-            // Process upper 128 bits
-            let src1_high = &src1[16..32];
-            let src2_high = &src2[16..32];
-            let mut result_high = [0u8; 16];
-            
-            // Extract the 4 floats from each source (upper half)
-            for i in 0..4 {
-                src1_floats[i] = f32::from_le_bytes([
-                    src1_high[i*4], src1_high[i*4+1], src1_high[i*4+2], src1_high[i*4+3]
-                ]);
-                src2_floats[i] = f32::from_le_bytes([
-                    src2_high[i*4], src2_high[i*4+1], src2_high[i*4+2], src2_high[i*4+3]
-                ]);
-            }
-            
-            // Shuffle according to imm8 (same pattern for upper half)
-            result_floats[0] = src1_floats[(imm8 >> 0) & 0x3];
-            result_floats[1] = src1_floats[(imm8 >> 2) & 0x3];
-            result_floats[2] = src2_floats[(imm8 >> 4) & 0x3];
-            result_floats[3] = src2_floats[(imm8 >> 6) & 0x3];
-            
-            // Write result for upper 128 bits
-            for i in 0..4 {
-                let bytes = result_floats[i].to_le_bytes();
-                result_high[i*4..i*4+4].copy_from_slice(&bytes);
-            }
-            result[16..32].copy_from_slice(&result_high);
             
             let dst_reg = self.convert_register(inst.op_register(0))?;
             self.engine.cpu.write_ymm(dst_reg, result);
         } else {
             // XMM version (128-bit)
-            let src1 = self.read_xmm(inst.op_register(1))?;
+            let src1_reg = self.convert_register(inst.op_register(1))?;
+            let src1 = self.engine.cpu.read_xmm(src1_reg);
+            
             let src2 = match inst.op_kind(2) {
-                OpKind::Register => self.read_xmm(inst.op_register(2))?,
+                OpKind::Register => {
+                    let src2_reg = self.convert_register(inst.op_register(2))?;
+                    self.engine.cpu.read_xmm(src2_reg)
+                }
                 OpKind::Memory => {
-                    let addr = self.calculate_effective_address(inst, 2)?;
-                    let mut result = [0u8; 16];
-                    self.engine.memory.read(addr, &mut result)?;
-                    result
+                    let addr = self.calculate_memory_address(inst, 2)?;
+                    self.read_memory_128(addr)?
                 }
                 _ => {
                     return Err(EmulatorError::InvalidOperand(
@@ -12307,17 +12290,18 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
                 }
             };
 
-            let mut result = [0u8; 16];
-            
             // Extract the 4 floats from each source
+            let src1_bytes = src1.to_le_bytes();
+            let src2_bytes = src2.to_le_bytes();
+            
             let mut src1_floats = [0f32; 4];
             let mut src2_floats = [0f32; 4];
             for i in 0..4 {
                 src1_floats[i] = f32::from_le_bytes([
-                    src1[i*4], src1[i*4+1], src1[i*4+2], src1[i*4+3]
+                    src1_bytes[i*4], src1_bytes[i*4+1], src1_bytes[i*4+2], src1_bytes[i*4+3]
                 ]);
                 src2_floats[i] = f32::from_le_bytes([
-                    src2[i*4], src2[i*4+1], src2[i*4+2], src2[i*4+3]
+                    src2_bytes[i*4], src2_bytes[i*4+1], src2_bytes[i*4+2], src2_bytes[i*4+3]
                 ]);
             }
             
@@ -12328,12 +12312,14 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             result_floats[2] = src2_floats[(imm8 >> 4) & 0x3];
             result_floats[3] = src2_floats[(imm8 >> 6) & 0x3];
             
-            // Write result
+            // Build result
+            let mut result_bytes = [0u8; 16];
             for i in 0..4 {
                 let bytes = result_floats[i].to_le_bytes();
-                result[i*4..i*4+4].copy_from_slice(&bytes);
+                result_bytes[i*4..i*4+4].copy_from_slice(&bytes);
             }
             
+            let result = u128::from_le_bytes(result_bytes);
             let dst_reg = self.convert_register(inst.op_register(0))?;
             self.engine.cpu.write_xmm(dst_reg, result);
         }
@@ -12357,14 +12343,17 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         // Check if we're dealing with YMM (256-bit) or XMM (128-bit) registers
         if inst.op_register(0).is_ymm() {
             // YMM version (256-bit) - contains 4 doubles
-            let src1 = self.read_ymm(inst.op_register(1))?;
+            let src1_reg = self.convert_register(inst.op_register(1))?;
+            let src1 = self.engine.cpu.read_ymm(src1_reg);
+            
             let src2 = match inst.op_kind(2) {
-                OpKind::Register => self.read_ymm(inst.op_register(2))?,
+                OpKind::Register => {
+                    let src2_reg = self.convert_register(inst.op_register(2))?;
+                    self.engine.cpu.read_ymm(src2_reg)
+                }
                 OpKind::Memory => {
-                    let addr = self.calculate_effective_address(inst, 2)?;
-                    let mut result = [0u8; 32];
-                    self.engine.memory.read(addr, &mut result)?;
-                    result
+                    let addr = self.calculate_memory_address(inst, 2)?;
+                    self.read_ymm_memory(inst, 2)?
                 }
                 _ => {
                     return Err(EmulatorError::InvalidOperand(
@@ -12373,96 +12362,67 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
                 }
             };
 
-            let mut result = [0u8; 32];
+            // Process each 128-bit lane separately
+            let mut result = [0u128; 2];
             
-            // Process lower 128 bits (2 doubles)
-            let src1_low = &src1[0..16];
-            let src2_low = &src2[0..16];
-            let mut result_low = [0u8; 16];
-            
-            // Extract the 2 doubles from each source (lower half)
-            let src1_doubles = [
-                f64::from_le_bytes([
-                    src1_low[0], src1_low[1], src1_low[2], src1_low[3],
-                    src1_low[4], src1_low[5], src1_low[6], src1_low[7]
-                ]),
-                f64::from_le_bytes([
-                    src1_low[8], src1_low[9], src1_low[10], src1_low[11],
-                    src1_low[12], src1_low[13], src1_low[14], src1_low[15]
-                ])
-            ];
-            let src2_doubles = [
-                f64::from_le_bytes([
-                    src2_low[0], src2_low[1], src2_low[2], src2_low[3],
-                    src2_low[4], src2_low[5], src2_low[6], src2_low[7]
-                ]),
-                f64::from_le_bytes([
-                    src2_low[8], src2_low[9], src2_low[10], src2_low[11],
-                    src2_low[12], src2_low[13], src2_low[14], src2_low[15]
-                ])
-            ];
-            
-            // Shuffle according to imm8 bits 0-1
-            let result_doubles = [
-                src1_doubles[(imm8 >> 0) & 0x1],  // Bit 0 selects from src1
-                src2_doubles[(imm8 >> 1) & 0x1],  // Bit 1 selects from src2
-            ];
-            
-            // Write result for lower 128 bits
-            result_low[0..8].copy_from_slice(&result_doubles[0].to_le_bytes());
-            result_low[8..16].copy_from_slice(&result_doubles[1].to_le_bytes());
-            result[0..16].copy_from_slice(&result_low);
-            
-            // Process upper 128 bits (2 doubles)
-            let src1_high = &src1[16..32];
-            let src2_high = &src2[16..32];
-            let mut result_high = [0u8; 16];
-            
-            // Extract the 2 doubles from each source (upper half)
-            let src1_doubles = [
-                f64::from_le_bytes([
-                    src1_high[0], src1_high[1], src1_high[2], src1_high[3],
-                    src1_high[4], src1_high[5], src1_high[6], src1_high[7]
-                ]),
-                f64::from_le_bytes([
-                    src1_high[8], src1_high[9], src1_high[10], src1_high[11],
-                    src1_high[12], src1_high[13], src1_high[14], src1_high[15]
-                ])
-            ];
-            let src2_doubles = [
-                f64::from_le_bytes([
-                    src2_high[0], src2_high[1], src2_high[2], src2_high[3],
-                    src2_high[4], src2_high[5], src2_high[6], src2_high[7]
-                ]),
-                f64::from_le_bytes([
-                    src2_high[8], src2_high[9], src2_high[10], src2_high[11],
-                    src2_high[12], src2_high[13], src2_high[14], src2_high[15]
-                ])
-            ];
-            
-            // Shuffle according to imm8 bits 2-3
-            let result_doubles = [
-                src1_doubles[(imm8 >> 2) & 0x1],  // Bit 2 selects from src1
-                src2_doubles[(imm8 >> 3) & 0x1],  // Bit 3 selects from src2
-            ];
-            
-            // Write result for upper 128 bits
-            result_high[0..8].copy_from_slice(&result_doubles[0].to_le_bytes());
-            result_high[8..16].copy_from_slice(&result_doubles[1].to_le_bytes());
-            result[16..32].copy_from_slice(&result_high);
+            for lane in 0..2 {
+                let src1_lane = src1[lane];
+                let src2_lane = src2[lane];
+                
+                // Extract the 2 doubles from each source
+                let src1_bytes = src1_lane.to_le_bytes();
+                let src2_bytes = src2_lane.to_le_bytes();
+                
+                let src1_doubles = [
+                    f64::from_le_bytes([
+                        src1_bytes[0], src1_bytes[1], src1_bytes[2], src1_bytes[3],
+                        src1_bytes[4], src1_bytes[5], src1_bytes[6], src1_bytes[7]
+                    ]),
+                    f64::from_le_bytes([
+                        src1_bytes[8], src1_bytes[9], src1_bytes[10], src1_bytes[11],
+                        src1_bytes[12], src1_bytes[13], src1_bytes[14], src1_bytes[15]
+                    ])
+                ];
+                let src2_doubles = [
+                    f64::from_le_bytes([
+                        src2_bytes[0], src2_bytes[1], src2_bytes[2], src2_bytes[3],
+                        src2_bytes[4], src2_bytes[5], src2_bytes[6], src2_bytes[7]
+                    ]),
+                    f64::from_le_bytes([
+                        src2_bytes[8], src2_bytes[9], src2_bytes[10], src2_bytes[11],
+                        src2_bytes[12], src2_bytes[13], src2_bytes[14], src2_bytes[15]
+                    ])
+                ];
+                
+                // Shuffle according to imm8 bits for this lane
+                let bit_offset = lane * 2;
+                let result_doubles = [
+                    src1_doubles[(imm8 >> bit_offset) & 0x1],
+                    src2_doubles[(imm8 >> (bit_offset + 1)) & 0x1],
+                ];
+                
+                // Build result for this lane
+                let mut lane_bytes = [0u8; 16];
+                lane_bytes[0..8].copy_from_slice(&result_doubles[0].to_le_bytes());
+                lane_bytes[8..16].copy_from_slice(&result_doubles[1].to_le_bytes());
+                result[lane] = u128::from_le_bytes(lane_bytes);
+            }
             
             let dst_reg = self.convert_register(inst.op_register(0))?;
             self.engine.cpu.write_ymm(dst_reg, result);
         } else {
             // XMM version (128-bit) - contains 2 doubles
-            let src1 = self.read_xmm(inst.op_register(1))?;
+            let src1_reg = self.convert_register(inst.op_register(1))?;
+            let src1 = self.engine.cpu.read_xmm(src1_reg);
+            
             let src2 = match inst.op_kind(2) {
-                OpKind::Register => self.read_xmm(inst.op_register(2))?,
+                OpKind::Register => {
+                    let src2_reg = self.convert_register(inst.op_register(2))?;
+                    self.engine.cpu.read_xmm(src2_reg)
+                }
                 OpKind::Memory => {
-                    let addr = self.calculate_effective_address(inst, 2)?;
-                    let mut result = [0u8; 16];
-                    self.engine.memory.read(addr, &mut result)?;
-                    result
+                    let addr = self.calculate_memory_address(inst, 2)?;
+                    self.read_memory_128(addr)?
                 }
                 _ => {
                     return Err(EmulatorError::InvalidOperand(
@@ -12471,27 +12431,28 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
                 }
             };
 
-            let mut result = [0u8; 16];
-            
             // Extract the 2 doubles from each source
+            let src1_bytes = src1.to_le_bytes();
+            let src2_bytes = src2.to_le_bytes();
+            
             let src1_doubles = [
                 f64::from_le_bytes([
-                    src1[0], src1[1], src1[2], src1[3],
-                    src1[4], src1[5], src1[6], src1[7]
+                    src1_bytes[0], src1_bytes[1], src1_bytes[2], src1_bytes[3],
+                    src1_bytes[4], src1_bytes[5], src1_bytes[6], src1_bytes[7]
                 ]),
                 f64::from_le_bytes([
-                    src1[8], src1[9], src1[10], src1[11],
-                    src1[12], src1[13], src1[14], src1[15]
+                    src1_bytes[8], src1_bytes[9], src1_bytes[10], src1_bytes[11],
+                    src1_bytes[12], src1_bytes[13], src1_bytes[14], src1_bytes[15]
                 ])
             ];
             let src2_doubles = [
                 f64::from_le_bytes([
-                    src2[0], src2[1], src2[2], src2[3],
-                    src2[4], src2[5], src2[6], src2[7]
+                    src2_bytes[0], src2_bytes[1], src2_bytes[2], src2_bytes[3],
+                    src2_bytes[4], src2_bytes[5], src2_bytes[6], src2_bytes[7]
                 ]),
                 f64::from_le_bytes([
-                    src2[8], src2[9], src2[10], src2[11],
-                    src2[12], src2[13], src2[14], src2[15]
+                    src2_bytes[8], src2_bytes[9], src2_bytes[10], src2_bytes[11],
+                    src2_bytes[12], src2_bytes[13], src2_bytes[14], src2_bytes[15]
                 ])
             ];
             
@@ -12501,10 +12462,12 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
                 src2_doubles[(imm8 >> 1) & 0x1],  // Bit 1 selects from src2
             ];
             
-            // Write result
-            result[0..8].copy_from_slice(&result_doubles[0].to_le_bytes());
-            result[8..16].copy_from_slice(&result_doubles[1].to_le_bytes());
+            // Build result
+            let mut result_bytes = [0u8; 16];
+            result_bytes[0..8].copy_from_slice(&result_doubles[0].to_le_bytes());
+            result_bytes[8..16].copy_from_slice(&result_doubles[1].to_le_bytes());
             
+            let result = u128::from_le_bytes(result_bytes);
             let dst_reg = self.convert_register(inst.op_register(0))?;
             self.engine.cpu.write_xmm(dst_reg, result);
         }
