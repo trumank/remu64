@@ -424,6 +424,9 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             Mnemonic::Shrd => self.execute_shrd(inst),
             Mnemonic::Rcl => self.execute_rcl(inst),
             Mnemonic::Rcr => self.execute_rcr(inst),
+            Mnemonic::Stc => self.execute_stc(inst),
+            Mnemonic::Clc => self.execute_clc(inst),
+            Mnemonic::Cmc => self.execute_cmc(inst),
             Mnemonic::Shufps => self.execute_shufps(inst),
             Mnemonic::Unpcklps => self.execute_unpcklps(inst),
             Mnemonic::Unpckhps => self.execute_unpckhps(inst),
@@ -5621,6 +5624,28 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         }
         
         self.write_operand(inst, 0, result)?;
+        Ok(())
+    }
+
+    fn execute_stc(&mut self, _inst: &Instruction) -> Result<()> {
+        // STC: Set carry flag
+        self.engine.cpu.rflags.insert(Flags::CF);
+        Ok(())
+    }
+    
+    fn execute_clc(&mut self, _inst: &Instruction) -> Result<()> {
+        // CLC: Clear carry flag
+        self.engine.cpu.rflags.remove(Flags::CF);
+        Ok(())
+    }
+    
+    fn execute_cmc(&mut self, _inst: &Instruction) -> Result<()> {
+        // CMC: Complement carry flag
+        if self.engine.cpu.rflags.contains(Flags::CF) {
+            self.engine.cpu.rflags.remove(Flags::CF);
+        } else {
+            self.engine.cpu.rflags.insert(Flags::CF);
+        }
         Ok(())
     }
 
