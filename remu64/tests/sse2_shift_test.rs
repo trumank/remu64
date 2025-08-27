@@ -424,7 +424,7 @@ fn test_shift_overflow() {
     engine.memory.read(0x1028, &mut result).unwrap();
 
     // Expected: all zeros (all bits shifted out)
-    for i in 0..16 {
-        assert_eq!(result[i], 0);
+    for item in result.iter().take(16) {
+        assert_eq!(*item, 0);
     }
 }

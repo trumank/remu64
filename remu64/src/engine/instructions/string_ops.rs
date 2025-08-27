@@ -1349,7 +1349,7 @@ impl<H: HookManager<M, PS>, M: MemoryTrait<PS>, const PS: u64> ExecutionContext<
                         break;
                     }
                     // Simplified: just check if character is in reasonable ASCII range
-                    if ch1 >= 0x20 && ch1 <= 0x7E {
+                    if (0x20..=0x7E).contains(&ch1) {
                         for &ch2 in &str2 {
                             if ch2 == 0 {
                                 break;

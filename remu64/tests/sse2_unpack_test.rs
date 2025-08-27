@@ -31,7 +31,7 @@ fn test_punpcklbw() {
     // Result should interleave low 8 bytes:
     // 0x10, 0x00, 0x11, 0x01, 0x12, 0x02, 0x13, 0x03, 0x14, 0x04, 0x15, 0x05, 0x16, 0x06, 0x17, 0x07
     let result = engine.xmm_read(Register::XMM0);
-    assert_eq!(result, 0x1707160615051404130312021101_1000);
+    assert_eq!(result, 0x1707_1606_1505_1404_1303_1202_1101_1000);
 }
 
 #[test]
@@ -225,7 +225,7 @@ fn test_punpcklbw_memory() {
 
     // Check result
     let result = engine.xmm_read(Register::XMM0);
-    assert_eq!(result, 0x1707160615051404130312021101_1000);
+    assert_eq!(result, 0x1707_1606_1505_1404_1303_1202_1101_1000);
 }
 
 #[test]

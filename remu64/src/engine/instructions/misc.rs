@@ -241,9 +241,9 @@ impl<H: HookManager<M, PS>, M: MemoryTrait<PS>, const PS: u64> ExecutionContext<
         // The lower 128 bits (XMM portions) are preserved
 
         // Zero the upper 128 bits of all YMM registers (YMM0-YMM15)
-        for i in 0..16 {
+        for reg in &mut self.engine.cpu.ymm_regs[0..16] {
             // Keep the lower 128 bits (XMM part) and zero the upper 128 bits
-            self.engine.cpu.ymm_regs[i][1] = 0;
+            reg[1] = 0;
         }
 
         Ok(())

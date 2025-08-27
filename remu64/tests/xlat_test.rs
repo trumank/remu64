@@ -86,8 +86,8 @@ fn test_xlat_max_index() {
 
     // Create a full 256-byte lookup table
     let mut table = vec![0u8; 256];
-    for i in 0..256 {
-        table[i] = (i as u8).wrapping_mul(2); // Each entry is index * 2
+    for (i, item) in table.iter_mut().enumerate().take(256) {
+        *item = (i as u8).wrapping_mul(2); // Each entry is index * 2
     }
 
     engine.memory.write(0x2000, &table).unwrap();

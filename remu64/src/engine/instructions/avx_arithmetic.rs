@@ -1,3 +1,5 @@
+#![allow(clippy::needless_range_loop)]
+
 use crate::HookManager;
 use crate::engine::ExecutionContext;
 use crate::error::{EmulatorError, Result};

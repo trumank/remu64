@@ -520,10 +520,8 @@ impl<H: HookManager<M, PS>, M: MemoryTrait<PS>, const PS: u64> ExecutionContext<
         let size = self.get_operand_size_from_instruction(inst, 0)?;
         let max_bits = size * 8;
 
-        // If start position is >= operand size in bits, result is 0
-        let result = if start >= max_bits as u32 {
-            0u64
-        } else if length == 0 {
+        // If start position is >= operand size in bits, or length is 0, result is 0
+        let result = if start >= max_bits as u32 || length == 0 {
             0u64
         } else {
             // Calculate how many bits we can actually extract

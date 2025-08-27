@@ -261,7 +261,7 @@ impl<H: HookManager<M, PS>, M: MemoryTrait<PS>, const PS: u64> ExecutionContext<
                 return Err(EmulatorError::PermissionDenied(next_addr));
             }
 
-            inst_bytes.extend_from_slice(&chunk);
+            inst_bytes.extend_from_slice(chunk);
 
             // Try to decode with current bytes
             let mut decoder = Decoder::with_ip(bitness, &inst_bytes, rip, DecoderOptions::NONE);
@@ -1294,7 +1294,7 @@ impl<H: HookManager<M, PS>, M: MemoryTrait<PS>, const PS: u64> ExecutionContext<
             9 => !(a >= b), // NGE_US (Not Greater Than or Equal, Unordered, Signaling)
             10 => !(a > b), // NGT_US (Not Greater Than, Unordered, Signaling)
             11 => false, // FALSE_OQ (Always False, Ordered, Quiet)
-            12 => !(a == b) && !(a.is_nan() || b.is_nan()), // NEQ_OQ (Not Equal, Ordered, Quiet)
+            12 => !((a == b) || a.is_nan() || b.is_nan()), // NEQ_OQ (Not Equal, Ordered, Quiet)
             13 => a >= b, // GE_OS (Greater Than or Equal, Ordered, Signaling)
             14 => a > b, // GT_OS (Greater Than, Ordered, Signaling)
             15 => true,  // TRUE_UQ (Always True, Unordered, Quiet)
@@ -1333,7 +1333,7 @@ impl<H: HookManager<M, PS>, M: MemoryTrait<PS>, const PS: u64> ExecutionContext<
             9 => !(a >= b),                                 // NGE_US
             10 => !(a > b),                                 // NGT_US
             11 => false,                                    // FALSE_OQ
-            12 => !(a == b) && !(a.is_nan() || b.is_nan()), // NEQ_OQ
+            12 => !((a == b) || a.is_nan() || b.is_nan()), // NEQ_OQ
             13 => a >= b,                                   // GE_OS
             14 => a > b,                                    // GT_OS
             15 => true,                                     // TRUE_UQ
