@@ -353,6 +353,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             Mnemonic::Blsr => self.execute_blsr(inst),
             Mnemonic::Bzhi => self.execute_bzhi(inst),
             Mnemonic::Mulx => self.execute_mulx(inst),
+            Mnemonic::Pdep => self.execute_pdep(inst),
             Mnemonic::Cqo => self.execute_cqo(inst),
             Mnemonic::Xadd => self.execute_xadd(inst),
             Mnemonic::Cpuid => self.execute_cpuid(inst),
@@ -6840,6 +6841,46 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         self.write_operand(inst, 1, low)?;
         
         // MULX does not modify any flags - this is its key difference from MUL
+        
+        Ok(())
+    }
+
+    fn execute_pdep(&mut self, inst: &Instruction) -> Result<()> {
+        // PDEP: Parallel Bits Deposit
+        // Takes bits from source1 and deposits them at bit positions 
+        // marked by 1s in source2 (mask)
+        // Bits from source1 are taken from LSB to MSB
+        // Result bits at positions marked by 0s in mask are cleared
+        
+        // PDEP has 3 operands: dest, src1, src2 (mask)
+        let src1 = self.read_operand(inst, 1)?;
+        let mask = self.read_operand(inst, 2)?;
+        
+        let mut result = 0u64;
+        let mut src_bits = src1;
+        let mut mask_copy = mask;
+        
+        // For each bit position in the mask
+        while mask_copy != 0 {
+            // Find the lowest set bit in the mask
+            let bit_pos = mask_copy.trailing_zeros();
+            
+            // Deposit the next bit from source at this position
+            if src_bits & 1 != 0 {
+                result |= 1u64 << bit_pos;
+            }
+            
+            // Move to next source bit
+            src_bits >>= 1;
+            
+            // Clear this bit from the mask
+            mask_copy &= mask_copy - 1;
+        }
+        
+        // Write result to destination
+        self.write_operand(inst, 0, result)?;
+        
+        // PDEP does not modify any flags
         
         Ok(())
     }
