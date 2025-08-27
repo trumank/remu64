@@ -354,6 +354,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             Mnemonic::Bzhi => self.execute_bzhi(inst),
             Mnemonic::Mulx => self.execute_mulx(inst),
             Mnemonic::Pdep => self.execute_pdep(inst),
+            Mnemonic::Pext => self.execute_pext(inst),
             Mnemonic::Cqo => self.execute_cqo(inst),
             Mnemonic::Xadd => self.execute_xadd(inst),
             Mnemonic::Cpuid => self.execute_cpuid(inst),
@@ -6896,6 +6897,55 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         self.write_operand(inst, 0, result)?;
         
         // PDEP does not modify any flags
+        
+        Ok(())
+    }
+
+    fn execute_pext(&mut self, inst: &Instruction) -> Result<()> {
+        // PEXT: Parallel Bits Extract
+        // Extracts bits from source at positions marked by 1s in mask
+        // and packs them into consecutive low bits of result
+        // This is the inverse of PDEP
+        
+        // PEXT has 3 operands: dest, src, mask
+        let src = self.read_operand(inst, 1)?;
+        let mask = self.read_operand(inst, 2)?;
+        
+        // Get operand size to handle 32-bit vs 64-bit operations
+        let size = inst.op0_register().size();
+        
+        // Mask operands to appropriate size
+        let (src_masked, mask_masked) = match size {
+            4 => ((src & 0xFFFFFFFF), (mask & 0xFFFFFFFF)),
+            8 => (src, mask),
+            _ => return Err(EmulatorError::InvalidInstruction(self.engine.cpu.read_reg(Register::RIP))),
+        };
+        
+        let mut result = 0u64;
+        let mut result_bit = 0;
+        let mut mask_copy = mask_masked;
+        
+        // For each set bit in the mask
+        while mask_copy != 0 {
+            // Find the lowest set bit in the mask
+            let bit_pos = mask_copy.trailing_zeros();
+            
+            // Extract the bit at this position from source
+            if (src_masked >> bit_pos) & 1 != 0 {
+                result |= 1u64 << result_bit;
+            }
+            
+            // Move to next result bit position
+            result_bit += 1;
+            
+            // Clear this bit from the mask
+            mask_copy &= mask_copy - 1;
+        }
+        
+        // Write result to destination
+        self.write_operand(inst, 0, result)?;
+        
+        // PEXT does not modify any flags
         
         Ok(())
     }
