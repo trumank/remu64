@@ -429,6 +429,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             Mnemonic::Cmc => self.execute_cmc(inst),
             Mnemonic::Xlatb => self.execute_xlat(inst),
             Mnemonic::Pause => self.execute_pause(inst),
+            Mnemonic::Ud2 => self.execute_ud2(inst),
             Mnemonic::Shufps => self.execute_shufps(inst),
             Mnemonic::Unpcklps => self.execute_unpcklps(inst),
             Mnemonic::Unpckhps => self.execute_unpckhps(inst),
@@ -5691,6 +5692,15 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         // PAUSE doesn't affect registers or flags
         // It's essentially a NOP with a hint for the processor
         Ok(())
+    }
+    
+    fn execute_ud2(&mut self, _inst: &Instruction) -> Result<()> {
+        // UD2: Undefined instruction
+        // Guaranteed to raise an invalid opcode exception
+        // Often used for marking unreachable code or debugging
+        
+        // Raise an invalid opcode error
+        Err(EmulatorError::InvalidOpcode)
     }
 
     fn execute_xchg(&mut self, inst: &Instruction) -> Result<()> {

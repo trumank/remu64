@@ -16,6 +16,7 @@ pub enum EmulatorError {
     DivisionOverflow,
     InvalidOperand,
     UnsupportedOperandType,
+    InvalidOpcode,
     InternalError(String),
 }
 
@@ -44,6 +45,7 @@ impl fmt::Display for EmulatorError {
             EmulatorError::DivisionOverflow => write!(f, "Division overflow"),
             EmulatorError::InvalidOperand => write!(f, "Invalid operand"),
             EmulatorError::UnsupportedOperandType => write!(f, "Unsupported operand type"),
+            EmulatorError::InvalidOpcode => write!(f, "Invalid opcode (UD2 instruction)"),
             EmulatorError::InternalError(msg) => write!(f, "Internal error: {}", msg),
         }
     }
