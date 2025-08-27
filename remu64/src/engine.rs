@@ -432,6 +432,8 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             Mnemonic::Mfence => self.execute_mfence(inst),
             Mnemonic::Sfence => self.execute_sfence(inst),
             Mnemonic::Lfence => self.execute_lfence(inst),
+            Mnemonic::Clflush => self.execute_clflush(inst),
+            Mnemonic::Clflushopt => self.execute_clflush(inst), // Same as CLFLUSH for emulation
             Mnemonic::Adc => self.execute_adc(inst),
             Mnemonic::Not => self.execute_not(inst),
             Mnemonic::Ror => self.execute_ror(inst),
@@ -9204,6 +9206,57 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         // In emulation, this is a no-op since we execute instructions sequentially
         // In real hardware, ensures load ordering and can prevent speculative execution
         
+        Ok(())
+    }
+    
+    fn execute_clflush(&mut self, inst: &Instruction) -> Result<()> {
+        // CLFLUSH: Cache Line Flush
+        // Flushes the cache line containing the linear address from all levels of the processor cache hierarchy
+        // CLFLUSHOPT is an optimized version but functionally the same for emulation
+        
+        // In real hardware, this instruction:
+        // 1. Invalidates the cache line from all processor caches
+        // 2. Writes back modified data to memory if the cache line is dirty
+        // 3. Does not affect the TLBs
+        
+        // Get the memory address to flush
+        // CLFLUSH takes a memory operand (m8)
+        if inst.op_count() != 1 {
+            return Err(EmulatorError::InvalidArgument("CLFLUSH requires exactly one operand".to_string()));
+        }
+        
+        // Calculate the effective address
+        let _address = match inst.op_kind(0) {
+            OpKind::Memory => {
+                // Calculate effective address from memory operand
+                let mut addr;
+                if inst.memory_base() == IcedRegister::RIP {
+                    // RIP-relative addressing
+                    addr = inst.memory_displacement64();
+                } else {
+                    // Standard addressing: disp + base + index*scale
+                    addr = inst.memory_displacement64();
+                    if inst.memory_base() != IcedRegister::None {
+                        let base_reg = self.convert_register(inst.memory_base())?;
+                        addr = addr.wrapping_add(self.engine.cpu.read_reg(base_reg));
+                    }
+                    if inst.memory_index() != IcedRegister::None {
+                        let index_reg = self.convert_register(inst.memory_index())?;
+                        let index_value = self.engine.cpu.read_reg(index_reg);
+                        let scale = inst.memory_index_scale() as u64;
+                        addr = addr.wrapping_add(index_value.wrapping_mul(scale));
+                    }
+                }
+                addr
+            }
+            _ => return Err(EmulatorError::InvalidOperand),
+        };
+        
+        // In emulation, we don't have actual CPU caches to flush
+        // This is effectively a no-op for correctness of execution
+        // Real implementations would interact with the cache subsystem here
+        
+        // CLFLUSH does not affect RFLAGS
         Ok(())
     }
 }
