@@ -4,8 +4,8 @@ members = ["remu64", "rdex"]
 
 [workspace.package]
 version = "0.1.0"
-edition = "2021"
-authors = ["AMD64 Emulator Contributors"]
+edition = "2024"
+authors = ["trumank"]
 description = "Pure Rust AMD64 emulator with Unicorn Engine-like API"
 license = "MIT OR Apache-2.0"
 keywords = ["emulator", "x86-64", "amd64", "cpu", "unicorn"]
