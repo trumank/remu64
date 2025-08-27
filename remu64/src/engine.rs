@@ -352,6 +352,8 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             Mnemonic::Vandpd => self.execute_vandpd(inst),
             Mnemonic::Vorps => self.execute_vorps(inst),
             Mnemonic::Vorpd => self.execute_vorpd(inst),
+            Mnemonic::Vxorps => self.execute_vxorps(inst),
+            Mnemonic::Vxorpd => self.execute_vxorpd(inst),
             Mnemonic::Imul => self.execute_imul(inst),
             Mnemonic::Mul => self.execute_mul(inst),
             Mnemonic::Div => self.execute_div(inst),
@@ -11834,6 +11836,150 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             
             // Perform bitwise OR
             let result = src1_data | src2_data;
+            
+            let dst_reg = self.convert_register(inst.op_register(0))?;
+            self.engine.cpu.write_xmm(dst_reg, result);
+        }
+        
+        Ok(())
+    }
+
+    fn execute_vxorps(&mut self, inst: &Instruction) -> Result<()> {
+        // VXORPS - Bitwise XOR of Packed Single-Precision Floating-Point Values
+        // VEX.256: VXORPS ymm1, ymm2, ymm3/m256
+        // VEX.128: VXORPS xmm1, xmm2, xmm3/m128
+        
+        let is_256bit = inst.op_register(0).is_ymm();
+        
+        if inst.op_count() != 3 {
+            return Err(EmulatorError::UnsupportedInstruction(
+                "VXORPS requires exactly 3 operands".to_string(),
+            ));
+        }
+
+        if is_256bit {
+            // 256-bit YMM operation
+            let src1_reg = self.convert_register(inst.op_register(1))?;
+            let src1_data = self.engine.cpu.read_ymm(src1_reg);
+            
+            let src2_data = match inst.op_kind(2) {
+                OpKind::Register => {
+                    let src2_reg = self.convert_register(inst.op_register(2))?;
+                    self.engine.cpu.read_ymm(src2_reg)
+                }
+                OpKind::Memory => {
+                    self.read_ymm_memory(inst, 2)?
+                }
+                _ => {
+                    return Err(EmulatorError::UnsupportedInstruction(
+                        format!("Unsupported VXORPS source operand type: {:?}", inst.op_kind(2))
+                    ));
+                }
+            };
+            
+            // Perform bitwise XOR on both 128-bit halves
+            let result = [
+                src1_data[0] ^ src2_data[0],
+                src1_data[1] ^ src2_data[1],
+            ];
+            
+            let dst_reg = self.convert_register(inst.op_register(0))?;
+            self.engine.cpu.write_ymm(dst_reg, result);
+        } else {
+            // 128-bit XMM operation
+            let src1_reg = self.convert_register(inst.op_register(1))?;
+            let src1_data = self.engine.cpu.read_xmm(src1_reg);
+            
+            let src2_data = match inst.op_kind(2) {
+                OpKind::Register => {
+                    let src2_reg = self.convert_register(inst.op_register(2))?;
+                    self.engine.cpu.read_xmm(src2_reg)
+                }
+                OpKind::Memory => {
+                    let addr = self.calculate_memory_address(inst, 2)?;
+                    self.read_memory_128(addr)?
+                }
+                _ => {
+                    return Err(EmulatorError::UnsupportedInstruction(
+                        format!("Unsupported VXORPS source operand type: {:?}", inst.op_kind(2))
+                    ));
+                }
+            };
+            
+            // Perform bitwise XOR
+            let result = src1_data ^ src2_data;
+            
+            let dst_reg = self.convert_register(inst.op_register(0))?;
+            self.engine.cpu.write_xmm(dst_reg, result);
+        }
+        
+        Ok(())
+    }
+
+    fn execute_vxorpd(&mut self, inst: &Instruction) -> Result<()> {
+        // VXORPD - Bitwise XOR of Packed Double-Precision Floating-Point Values
+        // VEX.256: VXORPD ymm1, ymm2, ymm3/m256
+        // VEX.128: VXORPD xmm1, xmm2, xmm3/m128
+        
+        let is_256bit = inst.op_register(0).is_ymm();
+        
+        if inst.op_count() != 3 {
+            return Err(EmulatorError::UnsupportedInstruction(
+                "VXORPD requires exactly 3 operands".to_string(),
+            ));
+        }
+
+        if is_256bit {
+            // 256-bit YMM operation
+            let src1_reg = self.convert_register(inst.op_register(1))?;
+            let src1_data = self.engine.cpu.read_ymm(src1_reg);
+            
+            let src2_data = match inst.op_kind(2) {
+                OpKind::Register => {
+                    let src2_reg = self.convert_register(inst.op_register(2))?;
+                    self.engine.cpu.read_ymm(src2_reg)
+                }
+                OpKind::Memory => {
+                    self.read_ymm_memory(inst, 2)?
+                }
+                _ => {
+                    return Err(EmulatorError::UnsupportedInstruction(
+                        format!("Unsupported VXORPD source operand type: {:?}", inst.op_kind(2))
+                    ));
+                }
+            };
+            
+            // Perform bitwise XOR on both 128-bit halves
+            let result = [
+                src1_data[0] ^ src2_data[0],
+                src1_data[1] ^ src2_data[1],
+            ];
+            
+            let dst_reg = self.convert_register(inst.op_register(0))?;
+            self.engine.cpu.write_ymm(dst_reg, result);
+        } else {
+            // 128-bit XMM operation
+            let src1_reg = self.convert_register(inst.op_register(1))?;
+            let src1_data = self.engine.cpu.read_xmm(src1_reg);
+            
+            let src2_data = match inst.op_kind(2) {
+                OpKind::Register => {
+                    let src2_reg = self.convert_register(inst.op_register(2))?;
+                    self.engine.cpu.read_xmm(src2_reg)
+                }
+                OpKind::Memory => {
+                    let addr = self.calculate_memory_address(inst, 2)?;
+                    self.read_memory_128(addr)?
+                }
+                _ => {
+                    return Err(EmulatorError::UnsupportedInstruction(
+                        format!("Unsupported VXORPD source operand type: {:?}", inst.op_kind(2))
+                    ));
+                }
+            };
+            
+            // Perform bitwise XOR
+            let result = src1_data ^ src2_data;
             
             let dst_reg = self.convert_register(inst.op_register(0))?;
             self.engine.cpu.write_xmm(dst_reg, result);
