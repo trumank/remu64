@@ -54,6 +54,14 @@ impl<M: MemoryTrait> Engine<M> {
         self.cpu.write_xmm(reg, value);
     }
 
+    pub fn ymm_read(&self, reg: Register) -> [u128; 2] {
+        self.cpu.read_ymm(reg)
+    }
+
+    pub fn ymm_write(&mut self, reg: Register, value: [u128; 2]) {
+        self.cpu.write_ymm(reg, value);
+    }
+
     pub fn context_save(&self) -> CpuState {
         self.cpu.clone()
     }

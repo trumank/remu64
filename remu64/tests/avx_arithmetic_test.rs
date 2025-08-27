@@ -20,8 +20,8 @@ fn test_vaddps_xmm() {
         ((7.0_f32.to_bits() as u128) << 64) |
         ((8.0_f32.to_bits() as u128) << 96);
     
-    engine.reg_write_xmm(Register::XMM1, xmm1_data);
-    engine.reg_write_xmm(Register::XMM2, xmm2_data);
+    engine.xmm_write(Register::XMM1, xmm1_data);
+    engine.xmm_write(Register::XMM2, xmm2_data);
 
     // vaddps xmm0, xmm1, xmm2
     // C5 F0 58 C2
@@ -31,7 +31,7 @@ fn test_vaddps_xmm() {
     engine.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0).unwrap();
 
     // Expected: XMM0 = [6.0, 8.0, 10.0, 12.0]
-    let result = engine.reg_read_xmm(Register::XMM0);
+    let result = engine.xmm_read(Register::XMM0);
     assert_eq!(result & 0xFFFFFFFF, 6.0_f32.to_bits() as u128);
     assert_eq!((result >> 32) & 0xFFFFFFFF, 8.0_f32.to_bits() as u128);
     assert_eq!((result >> 64) & 0xFFFFFFFF, 10.0_f32.to_bits() as u128);
@@ -57,8 +57,8 @@ fn test_vsubps_xmm() {
         ((3.0_f32.to_bits() as u128) << 64) |
         ((4.0_f32.to_bits() as u128) << 96);
     
-    engine.reg_write_xmm(Register::XMM1, xmm1_data);
-    engine.reg_write_xmm(Register::XMM2, xmm2_data);
+    engine.xmm_write(Register::XMM1, xmm1_data);
+    engine.xmm_write(Register::XMM2, xmm2_data);
 
     // vsubps xmm0, xmm1, xmm2
     // C5 F0 5C C2
@@ -68,7 +68,7 @@ fn test_vsubps_xmm() {
     engine.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0).unwrap();
 
     // Expected: XMM0 = [9.0, 18.0, 27.0, 36.0]
-    let result = engine.reg_read_xmm(Register::XMM0);
+    let result = engine.xmm_read(Register::XMM0);
     assert_eq!(result & 0xFFFFFFFF, 9.0_f32.to_bits() as u128);
     assert_eq!((result >> 32) & 0xFFFFFFFF, 18.0_f32.to_bits() as u128);
     assert_eq!((result >> 64) & 0xFFFFFFFF, 27.0_f32.to_bits() as u128);
@@ -94,8 +94,8 @@ fn test_vmulps_xmm() {
         ((1.5_f32.to_bits() as u128) << 64) |
         ((2.0_f32.to_bits() as u128) << 96);
     
-    engine.reg_write_xmm(Register::XMM1, xmm1_data);
-    engine.reg_write_xmm(Register::XMM2, xmm2_data);
+    engine.xmm_write(Register::XMM1, xmm1_data);
+    engine.xmm_write(Register::XMM2, xmm2_data);
 
     // vmulps xmm0, xmm1, xmm2
     // C5 F0 59 C2
@@ -105,7 +105,7 @@ fn test_vmulps_xmm() {
     engine.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0).unwrap();
 
     // Expected: XMM0 = [6.0, 6.0, 6.0, 10.0]
-    let result = engine.reg_read_xmm(Register::XMM0);
+    let result = engine.xmm_read(Register::XMM0);
     assert_eq!(result & 0xFFFFFFFF, 6.0_f32.to_bits() as u128);
     assert_eq!((result >> 32) & 0xFFFFFFFF, 6.0_f32.to_bits() as u128);
     assert_eq!((result >> 64) & 0xFFFFFFFF, 6.0_f32.to_bits() as u128);
@@ -131,8 +131,8 @@ fn test_vdivps_xmm() {
         ((3.0_f32.to_bits() as u128) << 64) |
         ((5.0_f32.to_bits() as u128) << 96);
     
-    engine.reg_write_xmm(Register::XMM1, xmm1_data);
-    engine.reg_write_xmm(Register::XMM2, xmm2_data);
+    engine.xmm_write(Register::XMM1, xmm1_data);
+    engine.xmm_write(Register::XMM2, xmm2_data);
 
     // vdivps xmm0, xmm1, xmm2
     // C5 F0 5E C2
@@ -142,7 +142,7 @@ fn test_vdivps_xmm() {
     engine.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0).unwrap();
 
     // Expected: XMM0 = [4.0, 4.0, 2.0, 3.0]
-    let result = engine.reg_read_xmm(Register::XMM0);
+    let result = engine.xmm_read(Register::XMM0);
     assert_eq!(result & 0xFFFFFFFF, 4.0_f32.to_bits() as u128);
     assert_eq!((result >> 32) & 0xFFFFFFFF, 4.0_f32.to_bits() as u128);
     assert_eq!((result >> 64) & 0xFFFFFFFF, 2.0_f32.to_bits() as u128);
@@ -164,8 +164,8 @@ fn test_vaddpd_xmm() {
         (3.5_f64.to_bits() as u128) |
         ((4.5_f64.to_bits() as u128) << 64);
     
-    engine.reg_write_xmm(Register::XMM1, xmm1_data);
-    engine.reg_write_xmm(Register::XMM2, xmm2_data);
+    engine.xmm_write(Register::XMM1, xmm1_data);
+    engine.xmm_write(Register::XMM2, xmm2_data);
 
     // vaddpd xmm0, xmm1, xmm2
     // C5 F1 58 C2
@@ -175,7 +175,7 @@ fn test_vaddpd_xmm() {
     engine.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0).unwrap();
 
     // Expected: XMM0 = [5.0, 7.0]
-    let result = engine.reg_read_xmm(Register::XMM0);
+    let result = engine.xmm_read(Register::XMM0);
     assert_eq!(result & 0xFFFFFFFFFFFFFFFF, 5.0_f64.to_bits() as u128);
     assert_eq!((result >> 64) & 0xFFFFFFFFFFFFFFFF, 7.0_f64.to_bits() as u128);
 }
@@ -195,8 +195,8 @@ fn test_vsubpd_xmm() {
         (0.5_f64.to_bits() as u128) |
         ((5.5_f64.to_bits() as u128) << 64);
     
-    engine.reg_write_xmm(Register::XMM1, xmm1_data);
-    engine.reg_write_xmm(Register::XMM2, xmm2_data);
+    engine.xmm_write(Register::XMM1, xmm1_data);
+    engine.xmm_write(Register::XMM2, xmm2_data);
 
     // vsubpd xmm0, xmm1, xmm2
     // C5 F1 5C C2
@@ -206,7 +206,7 @@ fn test_vsubpd_xmm() {
     engine.emu_start(0x1000, 0x1000 + code.len() as u64, 0, 0).unwrap();
 
     // Expected: XMM0 = [10.0, 15.0]
-    let result = engine.reg_read_xmm(Register::XMM0);
+    let result = engine.xmm_read(Register::XMM0);
     assert_eq!(result & 0xFFFFFFFFFFFFFFFF, 10.0_f64.to_bits() as u128);
     assert_eq!((result >> 64) & 0xFFFFFFFFFFFFFFFF, 15.0_f64.to_bits() as u128);
 }
