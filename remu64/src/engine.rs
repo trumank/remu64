@@ -344,6 +344,8 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             Mnemonic::Enter => self.execute_enter(inst),
             Mnemonic::Leave => self.execute_leave(inst),
             Mnemonic::Popcnt => self.execute_popcnt(inst),
+            Mnemonic::Lzcnt => self.execute_lzcnt(inst),
+            Mnemonic::Tzcnt => self.execute_tzcnt(inst),
             Mnemonic::Cqo => self.execute_cqo(inst),
             Mnemonic::Xadd => self.execute_xadd(inst),
             Mnemonic::Cpuid => self.execute_cpuid(inst),
@@ -6286,6 +6288,87 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         if count == 0 {
             self.engine.cpu.rflags.insert(Flags::ZF);
         } else {
+            self.engine.cpu.rflags.remove(Flags::ZF);
+        }
+
+        Ok(())
+    }
+
+    fn execute_lzcnt(&mut self, inst: &Instruction) -> Result<()> {
+        // LZCNT: Leading Zero Count - Count number of leading zero bits
+        let source = self.read_operand(inst, 1)?;
+        let size = self.get_operand_size_from_instruction(inst, 1)?;
+        
+        // Count leading zeros based on operand size
+        let count = match size {
+            1 => (source as u8).leading_zeros() as u64,
+            2 => (source as u16).leading_zeros() as u64,
+            4 => (source as u32).leading_zeros() as u64,
+            8 => source.leading_zeros() as u64,
+            _ => {
+                return Err(EmulatorError::UnsupportedInstruction(format!(
+                    "Unsupported LZCNT operand size: {}",
+                    size
+                )));
+            }
+        };
+
+        // Write result to destination
+        self.write_operand(inst, 0, count)?;
+
+        // Update flags
+        // LZCNT clears all flags except CF and ZF
+        self.engine.cpu.rflags.remove(Flags::SF | Flags::OF | Flags::AF | Flags::PF);
+        
+        // CF is set if source is zero (indicating the destination holds operand size in bits)
+        if source == 0 {
+            self.engine.cpu.rflags.insert(Flags::CF);
+            self.engine.cpu.rflags.insert(Flags::ZF);
+        } else {
+            self.engine.cpu.rflags.remove(Flags::CF);
+            self.engine.cpu.rflags.remove(Flags::ZF);
+        }
+
+        Ok(())
+    }
+
+    fn execute_tzcnt(&mut self, inst: &Instruction) -> Result<()> {
+        // TZCNT: Trailing Zero Count - Count number of trailing zero bits
+        let source = self.read_operand(inst, 1)?;
+        let size = self.get_operand_size_from_instruction(inst, 1)?;
+        
+        // Count trailing zeros based on operand size
+        let count = if source == 0 {
+            // If source is 0, return the operand size in bits
+            match size {
+                1 => 8u64,
+                2 => 16u64,
+                4 => 32u64,
+                8 => 64u64,
+                _ => {
+                    return Err(EmulatorError::UnsupportedInstruction(format!(
+                        "Unsupported TZCNT operand size: {}",
+                        size
+                    )));
+                }
+            }
+        } else {
+            source.trailing_zeros() as u64
+        };
+
+        // Write result to destination
+        self.write_operand(inst, 0, count)?;
+
+        // Update flags
+        // TZCNT clears all flags except CF and ZF
+        self.engine.cpu.rflags.remove(Flags::SF | Flags::OF | Flags::AF | Flags::PF);
+        
+        // CF is set if source is zero
+        if source == 0 {
+            self.engine.cpu.rflags.insert(Flags::CF);
+            self.engine.cpu.rflags.insert(Flags::ZF);
+        } else {
+            self.engine.cpu.rflags.remove(Flags::CF);
             self.engine.cpu.rflags.remove(Flags::ZF);
         }
 
