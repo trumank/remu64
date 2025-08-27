@@ -408,7 +408,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             Mnemonic::Std => self.execute_std(inst),
             Mnemonic::Int => self.execute_int(inst),
             Mnemonic::Int3 => self.execute_int3(inst),
-            Mnemonic::Into => self.execute_into(inst),
+            // Note: INTO is not valid in 64-bit mode, only supported in 32-bit mode
             Mnemonic::Syscall => self.execute_syscall(inst),
             Mnemonic::Adc => self.execute_adc(inst),
             Mnemonic::Not => self.execute_not(inst),
@@ -8471,16 +8471,6 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         // INT3 is typically used for debugging breakpoints
         // The debugger/hook can decide how to handle it
         
-        Ok(())
-    }
-
-    fn execute_into(&mut self, inst: &Instruction) -> Result<()> {
-        // INTO: Interrupt if Overflow Flag is set
-        if self.engine.cpu.rflags.contains(Flags::OF) {
-            // Call interrupt hook with interrupt number 4 (overflow exception)
-            self.hooks.on_interrupt(self.engine, 4, inst.len() as usize)?;
-        }
-        // If OF is not set, INTO is a no-op
         Ok(())
     }
 
