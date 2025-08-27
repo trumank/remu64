@@ -11576,8 +11576,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
                     self.engine.cpu.read_ymm(src2_reg)
                 }
                 OpKind::Memory => {
-                    let addr = self.calculate_memory_address(inst, 2)?;
-                    self.read_memory_256(addr)?
+                    self.read_ymm_memory(inst, 2)?
                 }
                 _ => {
                     return Err(EmulatorError::UnsupportedInstruction(
@@ -11649,8 +11648,7 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
                     self.engine.cpu.read_ymm(src2_reg)
                 }
                 OpKind::Memory => {
-                    let addr = self.calculate_memory_address(inst, 2)?;
-                    self.read_memory_256(addr)?
+                    self.read_ymm_memory(inst, 2)?
                 }
                 _ => {
                     return Err(EmulatorError::UnsupportedInstruction(
