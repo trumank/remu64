@@ -6533,11 +6533,13 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         // This isolates the rightmost 1 bit (if any) in the source operand
         
         // BLSI has 2 operands: dest, src
+        // For VEX encoding, operand 0 is destination, operand 1 is source
         let src = self.read_operand(inst, 1)?;
         
         // Perform the operation: src & -src
         // In two's complement, -src = ~src + 1
-        let result = src & (!src).wrapping_add(1);
+        let neg_src = (!src).wrapping_add(1);
+        let result = src & neg_src;
         
         // Write result to destination
         self.write_operand(inst, 0, result)?;
