@@ -354,6 +354,8 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             Mnemonic::Vorpd => self.execute_vorpd(inst),
             Mnemonic::Vxorps => self.execute_vxorps(inst),
             Mnemonic::Vxorpd => self.execute_vxorpd(inst),
+            Mnemonic::Vcmpps => self.execute_vcmpps(inst),
+            Mnemonic::Vcmppd => self.execute_vcmppd(inst),
             Mnemonic::Imul => self.execute_imul(inst),
             Mnemonic::Mul => self.execute_mul(inst),
             Mnemonic::Div => self.execute_div(inst),
@@ -11986,5 +11988,285 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         }
         
         Ok(())
+    }
+
+    fn execute_vcmpps(&mut self, inst: &Instruction) -> Result<()> {
+        // VCMPPS - Compare Packed Single-Precision Floating-Point Values
+        // VEX.256: VCMPPS ymm1, ymm2, ymm3/m256, imm8
+        // VEX.128: VCMPPS xmm1, xmm2, xmm3/m128, imm8
+        
+        let is_256bit = inst.op_register(0).is_ymm();
+        
+        if inst.op_count() != 4 {
+            return Err(EmulatorError::UnsupportedInstruction(
+                "VCMPPS requires exactly 4 operands".to_string(),
+            ));
+        }
+        
+        let imm = inst.immediate(3) as u8;
+        
+        if is_256bit {
+            // 256-bit YMM operation - compare 8 floats
+            let src1_reg = self.convert_register(inst.op_register(1))?;
+            let src1_data = self.engine.cpu.read_ymm(src1_reg);
+            
+            let src2_data = match inst.op_kind(2) {
+                OpKind::Register => {
+                    let src2_reg = self.convert_register(inst.op_register(2))?;
+                    self.engine.cpu.read_ymm(src2_reg)
+                }
+                OpKind::Memory => {
+                    self.read_ymm_memory(inst, 2)?
+                }
+                _ => {
+                    return Err(EmulatorError::UnsupportedInstruction(
+                        format!("Unsupported VCMPPS source operand type: {:?}", inst.op_kind(2))
+                    ));
+                }
+            };
+            
+            let mut result = [0u128; 2];
+            
+            // Process lower 128 bits (4 floats)
+            for i in 0..4 {
+                let offset = i * 32;
+                let a = f32::from_bits(((src1_data[0] >> offset) & 0xFFFFFFFF) as u32);
+                let b = f32::from_bits(((src2_data[0] >> offset) & 0xFFFFFFFF) as u32);
+                
+                if self.compare_floats_avx(a, b, imm) {
+                    result[0] |= 0xFFFFFFFFu128 << offset;
+                }
+            }
+            
+            // Process upper 128 bits (4 floats)
+            for i in 0..4 {
+                let offset = i * 32;
+                let a = f32::from_bits(((src1_data[1] >> offset) & 0xFFFFFFFF) as u32);
+                let b = f32::from_bits(((src2_data[1] >> offset) & 0xFFFFFFFF) as u32);
+                
+                if self.compare_floats_avx(a, b, imm) {
+                    result[1] |= 0xFFFFFFFFu128 << offset;
+                }
+            }
+            
+            let dst_reg = self.convert_register(inst.op_register(0))?;
+            self.engine.cpu.write_ymm(dst_reg, result);
+        } else {
+            // 128-bit XMM operation - compare 4 floats
+            let src1_reg = self.convert_register(inst.op_register(1))?;
+            let src1_data = self.engine.cpu.read_xmm(src1_reg);
+            
+            let src2_data = match inst.op_kind(2) {
+                OpKind::Register => {
+                    let src2_reg = self.convert_register(inst.op_register(2))?;
+                    self.engine.cpu.read_xmm(src2_reg)
+                }
+                OpKind::Memory => {
+                    let addr = self.calculate_memory_address(inst, 2)?;
+                    self.read_memory_128(addr)?
+                }
+                _ => {
+                    return Err(EmulatorError::UnsupportedInstruction(
+                        format!("Unsupported VCMPPS source operand type: {:?}", inst.op_kind(2))
+                    ));
+                }
+            };
+            
+            let mut result = 0u128;
+            
+            for i in 0..4 {
+                let offset = i * 32;
+                let a = f32::from_bits(((src1_data >> offset) & 0xFFFFFFFF) as u32);
+                let b = f32::from_bits(((src2_data >> offset) & 0xFFFFFFFF) as u32);
+                
+                if self.compare_floats_avx(a, b, imm) {
+                    result |= 0xFFFFFFFFu128 << offset;
+                }
+            }
+            
+            let dst_reg = self.convert_register(inst.op_register(0))?;
+            self.engine.cpu.write_xmm(dst_reg, result);
+        }
+        
+        Ok(())
+    }
+
+    fn execute_vcmppd(&mut self, inst: &Instruction) -> Result<()> {
+        // VCMPPD - Compare Packed Double-Precision Floating-Point Values
+        // VEX.256: VCMPPD ymm1, ymm2, ymm3/m256, imm8
+        // VEX.128: VCMPPD xmm1, xmm2, xmm3/m128, imm8
+        
+        let is_256bit = inst.op_register(0).is_ymm();
+        
+        if inst.op_count() != 4 {
+            return Err(EmulatorError::UnsupportedInstruction(
+                "VCMPPD requires exactly 4 operands".to_string(),
+            ));
+        }
+        
+        let imm = inst.immediate(3) as u8;
+        
+        if is_256bit {
+            // 256-bit YMM operation - compare 4 doubles
+            let src1_reg = self.convert_register(inst.op_register(1))?;
+            let src1_data = self.engine.cpu.read_ymm(src1_reg);
+            
+            let src2_data = match inst.op_kind(2) {
+                OpKind::Register => {
+                    let src2_reg = self.convert_register(inst.op_register(2))?;
+                    self.engine.cpu.read_ymm(src2_reg)
+                }
+                OpKind::Memory => {
+                    self.read_ymm_memory(inst, 2)?
+                }
+                _ => {
+                    return Err(EmulatorError::UnsupportedInstruction(
+                        format!("Unsupported VCMPPD source operand type: {:?}", inst.op_kind(2))
+                    ));
+                }
+            };
+            
+            let mut result = [0u128; 2];
+            
+            // Process lower 128 bits (2 doubles)
+            for i in 0..2 {
+                let offset = i * 64;
+                let a = f64::from_bits((src1_data[0] >> offset) as u64);
+                let b = f64::from_bits((src2_data[0] >> offset) as u64);
+                
+                if self.compare_doubles_avx(a, b, imm) {
+                    result[0] |= 0xFFFFFFFFFFFFFFFFu128 << offset;
+                }
+            }
+            
+            // Process upper 128 bits (2 doubles)
+            for i in 0..2 {
+                let offset = i * 64;
+                let a = f64::from_bits((src1_data[1] >> offset) as u64);
+                let b = f64::from_bits((src2_data[1] >> offset) as u64);
+                
+                if self.compare_doubles_avx(a, b, imm) {
+                    result[1] |= 0xFFFFFFFFFFFFFFFFu128 << offset;
+                }
+            }
+            
+            let dst_reg = self.convert_register(inst.op_register(0))?;
+            self.engine.cpu.write_ymm(dst_reg, result);
+        } else {
+            // 128-bit XMM operation - compare 2 doubles
+            let src1_reg = self.convert_register(inst.op_register(1))?;
+            let src1_data = self.engine.cpu.read_xmm(src1_reg);
+            
+            let src2_data = match inst.op_kind(2) {
+                OpKind::Register => {
+                    let src2_reg = self.convert_register(inst.op_register(2))?;
+                    self.engine.cpu.read_xmm(src2_reg)
+                }
+                OpKind::Memory => {
+                    let addr = self.calculate_memory_address(inst, 2)?;
+                    self.read_memory_128(addr)?
+                }
+                _ => {
+                    return Err(EmulatorError::UnsupportedInstruction(
+                        format!("Unsupported VCMPPD source operand type: {:?}", inst.op_kind(2))
+                    ));
+                }
+            };
+            
+            let mut result = 0u128;
+            
+            for i in 0..2 {
+                let offset = i * 64;
+                let a = f64::from_bits((src1_data >> offset) as u64);
+                let b = f64::from_bits((src2_data >> offset) as u64);
+                
+                if self.compare_doubles_avx(a, b, imm) {
+                    result |= 0xFFFFFFFFFFFFFFFFu128 << offset;
+                }
+            }
+            
+            let dst_reg = self.convert_register(inst.op_register(0))?;
+            self.engine.cpu.write_xmm(dst_reg, result);
+        }
+        
+        Ok(())
+    }
+    
+    fn compare_floats_avx(&self, a: f32, b: f32, imm: u8) -> bool {
+        // AVX comparison predicates (0-31)
+        match imm & 0x1F {
+            0 => a == b,                                    // EQ_OQ (Equal, Ordered, Quiet)
+            1 => a < b,                                     // LT_OS (Less Than, Ordered, Signaling)
+            2 => a <= b,                                    // LE_OS (Less Than or Equal, Ordered, Signaling)
+            3 => a.is_nan() || b.is_nan(),                  // UNORD_Q (Unordered, Quiet)
+            4 => !(a == b),                                 // NEQ_UQ (Not Equal, Unordered, Quiet)
+            5 => !(a < b),                                  // NLT_US (Not Less Than, Unordered, Signaling)
+            6 => !(a <= b),                                 // NLE_US (Not Less Than or Equal, Unordered, Signaling)
+            7 => !(a.is_nan() || b.is_nan()),               // ORD_Q (Ordered, Quiet)
+            8 => a == b || (a.is_nan() || b.is_nan()),      // EQ_UQ (Equal, Unordered, Quiet)
+            9 => !(a >= b),                                 // NGE_US (Not Greater Than or Equal, Unordered, Signaling)
+            10 => !(a > b),                                 // NGT_US (Not Greater Than, Unordered, Signaling)
+            11 => false,                                    // FALSE_OQ (Always False, Ordered, Quiet)
+            12 => !(a == b) && !(a.is_nan() || b.is_nan()), // NEQ_OQ (Not Equal, Ordered, Quiet)
+            13 => a >= b,                                   // GE_OS (Greater Than or Equal, Ordered, Signaling)
+            14 => a > b,                                    // GT_OS (Greater Than, Ordered, Signaling)
+            15 => true,                                     // TRUE_UQ (Always True, Unordered, Quiet)
+            16 => a == b && !(a.is_nan() || b.is_nan()),    // EQ_OS (Equal, Ordered, Signaling)
+            17 => a < b && !(a.is_nan() || b.is_nan()),     // LT_OQ (Less Than, Ordered, Quiet)
+            18 => a <= b && !(a.is_nan() || b.is_nan()),    // LE_OQ (Less Than or Equal, Ordered, Quiet)
+            19 => a.is_nan() || b.is_nan(),                 // UNORD_S (Unordered, Signaling)
+            20 => a != b || (a.is_nan() || b.is_nan()),     // NEQ_US (Not Equal, Unordered, Signaling)
+            21 => !(a < b) || (a.is_nan() || b.is_nan()),   // NLT_UQ (Not Less Than, Unordered, Quiet)
+            22 => !(a <= b) || (a.is_nan() || b.is_nan()),  // NLE_UQ (Not Less Than or Equal, Unordered, Quiet)
+            23 => !(a.is_nan() || b.is_nan()),              // ORD_S (Ordered, Signaling)
+            24 => a == b,                                    // EQ_US (Equal, Unordered, Signaling)
+            25 => !(a >= b) || (a.is_nan() || b.is_nan()),  // NGE_UQ (Not Greater Than or Equal, Unordered, Quiet)
+            26 => !(a > b) || (a.is_nan() || b.is_nan()),   // NGT_UQ (Not Greater Than, Unordered, Quiet)
+            27 => false,                                    // FALSE_OS (Always False, Ordered, Signaling)
+            28 => a != b && !(a.is_nan() || b.is_nan()),    // NEQ_OS (Not Equal, Ordered, Signaling)
+            29 => a >= b && !(a.is_nan() || b.is_nan()),    // GE_OQ (Greater Than or Equal, Ordered, Quiet)
+            30 => a > b && !(a.is_nan() || b.is_nan()),     // GT_OQ (Greater Than, Ordered, Quiet)
+            31 => true,                                     // TRUE_US (Always True, Unordered, Signaling)
+            _ => false,
+        }
+    }
+    
+    fn compare_doubles_avx(&self, a: f64, b: f64, imm: u8) -> bool {
+        // AVX comparison predicates (0-31) - same logic as floats but with f64
+        match imm & 0x1F {
+            0 => a == b,                                    // EQ_OQ
+            1 => a < b,                                     // LT_OS
+            2 => a <= b,                                    // LE_OS
+            3 => a.is_nan() || b.is_nan(),                  // UNORD_Q
+            4 => !(a == b),                                 // NEQ_UQ
+            5 => !(a < b),                                  // NLT_US
+            6 => !(a <= b),                                 // NLE_US
+            7 => !(a.is_nan() || b.is_nan()),               // ORD_Q
+            8 => a == b || (a.is_nan() || b.is_nan()),      // EQ_UQ
+            9 => !(a >= b),                                 // NGE_US
+            10 => !(a > b),                                 // NGT_US
+            11 => false,                                    // FALSE_OQ
+            12 => !(a == b) && !(a.is_nan() || b.is_nan()), // NEQ_OQ
+            13 => a >= b,                                   // GE_OS
+            14 => a > b,                                    // GT_OS
+            15 => true,                                     // TRUE_UQ
+            16 => a == b && !(a.is_nan() || b.is_nan()),    // EQ_OS
+            17 => a < b && !(a.is_nan() || b.is_nan()),     // LT_OQ
+            18 => a <= b && !(a.is_nan() || b.is_nan()),    // LE_OQ
+            19 => a.is_nan() || b.is_nan(),                 // UNORD_S
+            20 => a != b || (a.is_nan() || b.is_nan()),     // NEQ_US
+            21 => !(a < b) || (a.is_nan() || b.is_nan()),   // NLT_UQ
+            22 => !(a <= b) || (a.is_nan() || b.is_nan()),  // NLE_UQ
+            23 => !(a.is_nan() || b.is_nan()),              // ORD_S
+            24 => a == b,                                    // EQ_US
+            25 => !(a >= b) || (a.is_nan() || b.is_nan()),  // NGE_UQ
+            26 => !(a > b) || (a.is_nan() || b.is_nan()),   // NGT_UQ
+            27 => false,                                    // FALSE_OS
+            28 => a != b && !(a.is_nan() || b.is_nan()),    // NEQ_OS
+            29 => a >= b && !(a.is_nan() || b.is_nan()),    // GE_OQ
+            30 => a > b && !(a.is_nan() || b.is_nan()),     // GT_OQ
+            31 => true,                                     // TRUE_US
+            _ => false,
+        }
     }
 }
