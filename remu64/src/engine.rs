@@ -420,6 +420,8 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             Mnemonic::Loop => self.execute_loop(inst),
             Mnemonic::Loope => self.execute_loope(inst),
             Mnemonic::Loopne => self.execute_loopne(inst),
+            Mnemonic::Shld => self.execute_shld(inst),
+            Mnemonic::Shrd => self.execute_shrd(inst),
             Mnemonic::Shufps => self.execute_shufps(inst),
             Mnemonic::Unpcklps => self.execute_unpcklps(inst),
             Mnemonic::Unpckhps => self.execute_unpckhps(inst),
@@ -932,6 +934,157 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
         self.update_flags_logical_iced(result, inst)?;
 
         // Write result back to destination
+        self.write_operand(inst, 0, result)?;
+        Ok(())
+    }
+
+    fn execute_shld(&mut self, inst: &Instruction) -> Result<()> {
+        // SHLD shifts dst left by count, filling from src
+        let dst_value = self.read_operand(inst, 0)?;
+        let src_value = self.read_operand(inst, 1)?;
+        let shift_count = (self.read_operand(inst, 2)? & 0x3F) as u32; // Count is modulo 64
+
+        if shift_count == 0 {
+            return Ok(());
+        }
+
+        let size = self.get_operand_size_from_instruction(inst, 0)?;
+        let (result, cf, of) = match size {
+            2 => {
+                let count = (shift_count & 0x1F) as u32; // For 16-bit, modulo 32
+                if count >= 16 {
+                    let result = (src_value as u16).wrapping_shl(count - 16) as u64;
+                    let cf = ((dst_value >> (16 - count)) & 1) != 0;
+                    (result, cf, false)
+                } else {
+                    let result = ((dst_value as u16) << count) | ((src_value as u16) >> (16 - count));
+                    let cf = ((dst_value >> (16 - count)) & 1) != 0;
+                    let of = count == 1 && (((result >> 15) & 1) as u64 != ((dst_value >> 15) & 1));
+                    (result as u64, cf, of)
+                }
+            }
+            4 => {
+                let count = (shift_count & 0x1F) as u32; // For 32-bit, modulo 32
+                if count == 0 {
+                    return Ok(());
+                }
+                let result = ((dst_value as u32) << count) | ((src_value as u32) >> (32 - count));
+                let cf = ((dst_value >> (32 - count)) & 1) != 0;
+                let of = count == 1 && (((result >> 31) & 1) as u64 != ((dst_value >> 31) & 1));
+                (result as u64, cf, of)
+            }
+            8 => {
+                if shift_count >= 64 {
+                    // Undefined behavior, but typically zeroes result
+                    (0, false, false)
+                } else {
+                    let result = (dst_value << shift_count) | (src_value >> (64 - shift_count));
+                    let cf = ((dst_value >> (64 - shift_count)) & 1) != 0;
+                    let of = shift_count == 1 && (((result >> 63) & 1) != ((dst_value >> 63) & 1));
+                    (result, cf, of)
+                }
+            }
+            _ => {
+                return Err(EmulatorError::UnsupportedInstruction(format!(
+                    "SHLD: Unsupported size: {}",
+                    size
+                )));
+            }
+        };
+
+        // Update flags
+        if cf {
+            self.engine.cpu.rflags.insert(Flags::CF);
+        } else {
+            self.engine.cpu.rflags.remove(Flags::CF);
+        }
+        if shift_count == 1 {
+            if of {
+                self.engine.cpu.rflags.insert(Flags::OF);
+            } else {
+                self.engine.cpu.rflags.remove(Flags::OF);
+            }
+        }
+        // Update SF, ZF, PF based on result  
+        self.update_flags_logical_iced(result, inst)?;
+
+        self.write_operand(inst, 0, result)?;
+        Ok(())
+    }
+
+    fn execute_shrd(&mut self, inst: &Instruction) -> Result<()> {
+        // SHRD shifts dst right by count, filling from src
+        let dst_value = self.read_operand(inst, 0)?;
+        let src_value = self.read_operand(inst, 1)?;
+        let shift_count = (self.read_operand(inst, 2)? & 0x3F) as u32; // Count is modulo 64
+
+        if shift_count == 0 {
+            return Ok(());
+        }
+
+        let size = self.get_operand_size_from_instruction(inst, 0)?;
+        let (result, cf, of) = match size {
+            2 => {
+                let count = (shift_count & 0x1F) as u32; // For 16-bit, modulo 32
+                if count >= 16 {
+                    let result = (src_value as u16).wrapping_shr(count - 16) as u64;
+                    let cf = ((dst_value >> (count - 1)) & 1) != 0;
+                    (result, cf, false)
+                } else {
+                    let result = ((dst_value as u16) >> count) | ((src_value as u16) << (16 - count));
+                    let cf = ((dst_value >> (count - 1)) & 1) != 0;
+                    let msb = (dst_value >> 15) & 1;
+                    let of = count == 1 && (msb != ((src_value >> 15) & 1));
+                    (result as u64, cf, of)
+                }
+            }
+            4 => {
+                let count = (shift_count & 0x1F) as u32; // For 32-bit, modulo 32
+                if count == 0 {
+                    return Ok(());
+                }
+                let result = ((dst_value as u32) >> count) | ((src_value as u32) << (32 - count));
+                let cf = ((dst_value >> (count - 1)) & 1) != 0;
+                let msb = (dst_value >> 31) & 1;
+                let of = count == 1 && (msb != ((src_value >> 31) & 1));
+                (result as u64, cf, of)
+            }
+            8 => {
+                if shift_count >= 64 {
+                    // Undefined behavior, but typically zeroes result
+                    (0, false, false)
+                } else {
+                    let result = (dst_value >> shift_count) | (src_value << (64 - shift_count));
+                    let cf = ((dst_value >> (shift_count - 1)) & 1) != 0;
+                    let msb = (dst_value >> 63) & 1;
+                    let of = shift_count == 1 && (msb != ((src_value >> 63) & 1));
+                    (result, cf, of)
+                }
+            }
+            _ => {
+                return Err(EmulatorError::UnsupportedInstruction(format!(
+                    "SHRD: Unsupported size: {}",
+                    size
+                )));
+            }
+        };
+
+        // Update flags
+        if cf {
+            self.engine.cpu.rflags.insert(Flags::CF);
+        } else {
+            self.engine.cpu.rflags.remove(Flags::CF);
+        }
+        if shift_count == 1 {
+            if of {
+                self.engine.cpu.rflags.insert(Flags::OF);
+            } else {
+                self.engine.cpu.rflags.remove(Flags::OF);
+            }
+        }
+        // Update SF, ZF, PF based on result  
+        self.update_flags_logical_iced(result, inst)?;
+
         self.write_operand(inst, 0, result)?;
         Ok(())
     }
