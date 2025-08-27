@@ -115,11 +115,12 @@ fn test_vandpd_ymm() {
 fn test_vandps_memory() {
     let mut engine = Engine::new(EngineMode::Mode64);
     engine.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
+    engine.memory.map(0x2000, 0x1000, Permission::ALL).unwrap();
     
     // Test VANDPS with memory operand
     // Store test value in memory
     let mem_value: u128 = 0xFFFFFFFF_FFFFFFFF_00000000_00000000;
-    engine.mem_write_128(0x2000, mem_value).unwrap();
+    engine.memory.write(0x2000, &mem_value.to_le_bytes()).unwrap();
     
     // Set up XMM1 with test value
     engine.xmm_write(Register::XMM1, 0xFFFFFFFF_00000000_FFFFFFFF_00000000);
@@ -146,11 +147,12 @@ fn test_vandps_memory() {
 fn test_vandpd_memory() {
     let mut engine = Engine::new(EngineMode::Mode64);
     engine.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
+    engine.memory.map(0x2000, 0x1000, Permission::ALL).unwrap();
     
     // Test VANDPD with memory operand
     // Store test value in memory
     let mem_value: u128 = 0xFFFFFFFFFFFFFFFF_FFFFFFFFFFFFFFFF;
-    engine.mem_write_128(0x2000, mem_value).unwrap();
+    engine.memory.write(0x2000, &mem_value.to_le_bytes()).unwrap();
     
     // Set up XMM1 with test value
     engine.xmm_write(Register::XMM1, 0xFFFFFFFFFFFFFFFF_0000000000000000);
