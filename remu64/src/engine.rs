@@ -356,6 +356,8 @@ impl<H: HookManager<M>, M: MemoryTrait> ExecutionContext<'_, H, M> {
             Mnemonic::Vxorpd => self.execute_vxorpd(inst),
             Mnemonic::Vcmpps => self.execute_vcmpps(inst),
             Mnemonic::Vcmppd => self.execute_vcmppd(inst),
+            Mnemonic::Vshufps => self.execute_vshufps(inst),
+            Mnemonic::Vshufpd => self.execute_vshufpd(inst),
             Mnemonic::Imul => self.execute_imul(inst),
             Mnemonic::Mul => self.execute_mul(inst),
             Mnemonic::Div => self.execute_div(inst),
