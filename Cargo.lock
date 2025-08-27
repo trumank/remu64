@@ -3,14 +3,6 @@
 version = 4
 
 [[package]]
-name = "amd64-emu"
-version = "0.1.0"
-dependencies = [
- "bitflags",
- "iced-x86",
-]
-
-[[package]]
 name = "anstream"
 version = "0.6.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -162,19 +154,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9c9e6a11ca8224451684bc0d7d5a7adbf8f2fd6887261a1cfc3c0432f9d4068e"
 dependencies = [
  "powerfmt",
-]
-
-[[package]]
-name = "dump_exec"
-version = "0.1.0"
-dependencies = [
- "amd64-emu",
- "anyhow",
- "clap",
- "colored",
- "iced-x86",
- "memmap2",
- "minidump",
 ]
 
 [[package]]
@@ -376,6 +355,27 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "12a5a2d6c7039059af621472a4389be1215a816df61aa4d531cfe85264aee95f"
 dependencies = [
  "num-traits",
+]
+
+[[package]]
+name = "rdex"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "colored",
+ "iced-x86",
+ "memmap2",
+ "minidump",
+ "remu64",
+]
+
+[[package]]
+name = "remu64"
+version = "0.1.0"
+dependencies = [
+ "bitflags",
+ "iced-x86",
 ]
 
 [[package]]
