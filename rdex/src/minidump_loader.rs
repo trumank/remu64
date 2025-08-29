@@ -109,8 +109,8 @@ impl<'a> MinidumpLoader<'a> {
                 let name = module.code_file();
                 // Extract just the filename from the full path (handle both Unix and Windows separators)
                 let filename = name
-                    .rfind(['/', '\\'])
-                    .map(|pos| &name[pos + 1..])
+                    .rsplit_once(['/', '\\'])
+                    .map(|(_, name)| name)
                     .unwrap_or(&*name)
                     .to_string();
                 Some((filename, base, address - base))
@@ -134,12 +134,7 @@ impl<'a> MinidumpLoader<'a> {
             anyhow::bail!("No threads found in minidump");
         }
 
-        // Use the first thread's TEB address
         let teb_address = thread_list.threads[0].raw.teb;
-        println!(
-            "Using TEB address 0x{:x} from thread {}",
-            teb_address, thread_list.threads[0].raw.thread_id
-        );
 
         Ok(teb_address)
     }
@@ -149,25 +144,16 @@ impl<'a> ProcessTrait for MinidumpLoader<'a> {
     type Memory = MinidumpMemory<'a>;
 
     fn get_module_by_name(&self, name: &str) -> Option<ModuleInfo> {
-        self.modules
-            .iter()
-            .find(|module| {
-                let code_file = module.code_file();
-                code_file.to_lowercase().contains(&name.to_lowercase())
-            })
-            .map(|module| ModuleInfo {
-                name: module.code_file().to_string(),
-                base_address: module.base_address(),
-                size: module.size(),
-                path: Some(module.code_file().to_string()),
-            })
+        MinidumpLoader::get_module_by_name(self, name).map(|module| ModuleInfo {
+            name: module.code_file().to_string(),
+            base_address: module.base_address(),
+            size: module.size(),
+            path: Some(module.code_file().to_string()),
+        })
     }
-
     fn get_module_base_address(&self, name: &str) -> Option<u64> {
-        // Use the existing MinidumpLoader method
         MinidumpLoader::get_module_base_address(self, name)
     }
-
     fn list_modules(&self) -> Vec<ModuleInfo> {
         self.modules
             .iter()
@@ -179,48 +165,15 @@ impl<'a> ProcessTrait for MinidumpLoader<'a> {
             })
             .collect()
     }
-
     fn find_module_for_address(&self, address: u64) -> Option<(String, u64, u64)> {
-        self.modules.iter().find_map(|module| {
-            let base = module.base_address();
-            let size = module.size();
-            if address >= base && address < base + size {
-                let name = module.code_file();
-                let filename = name
-                    .rfind(['/', '\\'])
-                    .map(|pos| &name[pos + 1..])
-                    .unwrap_or(&*name)
-                    .to_string();
-                Some((filename, base, address - base))
-            } else {
-                None
-            }
-        })
+        MinidumpLoader::find_module_for_address(self, address)
     }
-
     fn create_memory(&self) -> Result<Self::Memory> {
         Ok(MinidumpMemory::new(self.dump)?)
     }
-
     fn get_teb_address(&self) -> Result<u64> {
-        let thread_list = self
-            .dump
-            .get_stream::<MinidumpThreadList>()
-            .with_context(|| "Failed to get thread list from minidump")?;
-
-        if thread_list.threads.is_empty() {
-            anyhow::bail!("No threads found in minidump");
-        }
-
-        let teb_address = thread_list.threads[0].raw.teb;
-        println!(
-            "Using TEB address 0x{:x} from thread {}",
-            teb_address, thread_list.threads[0].raw.thread_id
-        );
-
-        Ok(teb_address)
+        MinidumpLoader::get_teb_address(self)
     }
-
     fn get_architecture(&self) -> ProcessArchitecture {
         ProcessArchitecture::X64
     }
@@ -233,27 +186,21 @@ impl<'a> ProcessTrait for &MinidumpLoader<'a> {
     fn get_module_by_name(&self, name: &str) -> Option<ModuleInfo> {
         <MinidumpLoader<'a> as ProcessTrait>::get_module_by_name(*self, name)
     }
-
     fn get_module_base_address(&self, name: &str) -> Option<u64> {
         <MinidumpLoader<'a> as ProcessTrait>::get_module_base_address(*self, name)
     }
-
     fn list_modules(&self) -> Vec<ModuleInfo> {
         <MinidumpLoader<'a> as ProcessTrait>::list_modules(*self)
     }
-
     fn find_module_for_address(&self, address: u64) -> Option<(String, u64, u64)> {
         <MinidumpLoader<'a> as ProcessTrait>::find_module_for_address(*self, address)
     }
-
     fn create_memory(&self) -> Result<Self::Memory> {
         <MinidumpLoader<'a> as ProcessTrait>::create_memory(*self)
     }
-
     fn get_teb_address(&self) -> Result<u64> {
         <MinidumpLoader<'a> as ProcessTrait>::get_teb_address(*self)
     }
-
     fn get_architecture(&self) -> ProcessArchitecture {
         <MinidumpLoader<'a> as ProcessTrait>::get_architecture(*self)
     }
