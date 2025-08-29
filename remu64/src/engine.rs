@@ -1282,8 +1282,8 @@ impl<H: HookManager<M, PS>, M: MemoryTrait<PS>, const PS: u64> ExecutionContext<
     fn compare_floats_avx(&self, a: f32, b: f32, imm: u8) -> bool {
         // AVX comparison predicates (0-31)
         match imm & 0x1F {
-            0 => a == b,                                    // EQ_OQ (Equal, Ordered, Quiet)
-            1 => a < b,                                     // LT_OS (Less Than, Ordered, Signaling)
+            0 => a == b,                                   // EQ_OQ (Equal, Ordered, Quiet)
+            1 => a < b,                                    // LT_OS (Less Than, Ordered, Signaling)
             2 => a <= b, // LE_OS (Less Than or Equal, Ordered, Signaling)
             3 => a.is_nan() || b.is_nan(), // UNORD_Q (Unordered, Quiet)
             4 => !(a == b), // NEQ_UQ (Not Equal, Unordered, Quiet)
@@ -1321,38 +1321,38 @@ impl<H: HookManager<M, PS>, M: MemoryTrait<PS>, const PS: u64> ExecutionContext<
     fn compare_doubles_avx(&self, a: f64, b: f64, imm: u8) -> bool {
         // AVX comparison predicates (0-31) - same logic as floats but with f64
         match imm & 0x1F {
-            0 => a == b,                                    // EQ_OQ
-            1 => a < b,                                     // LT_OS
-            2 => a <= b,                                    // LE_OS
-            3 => a.is_nan() || b.is_nan(),                  // UNORD_Q
-            4 => !(a == b),                                 // NEQ_UQ
-            5 => !(a < b),                                  // NLT_US
-            6 => !(a <= b),                                 // NLE_US
-            7 => !(a.is_nan() || b.is_nan()),               // ORD_Q
-            8 => a == b || (a.is_nan() || b.is_nan()),      // EQ_UQ
-            9 => !(a >= b),                                 // NGE_US
-            10 => !(a > b),                                 // NGT_US
-            11 => false,                                    // FALSE_OQ
+            0 => a == b,                                   // EQ_OQ
+            1 => a < b,                                    // LT_OS
+            2 => a <= b,                                   // LE_OS
+            3 => a.is_nan() || b.is_nan(),                 // UNORD_Q
+            4 => !(a == b),                                // NEQ_UQ
+            5 => !(a < b),                                 // NLT_US
+            6 => !(a <= b),                                // NLE_US
+            7 => !(a.is_nan() || b.is_nan()),              // ORD_Q
+            8 => a == b || (a.is_nan() || b.is_nan()),     // EQ_UQ
+            9 => !(a >= b),                                // NGE_US
+            10 => !(a > b),                                // NGT_US
+            11 => false,                                   // FALSE_OQ
             12 => !((a == b) || a.is_nan() || b.is_nan()), // NEQ_OQ
-            13 => a >= b,                                   // GE_OS
-            14 => a > b,                                    // GT_OS
-            15 => true,                                     // TRUE_UQ
-            16 => a == b && !(a.is_nan() || b.is_nan()),    // EQ_OS
-            17 => a < b && !(a.is_nan() || b.is_nan()),     // LT_OQ
-            18 => a <= b && !(a.is_nan() || b.is_nan()),    // LE_OQ
-            19 => a.is_nan() || b.is_nan(),                 // UNORD_S
-            20 => a != b || (a.is_nan() || b.is_nan()),     // NEQ_US
-            21 => !(a < b) || (a.is_nan() || b.is_nan()),   // NLT_UQ
-            22 => !(a <= b) || (a.is_nan() || b.is_nan()),  // NLE_UQ
-            23 => !(a.is_nan() || b.is_nan()),              // ORD_S
-            24 => a == b,                                   // EQ_US
-            25 => !(a >= b) || (a.is_nan() || b.is_nan()),  // NGE_UQ
-            26 => !(a > b) || (a.is_nan() || b.is_nan()),   // NGT_UQ
-            27 => false,                                    // FALSE_OS
-            28 => a != b && !(a.is_nan() || b.is_nan()),    // NEQ_OS
-            29 => a >= b && !(a.is_nan() || b.is_nan()),    // GE_OQ
-            30 => a > b && !(a.is_nan() || b.is_nan()),     // GT_OQ
-            31 => true,                                     // TRUE_US
+            13 => a >= b,                                  // GE_OS
+            14 => a > b,                                   // GT_OS
+            15 => true,                                    // TRUE_UQ
+            16 => a == b && !(a.is_nan() || b.is_nan()),   // EQ_OS
+            17 => a < b && !(a.is_nan() || b.is_nan()),    // LT_OQ
+            18 => a <= b && !(a.is_nan() || b.is_nan()),   // LE_OQ
+            19 => a.is_nan() || b.is_nan(),                // UNORD_S
+            20 => a != b || (a.is_nan() || b.is_nan()),    // NEQ_US
+            21 => !(a < b) || (a.is_nan() || b.is_nan()),  // NLT_UQ
+            22 => !(a <= b) || (a.is_nan() || b.is_nan()), // NLE_UQ
+            23 => !(a.is_nan() || b.is_nan()),             // ORD_S
+            24 => a == b,                                  // EQ_US
+            25 => !(a >= b) || (a.is_nan() || b.is_nan()), // NGE_UQ
+            26 => !(a > b) || (a.is_nan() || b.is_nan()),  // NGT_UQ
+            27 => false,                                   // FALSE_OS
+            28 => a != b && !(a.is_nan() || b.is_nan()),   // NEQ_OS
+            29 => a >= b && !(a.is_nan() || b.is_nan()),   // GE_OQ
+            30 => a > b && !(a.is_nan() || b.is_nan()),    // GT_OQ
+            31 => true,                                    // TRUE_US
             _ => false,
         }
     }
