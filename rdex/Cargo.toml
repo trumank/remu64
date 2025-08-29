@@ -13,3 +13,4 @@ memmap2 = "0.9"
 iced-x86 = "1.21"
 clap = { version = "4.0", features = ["derive"] }
 colored = "2.0"
+pdb = { git = "https://github.com/trumank/pdb", version = "0.8.0" }

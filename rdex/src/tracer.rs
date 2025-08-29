@@ -122,7 +122,17 @@ impl InstructionTracer {
         self.formatter_output.clear();
         self.formatter
             .format(&instruction, &mut self.formatter_output);
-        let colored_disasm = self.formatter_output.get_result();
+
+        // Create a plain text version for proper width formatting
+        let mut plain = String::new();
+        self.formatter.format(&instruction, &mut plain);
+        let pad = 32usize.saturating_sub(plain.len() + (hex_bytes.len().saturating_sub(26)));
+
+        let colored_disasm = format!(
+            "{}{}",
+            self.formatter_output.get_result().trim(),
+            " ".repeat(pad)
+        );
 
         // Get register values
         let rax = engine.reg_read(Register::RAX);
@@ -146,36 +156,37 @@ impl InstructionTracer {
         let module_info = process.find_module_for_address(rip);
 
         // Try to get symbol information for the current instruction address
-        let symbol_info = symbolizer
-            .resolve_address(&engine.memory, rip)
-            .map(|s| s.name.clone());
+        let resolved_symbol = symbolizer.resolve_address(&engine.memory, rip);
 
-        // Format the address with symbol name preferred over module+offset
-        let address_str = match (module_info, symbol_info) {
-            (_, Some(symbol_name)) => {
-                format!("0x{:016x} ({})", rip, symbol_name.bright_cyan())
+        // Format the symbol information (no address since it's shown separately)
+        let symbol_str = match (module_info, resolved_symbol) {
+            (_, Some(resolved)) => {
+                if resolved.offset == 0 {
+                    format!("{}", resolved.symbol.name.bright_cyan())
+                } else {
+                    format!(
+                        "{}+0x{:x}",
+                        resolved.symbol.name.bright_cyan(),
+                        resolved.offset
+                    )
+                }
             }
             (Some((module_name, _base, offset)), None) => {
-                format!(
-                    "0x{:016x} ({}+0x{:x})",
-                    rip,
-                    module_name.green().bold(),
-                    offset
-                )
+                format!("{}+0x{:x}", module_name.green().bold(), offset)
             }
-            (None, None) => format!("0x{:016x}", rip).yellow().to_string(),
+            (None, None) => String::new(),
         };
 
         if self.full_trace {
             // Full trace mode - show all registers
             writeln!(
                 self.output,
-                "{} {}: {} [{}] ({} bytes)",
+                "{} 0x{:016x} {:26} {} {}",
                 format!("[{:06}]", self.instruction_count).bright_black(),
-                address_str,
-                colored_disasm,
+                rip,
                 hex_bytes.bright_magenta(),
-                instruction_bytes.len()
+                colored_disasm,
+                symbol_str
             )?;
 
             // Show all general-purpose registers in a compact format
@@ -261,17 +272,17 @@ impl InstructionTracer {
             let register_display = if used_registers.is_empty() {
                 String::new()
             } else {
-                format!(" | {}", used_registers.join(" "))
+                format!(" \t {}", used_registers.join(" "))
             };
 
             writeln!(
                 self.output,
-                "{} {}: {} [{}] ({} bytes){}",
+                "{} 0x{:016x} {:26} {} {}{}",
                 format!("[{:06}]", self.instruction_count).bright_black(),
-                address_str,
-                colored_disasm,
+                rip,
                 hex_bytes.bright_magenta(),
-                instruction_bytes.len(),
+                colored_disasm,
+                symbol_str,
                 register_display
             )?;
         }
@@ -282,7 +293,6 @@ impl InstructionTracer {
     pub fn trace_memory_access(
         &mut self,
         address: u64,
-        size: usize,
         is_write: bool,
         value: Option<u64>,
     ) -> Result<()> {
@@ -300,22 +310,20 @@ impl InstructionTracer {
             Some(val) => {
                 writeln!(
                     self.output,
-                    "{} {} @ {} ({} bytes): {}",
+                    "{} {} @ 0x{:016x}: {}",
                     "[MEMORY]".bright_black(),
                     access_type,
-                    format!("0x{:016x}", address).yellow(),
-                    size,
+                    address,
                     format!("0x{:x}", val).bright_white()
                 )?;
             }
             None => {
                 writeln!(
                     self.output,
-                    "{} {} @ {} ({} bytes)",
+                    "{} {} @ 0x{:016x}",
                     "[MEMORY]".bright_black(),
                     access_type,
-                    format!("0x{:016x}", address).yellow(),
-                    size
+                    address
                 )?;
             }
         }

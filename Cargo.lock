@@ -166,6 +166,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "fallible-iterator"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4443176a9f2c162692bd3d352d745ef9413eec5782a80d8fd6f8a1ac692a07f7"
+
+[[package]]
 name = "heck"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -248,7 +254,7 @@ dependencies = [
  "num-traits",
  "procfs-core",
  "range-map",
- "scroll",
+ "scroll 0.12.0",
  "thiserror",
  "time",
  "tracing",
@@ -266,7 +272,7 @@ dependencies = [
  "num-derive",
  "num-traits",
  "range-map",
- "scroll",
+ "scroll 0.12.0",
  "smart-default",
 ]
 
@@ -307,6 +313,16 @@ name = "once_cell_polyfill"
 version = "1.70.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a4895175b425cb1f87721b59f0f286c2092bd4af812243672510e1ac53e2e0ad"
+
+[[package]]
+name = "pdb"
+version = "0.8.0"
+source = "git+https://github.com/trumank/pdb#7053e702967a70f87c7a1d6598ad9a1edf6f62d1"
+dependencies = [
+ "fallible-iterator",
+ "scroll 0.11.0",
+ "uuid",
+]
 
 [[package]]
 name = "pin-project-lite"
@@ -367,6 +383,7 @@ dependencies = [
  "iced-x86",
  "memmap2",
  "minidump",
+ "pdb",
  "remu64",
 ]
 
@@ -383,6 +400,12 @@ name = "rustversion"
 version = "1.0.22"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b39cdef0fa800fc44525c84ccb54a029961a8215f9619753635a9c0d2538d46d"
+
+[[package]]
+name = "scroll"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "04c565b551bafbef4157586fa379538366e4385d42082f255bfd96e4fe8519da"
 
 [[package]]
 name = "scroll"

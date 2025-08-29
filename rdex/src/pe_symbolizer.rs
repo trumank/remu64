@@ -1,8 +1,10 @@
 use std::collections::HashMap;
+use std::path::Path;
 
 use crate::process_trait::ProcessTrait;
-use crate::symbolizer::{SymbolInfo, Symbolizer};
+use crate::symbolizer::{ResolvedSymbol, SymbolInfo, Symbolizer};
 use anyhow::{Result, anyhow};
+use pdb::FallibleIterator;
 use remu64::memory::MemoryTrait;
 
 #[derive(Debug, Clone)]
@@ -14,16 +16,41 @@ struct ModuleRange {
     analyzed: bool,
 }
 
+#[derive(Debug, Clone)]
+pub struct PdbInfo {
+    pub guid: [u8; 16],
+    pub age: u32,
+    pub filename: String,
+}
+
+#[derive(Debug, Clone)]
+struct ProcedureRange {
+    start: u64,
+    end: u64,
+    symbol: SymbolInfo,
+}
+
+// Hash bucket approach for fast range lookups
+// Bucket size: 4KB (page size) for good cache locality and reasonable bucket fill
+const BUCKET_SIZE: u64 = 4096;
+
+#[derive(Debug, Default)]
+struct RangeBucket {
+    ranges: Vec<ProcedureRange>,
+}
+
 /// A symbolizer that resolves symbols from PE files loaded in a minidump
 pub struct PeSymbolizer {
     module_ranges: Vec<ModuleRange>, // sorted by start address for binary search
-    symbol_cache: SymbolCache,
+    symbol_cache: SymbolCache,       // Point symbols (exports, imports, data)
+    pdb_info_cache: HashMap<u64, Option<PdbInfo>>, // base_address -> PdbInfo
+    range_buckets: HashMap<u64, RangeBucket>, // bucket_id -> ranges in bucket
 }
 
 type SymbolCache = HashMap<u64, SymbolInfo>;
 
 impl<M: MemoryTrait> Symbolizer<M> for PeSymbolizer {
-    fn resolve_address(&mut self, memory: &M, address: u64) -> Option<&SymbolInfo> {
+    fn resolve_address(&mut self, memory: &M, address: u64) -> Option<ResolvedSymbol<'_>> {
         // Use binary search to find the module containing this address
         let module_idx = self.module_ranges.binary_search_by(|range| {
             if address < range.start {
@@ -41,6 +68,8 @@ impl<M: MemoryTrait> Symbolizer<M> for PeSymbolizer {
             if !module.analyzed {
                 let _res = analyze_module(
                     &mut self.symbol_cache,
+                    &mut self.pdb_info_cache,
+                    &mut self.range_buckets,
                     &module.name,
                     module.base_address,
                     memory,
@@ -49,7 +78,7 @@ impl<M: MemoryTrait> Symbolizer<M> for PeSymbolizer {
             module.analyzed = true;
         }
 
-        self.resolve_symbol(address)
+        self.resolve_symbol_with_offset(address)
     }
 }
 
@@ -100,16 +129,47 @@ impl PeSymbolizer {
         Self {
             module_ranges,
             symbol_cache: HashMap::new(),
+            pdb_info_cache: HashMap::new(),
+            range_buckets: HashMap::new(),
         }
     }
 
-    pub fn resolve_symbol(&self, address: u64) -> Option<&SymbolInfo> {
-        self.symbol_cache.get(&address)
+    pub fn resolve_symbol_with_offset(&self, address: u64) -> Option<ResolvedSymbol<'_>> {
+        if let Some(symbol) = self.find_procedure_symbol_with_offset(address) {
+            Some(symbol)
+        } else {
+            self.symbol_cache
+                .get(&address)
+                .map(|symbol| ResolvedSymbol { symbol, offset: 0 })
+        }
+    }
+
+    fn find_procedure_symbol_with_offset(&self, address: u64) -> Option<ResolvedSymbol<'_>> {
+        let bucket_id = address / BUCKET_SIZE;
+
+        if let Some(bucket) = self.range_buckets.get(&bucket_id) {
+            for range in &bucket.ranges {
+                if address >= range.start && address < range.end {
+                    return Some(ResolvedSymbol {
+                        symbol: &range.symbol,
+                        offset: address - range.start,
+                    });
+                }
+            }
+        }
+
+        None
+    }
+
+    pub fn get_pdb_info(&self, base_address: u64) -> Option<&PdbInfo> {
+        self.pdb_info_cache.get(&base_address)?.as_ref()
     }
 }
 
 fn analyze_module<M>(
     cache: &mut SymbolCache,
+    pdb_cache: &mut HashMap<u64, Option<PdbInfo>>,
+    range_buckets: &mut HashMap<u64, RangeBucket>,
     module_name: &str,
     base_address: u64,
     memory: &M,
@@ -160,6 +220,21 @@ where
             module_name,
         )?;
     }
+
+    // Parse debug directory (data directory entry 6)
+    let pdb_info = if let Some(debug_dir) = get_data_directory(memory, data_dir_offset, 6)? {
+        parse_debug_directory(memory, base_address + debug_dir as u64, base_address)?
+    } else {
+        None
+    };
+
+    // Attempt to load symbols from PDB file if available
+    if let Some(ref pdb_info) = pdb_info {
+        let _ = load_pdb_symbols(cache, range_buckets, &pdb_info.filename, base_address);
+    }
+
+    pdb_cache.insert(base_address, pdb_info);
+
     Ok(())
 }
 
@@ -325,4 +400,207 @@ fn parse_export_table<M: MemoryTrait>(
     }
 
     Ok(())
+}
+
+fn parse_debug_directory<M: MemoryTrait>(
+    memory: &M,
+    debug_dir_address: u64,
+    base_address: u64,
+) -> Result<Option<PdbInfo>> {
+    // Debug directory entry structure:
+    // DWORD Characteristics;    // 0x00 - unused
+    // DWORD TimeDateStamp;      // 0x04
+    // WORD  MajorVersion;       // 0x08
+    // WORD  MinorVersion;       // 0x0A
+    // DWORD Type;               // 0x0C - IMAGE_DEBUG_TYPE_CODEVIEW = 2
+    // DWORD SizeOfData;         // 0x10
+    // DWORD AddressOfRawData;   // 0x14 - RVA to debug info
+    // DWORD PointerToRawData;   // 0x18 - file offset (we use RVA)
+
+    let mut offset = 0;
+    loop {
+        let entry_address = debug_dir_address + offset;
+
+        // Read debug directory entry
+        let characteristics = memory.read_u32(entry_address)?;
+        // let timestamp = memory.read_u32(entry_address + 4)?;
+        // let major_version = memory.read_u16(entry_address + 8)?;
+        // let minor_version = memory.read_u16(entry_address + 10)?;
+        let debug_type = memory.read_u32(entry_address + 12)?;
+        let size_of_data = memory.read_u32(entry_address + 16)?;
+        let address_of_raw_data = memory.read_u32(entry_address + 20)?;
+
+        // Check if this is the end of debug directory entries
+        if characteristics == 0 && debug_type == 0 && size_of_data == 0 && address_of_raw_data == 0
+        {
+            break;
+        }
+
+        // IMAGE_DEBUG_TYPE_CODEVIEW = 2
+        if debug_type == 2 && address_of_raw_data != 0 && size_of_data >= 24 {
+            let debug_data_address = base_address + address_of_raw_data as u64;
+
+            // Read CodeView signature (should be "RSDS" for PDB 7.0)
+            let mut signature = [0; 4];
+            memory.read(debug_data_address, &mut signature)?;
+            if &signature == b"RSDS" {
+                // Read PDB GUID (16 bytes)
+                let mut guid = [0u8; 16];
+                memory.read(debug_data_address + 4, &mut guid)?;
+
+                // Read age (4 bytes)
+                let age = memory.read_u32(debug_data_address + 20)?;
+
+                // Read filename (null-terminated string after age)
+                let filename_address = debug_data_address + 24;
+                let filename = read_cstring(memory, filename_address)?;
+
+                return Ok(Some(PdbInfo {
+                    guid,
+                    age,
+                    filename,
+                }));
+            }
+        }
+
+        offset += 28; // Size of IMAGE_DEBUG_DIRECTORY entry
+    }
+
+    Ok(None)
+}
+
+fn load_pdb_symbols(
+    cache: &mut SymbolCache,
+    range_buckets: &mut HashMap<u64, RangeBucket>,
+    pdb_filename: &str,
+    base_address: u64,
+) -> Result<()> {
+    // Try to find PDB file in current directory
+    let pdb_path = Path::new(pdb_filename);
+    let pdb_path = if pdb_path.exists() {
+        pdb_path.to_path_buf()
+    } else {
+        // Try just the filename in current directory
+        Path::new(".").join(
+            pdb_path
+                .file_name()
+                .ok_or_else(|| anyhow!("Invalid PDB filename"))?,
+        )
+    };
+
+    if !pdb_path.exists() {
+        return Ok(());
+    }
+
+    let file = std::fs::File::open(&pdb_path)?;
+    let mut pdb = pdb::PDB::open(file)?;
+
+    // Get address map for RVA translation
+    let address_map = pdb.address_map()?;
+
+    // Load global symbols
+    if let Ok(symbol_table) = pdb.global_symbols() {
+        load_symbols_from_iter(
+            cache,
+            range_buckets,
+            symbol_table.iter(),
+            base_address,
+            &address_map,
+        )?;
+    }
+
+    // Load module-specific symbols
+    if let Ok(dbi) = pdb.debug_information()
+        && let Ok(mut modules) = dbi.modules()
+    {
+        while let Some(module) = modules.next()? {
+            if let Some(info) = pdb.module_info(&module)?
+                && let Ok(symbols) = info.symbols()
+            {
+                load_symbols_from_iter(cache, range_buckets, symbols, base_address, &address_map)?;
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn load_symbols_from_iter(
+    cache: &mut SymbolCache,
+    range_buckets: &mut HashMap<u64, RangeBucket>,
+    mut symbols: pdb::SymbolIter<'_>,
+    base_address: u64,
+    address_map: &pdb::AddressMap,
+) -> Result<()> {
+    while let Some(symbol) = symbols.next()? {
+        if let Ok(symbol_data) = symbol.parse() {
+            match symbol_data {
+                pdb::SymbolData::Public(data) => {
+                    if let Some(rva) = data.offset.to_rva(address_map) {
+                        let address = base_address + rva.0 as u64;
+                        let symbol_info = SymbolInfo {
+                            name: data.name.to_string().into_owned(),
+                            module: "pdb".to_string(),
+                        };
+                        cache.insert(address, symbol_info);
+                    }
+                }
+                pdb::SymbolData::Procedure(data) => {
+                    if let Some(rva) = data.offset.to_rva(address_map) {
+                        let start_address = base_address + rva.0 as u64;
+                        let end_address = start_address + data.len as u64;
+                        let symbol_info = SymbolInfo {
+                            name: data.name.to_string().into_owned(),
+                            module: "pdb".to_string(),
+                        };
+
+                        // Add to range buckets for fast interval lookup
+                        add_procedure_range_to_buckets(
+                            range_buckets,
+                            start_address,
+                            end_address,
+                            symbol_info,
+                        );
+                    }
+                }
+                pdb::SymbolData::Data(data) => {
+                    if let Some(rva) = data.offset.to_rva(address_map) {
+                        let address = base_address + rva.0 as u64;
+                        let symbol_info = SymbolInfo {
+                            name: data.name.to_string().into_owned(),
+                            module: "pdb".to_string(),
+                        };
+                        cache.insert(address, symbol_info);
+                    }
+                }
+                _ => {} // Ignore other symbol types for now
+            }
+        }
+    }
+    Ok(())
+}
+
+fn add_procedure_range_to_buckets(
+    range_buckets: &mut HashMap<u64, RangeBucket>,
+    start: u64,
+    end: u64,
+    symbol: SymbolInfo,
+) {
+    let range = ProcedureRange { start, end, symbol };
+
+    // Add this range to all buckets it overlaps
+    let start_bucket = start / BUCKET_SIZE;
+    let end_bucket = if end > start {
+        (end - 1) / BUCKET_SIZE
+    } else {
+        start_bucket
+    };
+
+    for bucket_id in start_bucket..=end_bucket {
+        range_buckets
+            .entry(bucket_id)
+            .or_default()
+            .ranges
+            .push(range.clone());
+    }
 }
