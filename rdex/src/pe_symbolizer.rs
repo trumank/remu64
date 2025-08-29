@@ -49,8 +49,12 @@ pub struct PeSymbolizer {
 
 type SymbolCache = HashMap<u64, SymbolInfo>;
 
-impl<M: MemoryTrait> Symbolizer<M> for PeSymbolizer {
-    fn resolve_address(&mut self, memory: &M, address: u64) -> Option<ResolvedSymbol<'_>> {
+impl Symbolizer for PeSymbolizer {
+    fn resolve_address(
+        &mut self,
+        memory: &dyn MemoryTrait,
+        address: u64,
+    ) -> Option<ResolvedSymbol<'_>> {
         // Use binary search to find the module containing this address
         let module_idx = self.module_ranges.binary_search_by(|range| {
             if address < range.start {
@@ -82,7 +86,7 @@ impl<M: MemoryTrait> Symbolizer<M> for PeSymbolizer {
     }
 }
 
-fn read_cstring<M: MemoryTrait>(memory: &M, mut address: u64) -> Result<String> {
+fn read_cstring(memory: &dyn MemoryTrait, mut address: u64) -> Result<String> {
     let mut result = Vec::new();
     loop {
         let mut byte = 0;
@@ -166,17 +170,14 @@ impl PeSymbolizer {
     }
 }
 
-fn analyze_module<M>(
+fn analyze_module(
     cache: &mut SymbolCache,
     pdb_cache: &mut HashMap<u64, Option<PdbInfo>>,
     range_buckets: &mut HashMap<u64, RangeBucket>,
     module_name: &str,
     base_address: u64,
-    memory: &M,
-) -> Result<()>
-where
-    M: MemoryTrait,
-{
+    memory: &dyn MemoryTrait,
+) -> Result<()> {
     // Parse DOS header
     let signature = memory.read_u16(base_address)?;
     if signature != 0x5A4D {
@@ -238,8 +239,8 @@ where
     Ok(())
 }
 
-fn get_data_directory<M: MemoryTrait>(
-    memory: &M,
+fn get_data_directory(
+    memory: &dyn MemoryTrait,
     data_dir_base: u64,
     index: u32,
 ) -> Result<Option<u32>> {
@@ -254,9 +255,9 @@ fn get_data_directory<M: MemoryTrait>(
     Ok(Some(virtual_address))
 }
 
-fn parse_import_table<M: MemoryTrait>(
+fn parse_import_table(
     cache: &mut SymbolCache,
-    memory: &M,
+    memory: &dyn MemoryTrait,
     import_table_address: u64,
     base_address: u64,
 ) -> Result<()> {
@@ -300,9 +301,9 @@ fn parse_import_table<M: MemoryTrait>(
     Ok(())
 }
 
-fn parse_import_address_table<M: MemoryTrait>(
+fn parse_import_address_table(
     cache: &mut SymbolCache,
-    memory: &M,
+    memory: &dyn MemoryTrait,
     lookup_table_address: u64,
     iat_address: u64,
     base_address: u64,
@@ -338,9 +339,9 @@ fn parse_import_address_table<M: MemoryTrait>(
     Ok(())
 }
 
-fn parse_export_table<M: MemoryTrait>(
+fn parse_export_table(
     cache: &mut SymbolCache,
-    memory: &M,
+    memory: &dyn MemoryTrait,
     export_table_address: u64,
     base_address: u64,
     module_name: &str,
@@ -402,8 +403,8 @@ fn parse_export_table<M: MemoryTrait>(
     Ok(())
 }
 
-fn parse_debug_directory<M: MemoryTrait>(
-    memory: &M,
+fn parse_debug_directory(
+    memory: &dyn MemoryTrait,
     debug_dir_address: u64,
     base_address: u64,
 ) -> Result<Option<PdbInfo>> {

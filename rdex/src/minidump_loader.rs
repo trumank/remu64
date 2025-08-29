@@ -56,31 +56,6 @@ impl<'a> MinidumpLoader<'a> {
             .map(|module| module.base_address())
     }
 
-    pub fn read_memory(&self, address: u64, size: usize) -> Result<Vec<u8>> {
-        if let Some(memory_list) = self.dump.get_memory()
-            && let Some(memory) = memory_list.memory_at_address(address)
-        {
-            let bytes = match memory {
-                UnifiedMemory::Memory(mem) => mem.bytes,
-                UnifiedMemory::Memory64(mem) => mem.bytes,
-            };
-
-            let base_address = match memory {
-                UnifiedMemory::Memory(mem) => mem.base_address,
-                UnifiedMemory::Memory64(mem) => mem.base_address,
-            };
-
-            let offset = (address - base_address) as usize;
-            let available_size = std::cmp::min(size, bytes.len().saturating_sub(offset));
-
-            if offset < bytes.len() && available_size > 0 {
-                return Ok(bytes[offset..offset + available_size].to_vec());
-            }
-        }
-
-        anyhow::bail!("Memory address 0x{:x} not found in minidump", address);
-    }
-
     pub fn get_memory_regions(&self) -> &HashMap<u64, (u64, usize)> {
         &self.memory_regions
     }

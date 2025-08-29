@@ -6,21 +6,19 @@ use iced_x86::Formatter;
 use remu64::memory::MemoryTrait;
 use remu64::{CowMemory, EmulatorError, Engine, HookAction, HookManager};
 
-pub struct ExecutionHooks<'a, 'b, P, S>
+pub struct ExecutionHooks<'a, 'b, P>
 where
     P: ProcessTrait,
-    S: Symbolizer<CowMemory<P::Memory>>,
 {
     pub process: &'a P,
     pub tracer: &'b mut InstructionTracer,
-    pub symbolizer: &'b mut S,
+    pub symbolizer: Option<&'b mut dyn Symbolizer>,
     pub instruction_count: u64,
 }
 
-impl<'a, 'b, P, S> HookManager<CowMemory<P::Memory>> for ExecutionHooks<'a, 'b, P, S>
+impl<'a, 'b, P> HookManager<CowMemory<P::Memory>> for ExecutionHooks<'a, 'b, P>
 where
     P: ProcessTrait,
-    S: Symbolizer<CowMemory<P::Memory>>,
 {
     fn on_code(
         &mut self,
@@ -39,7 +37,7 @@ where
                     &instruction_bytes,
                     engine,
                     self.process,
-                    self.symbolizer,
+                    self.symbolizer.as_deref_mut(),
                 )
                 .unwrap();
         }
@@ -51,7 +49,7 @@ where
 pub struct ExecutionController;
 
 impl ExecutionController {
-    pub fn execute_with_hooks<M: MemoryTrait, S: Symbolizer<M>, H: HookManager<M>>(
+    pub fn execute_with_hooks<M: MemoryTrait, H: HookManager<M>>(
         engine: &mut Engine<M>,
         start_address: u64,
         end_address: u64,

@@ -1,40 +1,29 @@
 use crate::execution_controller::{ExecutionController, ExecutionHooks};
 use crate::fastcall::{ArgumentType, CallingConvention, FString};
 use crate::process_trait::ProcessTrait;
-use crate::symbolizer::{NoSymbolizer, Symbolizer};
+use crate::symbolizer::Symbolizer;
 use crate::tracer::InstructionTracer;
 use crate::vm_context::VMContext;
 use anyhow::Result;
-use remu64::{CowMemory, Register};
+use remu64::Register;
 
-pub struct FunctionExecutor<P, S = NoSymbolizer>
+pub struct FunctionExecutor<P>
 where
     P: ProcessTrait,
-    S: Symbolizer<CowMemory<P::Memory>>,
 {
     pub vm_context: VMContext<P::Memory>,
     pub process: P,
     pub stack_base: u64,
     pub tracer: InstructionTracer,
     pub fstring_addresses: Vec<u64>,
-    pub symbolizer: S,
+    pub symbolizer: Option<Box<dyn Symbolizer>>,
 }
 
-impl<P> FunctionExecutor<P, NoSymbolizer>
+impl<P> FunctionExecutor<P>
 where
     P: ProcessTrait,
 {
-    pub fn new(process: P) -> Result<FunctionExecutor<P, NoSymbolizer>> {
-        Self::new_with_symbolizer(process, NoSymbolizer)
-    }
-}
-
-impl<P, S> FunctionExecutor<P, S>
-where
-    P: ProcessTrait,
-    S: Symbolizer<CowMemory<P::Memory>>,
-{
-    pub fn new_with_symbolizer(process: P, symbolizer: S) -> Result<FunctionExecutor<P, S>> {
+    pub fn new(process: P) -> Result<Self> {
         let vm_context = VMContext::new(&process)?;
         let stack_base = 0x7fff_f000_0000u64;
         let tracer = InstructionTracer::new(false);
@@ -45,15 +34,21 @@ where
             stack_base,
             tracer,
             fstring_addresses: Vec::new(),
-            symbolizer,
+            symbolizer: None,
         };
 
         executor.setup_stack()?;
         Ok(executor)
     }
 
+    pub fn new_with_symbolizer(process: P, symbolizer: Box<dyn Symbolizer>) -> Result<Self> {
+        let mut executor = Self::new(process)?;
+        executor.symbolizer = Some(symbolizer);
+        Ok(executor)
+    }
+
     fn setup_stack(&mut self) -> Result<()> {
-        let stack_size = 0x10000;
+        let stack_size = 0x10000000;
         self.vm_context.setup_stack(self.stack_base, stack_size)?;
 
         // Set initial stack pointer
@@ -82,10 +77,13 @@ where
             process: &self.process,
             tracer: &mut self.tracer,
             instruction_count: 0,
-            symbolizer: &mut self.symbolizer,
+            symbolizer: match &mut self.symbolizer {
+                Some(symbolizer) => Some(symbolizer.as_mut()),
+                None => None,
+            },
         };
 
-        ExecutionController::execute_with_hooks::<_, S, _>(
+        ExecutionController::execute_with_hooks(
             &mut self.vm_context.engine,
             function_address,
             return_address,

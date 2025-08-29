@@ -92,13 +92,13 @@ impl InstructionTracer {
         self.full_trace
     }
 
-    pub fn trace_instruction<M: MemoryTrait, P: ProcessTrait, S: Symbolizer<M>>(
+    pub fn trace_instruction<M: MemoryTrait, P: ProcessTrait>(
         &mut self,
         rip: u64,
         instruction_bytes: &[u8],
         engine: &Engine<M>,
         process: &P,
-        symbolizer: &mut S,
+        symbolizer: Option<&mut (dyn Symbolizer + '_)>,
     ) -> Result<()> {
         if !self.enabled {
             return Ok(());
@@ -156,7 +156,7 @@ impl InstructionTracer {
         let module_info = process.find_module_for_address(rip);
 
         // Try to get symbol information for the current instruction address
-        let resolved_symbol = symbolizer.resolve_address(&engine.memory, rip);
+        let resolved_symbol = symbolizer.and_then(|s| s.resolve_address(&engine.memory, rip));
 
         // Format the symbol information (no address since it's shown separately)
         let symbol_str = match (module_info, resolved_symbol) {

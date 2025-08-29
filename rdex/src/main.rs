@@ -125,7 +125,7 @@ fn main() -> Result<()> {
 
     println!("Creating function executor...");
     // Always use PE symbolizer - it won't do anything if tracing is disabled
-    let pe_symbolizer = PeSymbolizer::new(&loader);
+    let pe_symbolizer = Box::new(PeSymbolizer::new(&loader));
     let mut executor = DumpExec::create_executor_with_symbolizer(&loader, pe_symbolizer)?;
 
     if cli.trace {
