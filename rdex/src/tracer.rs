@@ -1,4 +1,5 @@
 use crate::process_trait::ProcessTrait;
+use crate::symbolizer::Symbolizer;
 use anyhow::Result;
 use colored::*;
 use iced_x86::{
@@ -91,12 +92,13 @@ impl InstructionTracer {
         self.full_trace
     }
 
-    pub fn trace_instruction<M: MemoryTrait, P: ProcessTrait>(
+    pub fn trace_instruction<M: MemoryTrait, P: ProcessTrait, S: Symbolizer<M>>(
         &mut self,
         rip: u64,
         instruction_bytes: &[u8],
         engine: &Engine<M>,
-        process: Option<&P>,
+        process: &P,
+        symbolizer: &mut S,
     ) -> Result<()> {
         if !self.enabled {
             return Ok(());
@@ -141,11 +143,19 @@ impl InstructionTracer {
         let r15 = engine.reg_read(Register::R15);
 
         // Check if RIP is in a known module
-        let module_info = process.and_then(|p| p.find_module_for_address(rip));
+        let module_info = process.find_module_for_address(rip);
 
-        // Format the address with module information and always show RIP
-        let address_str = match module_info {
-            Some((module_name, _base, offset)) => {
+        // Try to get symbol information for the current instruction address
+        let symbol_info = symbolizer
+            .resolve_address(&engine.memory, rip)
+            .map(|s| s.name.clone());
+
+        // Format the address with symbol name preferred over module+offset
+        let address_str = match (module_info, symbol_info) {
+            (_, Some(symbol_name)) => {
+                format!("0x{:016x} ({})", rip, symbol_name.bright_cyan())
+            }
+            (Some((module_name, _base, offset)), None) => {
                 format!(
                     "0x{:016x} ({}+0x{:x})",
                     rip,
@@ -153,7 +163,7 @@ impl InstructionTracer {
                     offset
                 )
             }
-            None => format!("0x{:016x}", rip).yellow().to_string(),
+            (None, None) => format!("0x{:016x}", rip).yellow().to_string(),
         };
 
         if self.full_trace {

@@ -1,5 +1,6 @@
 use anyhow::Result;
 use clap::Parser;
+use rdex::pe_symbolizer::PeSymbolizer;
 use rdex::{ArgumentType, DumpExec, FName, FString};
 
 #[derive(Parser)]
@@ -123,7 +124,9 @@ fn main() -> Result<()> {
     }
 
     println!("Creating function executor...");
-    let mut executor = DumpExec::create_executor(&loader)?;
+    // Always use PE symbolizer - it won't do anything if tracing is disabled
+    let pe_symbolizer = PeSymbolizer::new(&loader);
+    let mut executor = DumpExec::create_executor_with_symbolizer(&loader, pe_symbolizer)?;
 
     if cli.trace {
         println!("Enabling instruction tracing...");

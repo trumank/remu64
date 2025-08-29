@@ -35,8 +35,7 @@ fn allocate_memory<P: rdex::ProcessTrait>(
     let alloc_base = 0x7fff_e000_0000u64;
 
     // Round up size to next page boundary
-    let aligned_size = size.div_ceil(DEFAULT_PAGE_SIZE as usize)
-        * DEFAULT_PAGE_SIZE as usize;
+    let aligned_size = size.div_ceil(DEFAULT_PAGE_SIZE as usize) * DEFAULT_PAGE_SIZE as usize;
 
     executor.vm_context.engine.memory.map(
         alloc_base,

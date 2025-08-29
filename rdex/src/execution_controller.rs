@@ -1,25 +1,46 @@
 use crate::process_trait::ProcessTrait;
+use crate::symbolizer::Symbolizer;
 use crate::tracer::InstructionTracer;
 use anyhow::Result;
 use iced_x86::Formatter;
 use remu64::memory::MemoryTrait;
-use remu64::{EmulatorError, Engine, HookManager};
+use remu64::{CowMemory, EmulatorError, Engine, HookManager};
 
-pub struct ExecutionHooks<'a, 'b, P: ProcessTrait> {
+pub struct ExecutionHooks<'a, 'b, P, S>
+where
+    P: ProcessTrait,
+    S: Symbolizer<CowMemory<P::Memory>>,
+{
     pub process: &'a P,
     pub tracer: &'b mut InstructionTracer,
+    pub symbolizer: &'b mut S,
     pub instruction_count: u64,
 }
 
-impl<'a, 'b, P: ProcessTrait, M: MemoryTrait> HookManager<M> for ExecutionHooks<'a, 'b, P> {
-    fn on_code(&mut self, engine: &mut Engine<M>, address: u64, size: usize) -> remu64::Result<()> {
+impl<'a, 'b, P, S> HookManager<CowMemory<P::Memory>> for ExecutionHooks<'a, 'b, P, S>
+where
+    P: ProcessTrait,
+    S: Symbolizer<CowMemory<P::Memory>>,
+{
+    fn on_code(
+        &mut self,
+        engine: &mut Engine<CowMemory<P::Memory>>,
+        address: u64,
+        size: usize,
+    ) -> remu64::Result<()> {
         self.instruction_count += 1;
 
         if self.tracer.is_enabled() {
             let mut instruction_bytes = vec![0; size];
             engine.memory.read(address, &mut instruction_bytes).unwrap();
             self.tracer
-                .trace_instruction(address, &instruction_bytes, engine, Some(self.process))
+                .trace_instruction(
+                    address,
+                    &instruction_bytes,
+                    engine,
+                    self.process,
+                    self.symbolizer,
+                )
                 .unwrap();
         }
 
@@ -30,11 +51,11 @@ impl<'a, 'b, P: ProcessTrait, M: MemoryTrait> HookManager<M> for ExecutionHooks<
 pub struct ExecutionController;
 
 impl ExecutionController {
-    pub fn execute_with_hooks<M: MemoryTrait>(
+    pub fn execute_with_hooks<M: MemoryTrait, S: Symbolizer<M>, H: HookManager<M>>(
         engine: &mut Engine<M>,
         start_address: u64,
         end_address: u64,
-        hooks: &mut impl HookManager<M>,
+        hooks: &mut H,
     ) -> Result<()> {
         match engine.emu_start_with_hooks(start_address, end_address, 0, 0, hooks) {
             Ok(()) => Ok(()),

@@ -1,21 +1,40 @@
 use crate::execution_controller::{ExecutionController, ExecutionHooks};
 use crate::fastcall::{ArgumentType, CallingConvention, FString};
 use crate::process_trait::ProcessTrait;
+use crate::symbolizer::{NoSymbolizer, Symbolizer};
 use crate::tracer::InstructionTracer;
 use crate::vm_context::VMContext;
 use anyhow::Result;
-use remu64::Register;
+use remu64::{CowMemory, Register};
 
-pub struct FunctionExecutor<P: ProcessTrait> {
+pub struct FunctionExecutor<P, S = NoSymbolizer>
+where
+    P: ProcessTrait,
+    S: Symbolizer<CowMemory<P::Memory>>,
+{
     pub vm_context: VMContext<P::Memory>,
     pub process: P,
     pub stack_base: u64,
     pub tracer: InstructionTracer,
     pub fstring_addresses: Vec<u64>,
+    pub symbolizer: S,
 }
 
-impl<P: ProcessTrait> FunctionExecutor<P> {
-    pub fn new(process: P) -> Result<FunctionExecutor<P>> {
+impl<P> FunctionExecutor<P, NoSymbolizer>
+where
+    P: ProcessTrait,
+{
+    pub fn new(process: P) -> Result<FunctionExecutor<P, NoSymbolizer>> {
+        Self::new_with_symbolizer(process, NoSymbolizer)
+    }
+}
+
+impl<P, S> FunctionExecutor<P, S>
+where
+    P: ProcessTrait,
+    S: Symbolizer<CowMemory<P::Memory>>,
+{
+    pub fn new_with_symbolizer(process: P, symbolizer: S) -> Result<FunctionExecutor<P, S>> {
         let vm_context = VMContext::new(&process)?;
         let stack_base = 0x7fff_f000_0000u64;
         let tracer = InstructionTracer::new(false);
@@ -26,6 +45,7 @@ impl<P: ProcessTrait> FunctionExecutor<P> {
             stack_base,
             tracer,
             fstring_addresses: Vec::new(),
+            symbolizer,
         };
 
         executor.setup_stack()?;
@@ -62,9 +82,10 @@ impl<P: ProcessTrait> FunctionExecutor<P> {
             process: &self.process,
             tracer: &mut self.tracer,
             instruction_count: 0,
+            symbolizer: &mut self.symbolizer,
         };
 
-        ExecutionController::execute_with_hooks(
+        ExecutionController::execute_with_hooks::<_, S, _>(
             &mut self.vm_context.engine,
             function_address,
             return_address,
