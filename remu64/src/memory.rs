@@ -32,39 +32,94 @@ bitflags! {
     }
 }
 
-/// Trait for memory regions within a memory system.
-///
 /// **IMPORTANT: Memory regions must be aligned to page boundaries.**
-/// The start address returned by `range()` must be page-aligned, and the
-/// region size must be a multiple of the page size.
-pub trait MemoryRegionTrait {
-    fn range(&self) -> Range<u64>;
-    fn data(&self) -> &[u8];
-    fn data_mut(&mut self) -> &mut [u8];
-    fn perms(&self) -> Permission;
-    fn contains(&self, addr: u64) -> bool {
-        self.range().contains(&addr)
+#[derive(Clone)]
+pub struct MemoryRegion {
+    pub address: u64,
+    pub data: Vec<u8>,
+    pub permissions: Permission,
+}
+/// **IMPORTANT: Memory regions must be aligned to page boundaries.**
+#[derive(Clone)]
+pub struct MemoryRegionRef<'a> {
+    pub address: u64,
+    pub data: &'a [u8],
+    pub permissions: Permission,
+}
+/// **IMPORTANT: Memory regions must be aligned to page boundaries.**
+pub struct MemoryRegionMut<'a> {
+    pub address: u64,
+    pub data: &'a mut [u8],
+    pub permissions: Permission,
+}
+
+macro_rules! region {
+    ($name:ident) => {
+        pub fn start(&self) -> u64 {
+            self.address
+        }
+        pub fn end(&self) -> u64 {
+            self.address + self.data.len() as u64
+        }
+        pub fn range(&self) -> Range<u64> {
+            self.start()..self.end()
+        }
+        pub fn contains(&self, addr: u64) -> bool {
+            self.range().contains(&addr)
+        }
+        pub fn size(&self) -> usize {
+            (self.end() - self.start()) as usize
+        }
+        pub fn offset(&self, addr: u64) -> usize {
+            assert!(self.contains(addr));
+            (addr - self.address) as usize
+        }
+    };
+}
+impl MemoryRegion {
+    region!(MemoryRegionOwned);
+}
+impl MemoryRegionRef<'_> {
+    region!(MemoryRegionOwned);
+}
+impl MemoryRegionMut<'_> {
+    region!(MemoryRegionOwned);
+}
+
+impl MemoryRegion {
+    pub fn new(address: u64, size: usize, permissions: Permission) -> Self {
+        assert_valid_region(address, size, DEFAULT_PAGE_SIZE, "MemoryRegion::new");
+
+        Self {
+            address,
+            permissions,
+            data: vec![0; size],
+        }
     }
-    fn size(&self) -> usize {
-        let range = self.range();
-        (range.end - range.start) as usize
+    pub fn as_ref(&self) -> MemoryRegionRef<'_> {
+        MemoryRegionRef {
+            address: self.address,
+            data: &self.data,
+            permissions: self.permissions,
+        }
     }
-    fn offset(&self, addr: u64) -> Option<usize> {
-        let range = self.range();
-        range.contains(&addr).then(|| (addr - range.start) as usize)
+    pub fn as_mut(&mut self) -> MemoryRegionMut<'_> {
+        MemoryRegionMut {
+            address: self.address,
+            data: &mut self.data,
+            permissions: self.permissions,
+        }
     }
 }
 
 pub trait MemoryTrait<const PS: u64 = DEFAULT_PAGE_SIZE> {
-    type MemoryRegion: MemoryRegionTrait;
-
     /// Find a memory region containing the given address.
     ///
     /// **IMPORTANT: This method is for optimization purposes ONLY.**
     /// It is NOT required to return a region even if the address is valid.
     /// If this method returns `None`, callers should fall back to using
     /// `read`/`write` methods instead.
-    fn find_region(&self, addr: u64) -> Option<&Self::MemoryRegion>;
+    fn find_region(&self, addr: u64) -> Option<MemoryRegionRef<'_>>;
 
     /// Find a mutable memory region containing the given address.
     ///
@@ -72,7 +127,7 @@ pub trait MemoryTrait<const PS: u64 = DEFAULT_PAGE_SIZE> {
     /// It is NOT required to return a region even if the address is valid.
     /// If this method returns `None`, callers should fall back to using
     /// `read`/`write` methods instead.
-    fn find_region_mut(&mut self, addr: u64) -> Option<&mut Self::MemoryRegion>;
+    fn find_region_mut(&mut self, addr: u64) -> Option<MemoryRegionMut<'_>>;
 
     /// Get the permissions for the memory at the given address.
     /// Returns the permissions if the address is valid, or an error if unmapped.
@@ -87,16 +142,16 @@ pub trait MemoryTrait<const PS: u64 = DEFAULT_PAGE_SIZE> {
                 .find_region(current_addr)
                 .ok_or(EmulatorError::UnmappedMemory(current_addr))?;
 
-            if !region.perms().contains(Permission::READ) {
+            if !region.permissions.contains(Permission::READ) {
                 return Err(EmulatorError::PermissionDenied(current_addr));
             }
 
-            let region_offset = region.offset(current_addr).unwrap();
+            let region_offset = region.offset(current_addr);
             let available = region.size() - region_offset;
             let to_copy = std::cmp::min(available, buf.len() - offset);
 
             buf[offset..offset + to_copy]
-                .copy_from_slice(&region.data()[region_offset..region_offset + to_copy]);
+                .copy_from_slice(&region.data[region_offset..region_offset + to_copy]);
 
             offset += to_copy;
             current_addr += to_copy as u64;
@@ -114,15 +169,15 @@ pub trait MemoryTrait<const PS: u64 = DEFAULT_PAGE_SIZE> {
                 .find_region_mut(current_addr)
                 .ok_or(EmulatorError::UnmappedMemory(current_addr))?;
 
-            if !region.perms().contains(Permission::WRITE) {
+            if !region.permissions.contains(Permission::WRITE) {
                 return Err(EmulatorError::PermissionDenied(current_addr));
             }
 
-            let region_offset = region.offset(current_addr).unwrap();
+            let region_offset = region.offset(current_addr);
             let available = region.size() - region_offset;
             let to_copy = std::cmp::min(available, data.len() - offset);
 
-            region.data_mut()[region_offset..region_offset + to_copy]
+            region.data[region_offset..region_offset + to_copy]
                 .copy_from_slice(&data[offset..offset + to_copy]);
 
             offset += to_copy;
@@ -142,11 +197,11 @@ pub trait MemoryTrait<const PS: u64 = DEFAULT_PAGE_SIZE> {
                 .find_region_mut(current_addr)
                 .ok_or(EmulatorError::UnmappedMemory(current_addr))?;
 
-            let region_offset = region.offset(current_addr).unwrap();
+            let region_offset = region.offset(current_addr);
             let available = region.size() - region_offset;
             let to_copy = std::cmp::min(available, data.len() - offset);
 
-            region.data_mut()[region_offset..region_offset + to_copy]
+            region.data[region_offset..region_offset + to_copy]
                 .copy_from_slice(&data[offset..offset + to_copy]);
 
             offset += to_copy;
@@ -216,45 +271,6 @@ pub trait MemoryTrait<const PS: u64 = DEFAULT_PAGE_SIZE> {
     /// - `addr` must be page-aligned
     /// - `size` must be a multiple of the page size
     fn protect(&mut self, addr: u64, size: usize, perms: Permission) -> Result<()>;
-
-    // fn regions(&self) -> impl Iterator<Item = &MemoryRegion>;
-    fn total_size(&self) -> usize;
-}
-
-#[derive(Debug, Clone)]
-pub struct MemoryRegion {
-    pub start: u64,
-    pub end: u64,
-    pub perms: Permission,
-    pub data: Vec<u8>,
-}
-
-impl MemoryRegionTrait for MemoryRegion {
-    fn range(&self) -> Range<u64> {
-        self.start..self.end
-    }
-    fn data(&self) -> &[u8] {
-        &self.data
-    }
-    fn data_mut(&mut self) -> &mut [u8] {
-        &mut self.data
-    }
-    fn perms(&self) -> Permission {
-        self.perms
-    }
-}
-
-impl MemoryRegion {
-    pub fn new(start: u64, size: usize, perms: Permission) -> Self {
-        assert_valid_region(start, size, DEFAULT_PAGE_SIZE, "MemoryRegion::new");
-
-        Self {
-            start,
-            end: start + size as u64,
-            perms,
-            data: vec![0; size],
-        }
-    }
 }
 
 pub struct OwnedMemory<const PS: u64 = DEFAULT_PAGE_SIZE> {
@@ -279,28 +295,26 @@ impl<const PS: u64> OwnedMemory<PS> {
 }
 
 impl<const PS: u64> MemoryTrait<PS> for OwnedMemory<PS> {
-    type MemoryRegion = MemoryRegion;
-
-    fn find_region(&self, addr: u64) -> Option<&MemoryRegion> {
+    fn find_region(&self, addr: u64) -> Option<MemoryRegionRef<'_>> {
         self.regions
             .range(..=addr)
             .next_back()
             .and_then(|(_, region)| {
                 if region.contains(addr) {
-                    Some(region)
+                    Some(region.as_ref())
                 } else {
                     None
                 }
             })
     }
 
-    fn find_region_mut(&mut self, addr: u64) -> Option<&mut MemoryRegion> {
+    fn find_region_mut(&mut self, addr: u64) -> Option<MemoryRegionMut<'_>> {
         self.regions
             .range_mut(..=addr)
             .next_back()
             .and_then(|(_, region)| {
                 if region.contains(addr) {
-                    Some(region)
+                    Some(region.as_mut())
                 } else {
                     None
                 }
@@ -311,7 +325,7 @@ impl<const PS: u64> MemoryTrait<PS> for OwnedMemory<PS> {
         let region = self
             .find_region(addr)
             .ok_or(EmulatorError::UnmappedMemory(addr))?;
-        Ok(region.perms())
+        Ok(region.permissions)
     }
 
     fn map(&mut self, addr: u64, size: usize, perms: Permission) -> Result<()> {
@@ -320,10 +334,7 @@ impl<const PS: u64> MemoryTrait<PS> for OwnedMemory<PS> {
         let end = addr + size as u64;
 
         for region in self.regions.values() {
-            if (addr >= region.start && addr < region.end)
-                || (end > region.start && end <= region.end)
-                || (addr <= region.start && end >= region.end)
-            {
+            if addr < region.end() && region.start() < end {
                 return Err(EmulatorError::InvalidArgument(format!(
                     "Memory overlap at {:#x}-{:#x}",
                     addr, end
@@ -343,7 +354,7 @@ impl<const PS: u64> MemoryTrait<PS> for OwnedMemory<PS> {
 
         let mut to_remove = Vec::new();
         for (&start, region) in &self.regions {
-            if start >= addr && region.end <= end {
+            if start >= addr && region.end() <= end {
                 to_remove.push(start);
             }
         }
@@ -366,10 +377,7 @@ impl<const PS: u64> MemoryTrait<PS> for OwnedMemory<PS> {
 
         let mut regions_to_update = Vec::new();
         for (&start, region) in &self.regions {
-            if (addr >= region.start && addr < region.end)
-                || (end > region.start && end <= region.end)
-                || (addr <= region.start && end >= region.end)
-            {
+            if addr < region.end() && region.start() < end {
                 regions_to_update.push(start);
             }
         }
@@ -380,15 +388,11 @@ impl<const PS: u64> MemoryTrait<PS> for OwnedMemory<PS> {
 
         for start in regions_to_update {
             if let Some(region) = self.regions.get_mut(&start) {
-                region.perms = perms;
+                region.permissions = perms;
             }
         }
 
         Ok(())
-    }
-
-    fn total_size(&self) -> usize {
-        self.regions.values().map(|r| r.size()).sum()
     }
 }
 
@@ -450,7 +454,7 @@ impl<T: MemoryTrait<PS>, const PS: u64> CowMemory<T, PS> {
         let perms = self.base.permissions(page_addr)?;
 
         let mut cow_region = MemoryRegion::new(page_addr, actual_size, perms);
-        cow_region.data_mut().copy_from_slice(&page_data);
+        cow_region.data.copy_from_slice(&page_data);
 
         self.overlay.insert(page_addr, cow_region);
         Ok(())
@@ -458,20 +462,18 @@ impl<T: MemoryTrait<PS>, const PS: u64> CowMemory<T, PS> {
 }
 
 impl<T: MemoryTrait<PS>, const PS: u64> MemoryTrait<PS> for CowMemory<T, PS> {
-    type MemoryRegion = MemoryRegion;
-
     /// Find a region in the CoW overlay only (optimization method).
     ///
     /// This only searches overlay regions for performance. If no overlay
     /// region is found, this returns `None` even if the address exists
     /// in the base memory. Callers must fall back to `read`/`write`.
-    fn find_region(&self, addr: u64) -> Option<&Self::MemoryRegion> {
+    fn find_region(&self, addr: u64) -> Option<MemoryRegionRef<'_>> {
         self.overlay
             .range(..=addr)
             .next_back()
             .and_then(|(_, region)| {
                 if region.contains(addr) {
-                    Some(region)
+                    Some(region.as_ref())
                 } else {
                     None
                 }
@@ -483,29 +485,24 @@ impl<T: MemoryTrait<PS>, const PS: u64> MemoryTrait<PS> for CowMemory<T, PS> {
     /// This only searches overlay regions for performance. If no overlay
     /// region is found, this returns `None` even if the address exists
     /// in the base memory. Callers must fall back to `read`/`write`.
-    fn find_region_mut(&mut self, addr: u64) -> Option<&mut Self::MemoryRegion> {
-        if let Some(overlay_region) =
-            self.overlay
-                .range_mut(..=addr)
-                .next_back()
-                .and_then(|(_, region)| {
-                    if region.contains(addr) {
-                        Some(region)
-                    } else {
-                        None
-                    }
-                })
-        {
-            Some(overlay_region)
-        } else {
-            None
-        }
+    fn find_region_mut(&mut self, addr: u64) -> Option<MemoryRegionMut<'_>> {
+        self.overlay
+            .range_mut(..=addr)
+            .next_back()
+            .and_then(|(_, region)| {
+                if region.contains(addr) {
+                    Some(region)
+                } else {
+                    None
+                }
+            })
+            .map(|overlay_region| overlay_region.as_mut())
     }
 
     fn permissions(&self, addr: u64) -> Result<Permission> {
         // First check overlay regions
         if let Some(region) = self.find_region(addr) {
-            return Ok(region.perms());
+            return Ok(region.permissions);
         }
 
         // Fall back to base memory
@@ -519,13 +516,12 @@ impl<T: MemoryTrait<PS>, const PS: u64> MemoryTrait<PS> for CowMemory<T, PS> {
         while offset < buf.len() {
             // First check overlay
             if let Some(overlay_region) = self.find_region(current_addr) {
-                let region_offset = overlay_region.offset(current_addr).unwrap();
+                let region_offset = overlay_region.offset(current_addr);
                 let available = overlay_region.size() - region_offset;
                 let to_copy = std::cmp::min(available, buf.len() - offset);
 
-                buf[offset..offset + to_copy].copy_from_slice(
-                    &overlay_region.data()[region_offset..region_offset + to_copy],
-                );
+                buf[offset..offset + to_copy]
+                    .copy_from_slice(&overlay_region.data[region_offset..region_offset + to_copy]);
 
                 offset += to_copy;
                 current_addr += to_copy as u64;
@@ -566,15 +562,15 @@ impl<T: MemoryTrait<PS>, const PS: u64> MemoryTrait<PS> for CowMemory<T, PS> {
                 .find_region_mut(current_addr)
                 .ok_or(EmulatorError::UnmappedMemory(current_addr))?;
 
-            if !region.perms().contains(Permission::WRITE) {
+            if !region.permissions.contains(Permission::WRITE) {
                 return Err(EmulatorError::PermissionDenied(current_addr));
             }
 
-            let region_offset = region.offset(current_addr).unwrap();
+            let region_offset = region.offset(current_addr);
             let available = region.size() - region_offset;
             let to_copy = std::cmp::min(available, data.len() - offset);
 
-            region.data_mut()[region_offset..region_offset + to_copy]
+            region.data[region_offset..region_offset + to_copy]
                 .copy_from_slice(&data[offset..offset + to_copy]);
 
             offset += to_copy;
@@ -606,11 +602,11 @@ impl<T: MemoryTrait<PS>, const PS: u64> MemoryTrait<PS> for CowMemory<T, PS> {
                 .find_region_mut(current_addr)
                 .ok_or(EmulatorError::UnmappedMemory(current_addr))?;
 
-            let region_offset = region.offset(current_addr).unwrap();
+            let region_offset = region.offset(current_addr);
             let available = region.size() - region_offset;
             let to_copy = std::cmp::min(available, data.len() - offset);
 
-            region.data_mut()[region_offset..region_offset + to_copy]
+            region.data[region_offset..region_offset + to_copy]
                 .copy_from_slice(&data[offset..offset + to_copy]);
 
             offset += to_copy;
@@ -626,10 +622,7 @@ impl<T: MemoryTrait<PS>, const PS: u64> MemoryTrait<PS> for CowMemory<T, PS> {
         let end = addr + size as u64;
 
         for region in self.overlay.values() {
-            if (addr >= region.start && addr < region.end)
-                || (end > region.start && end <= region.end)
-                || (addr <= region.start && end >= region.end)
-            {
+            if addr < region.end() && region.start() < end {
                 return Err(EmulatorError::InvalidArgument(format!(
                     "Memory overlap at {:#x}-{:#x}",
                     addr, end
@@ -662,7 +655,7 @@ impl<T: MemoryTrait<PS>, const PS: u64> MemoryTrait<PS> for CowMemory<T, PS> {
 
         let mut to_remove = Vec::new();
         for (&start, region) in &self.overlay {
-            if start >= addr && region.end <= end {
+            if start >= addr && region.end() <= end {
                 to_remove.push(start);
             }
         }
@@ -685,10 +678,7 @@ impl<T: MemoryTrait<PS>, const PS: u64> MemoryTrait<PS> for CowMemory<T, PS> {
 
         let mut regions_to_update = Vec::new();
         for (&start, region) in &self.overlay {
-            if (addr >= region.start && addr < region.end)
-                || (end > region.start && end <= region.end)
-                || (addr <= region.start && end >= region.end)
-            {
+            if addr < region.end() && region.start() < end {
                 regions_to_update.push(start);
             }
         }
@@ -699,17 +689,11 @@ impl<T: MemoryTrait<PS>, const PS: u64> MemoryTrait<PS> for CowMemory<T, PS> {
 
         for start in regions_to_update {
             if let Some(region) = self.overlay.get_mut(&start) {
-                region.perms = perms;
+                region.permissions = perms;
             }
         }
 
         Ok(())
-    }
-
-    fn total_size(&self) -> usize {
-        let base_size = self.base.total_size();
-        let overlay_size = self.overlay.values().map(|r| r.size()).sum::<usize>();
-        base_size + overlay_size
     }
 }
 
@@ -761,8 +745,8 @@ mod tests {
         // Verify overlay page was created
         assert_eq!(cow.overlay_regions().count(), 1);
         let overlay_region = cow.overlay_regions().next().unwrap();
-        assert_eq!(overlay_region.start, 0x1000);
-        assert_eq!(overlay_region.end, 0x2000);
+        assert_eq!(overlay_region.start(), 0x1000);
+        assert_eq!(overlay_region.end(), 0x2000);
 
         // Verify base memory is unchanged
         assert_eq!(cow.base().read_u8(0x1000).unwrap(), 0);
@@ -971,153 +955,6 @@ mod tests {
         let mut read_back = vec![0u8; 8192];
         cow.read(0x1800, &mut read_back).unwrap();
         assert_eq!(read_back, large_data);
-    }
-
-    #[test]
-    fn test_cow_memory_total_size_calculation() {
-        let base = create_base_memory(); // 3 pages
-        let base_size = base.total_size();
-
-        let mut cow = CowMemory::new(base);
-
-        // Initially should match base size
-        assert_eq!(cow.total_size(), base_size);
-
-        // Add overlay pages
-        cow.write_u8(0x1000, 1).unwrap(); // Overlaps with base
-        cow.map(0x5000, 0x1000, Permission::READ | Permission::WRITE)
-            .unwrap(); // New region
-
-        // Total size should include overlay pages
-        // Note: overlapping pages are counted in both base and overlay
-        let expected_size = base_size + 4096 + 4096; // original + cow page + new region
-        assert_eq!(cow.total_size(), expected_size);
-    }
-
-    // Mock memory type to test CowMemory flexibility with different MemoryRegion types
-    struct MockMemoryRegion {
-        start: u64,
-        end: u64,
-        data: Vec<u8>,
-    }
-
-    impl MemoryRegionTrait for MockMemoryRegion {
-        fn range(&self) -> std::ops::Range<u64> {
-            self.start..self.end
-        }
-
-        fn data(&self) -> &[u8] {
-            &self.data
-        }
-
-        fn data_mut(&mut self) -> &mut [u8] {
-            &mut self.data
-        }
-
-        fn perms(&self) -> Permission {
-            Permission::READ | Permission::WRITE
-        }
-    }
-
-    struct MockMemory {
-        regions: BTreeMap<u64, MockMemoryRegion>,
-    }
-
-    impl MockMemory {
-        fn new() -> Self {
-            let mut regions = BTreeMap::new();
-            regions.insert(
-                0x1000,
-                MockMemoryRegion {
-                    start: 0x1000,
-                    end: 0x2000,
-                    data: (0..4096).map(|i| (i % 256) as u8).collect(),
-                },
-            );
-            MockMemory { regions }
-        }
-    }
-
-    impl MemoryTrait for MockMemory {
-        type MemoryRegion = MockMemoryRegion;
-
-        fn find_region(&self, addr: u64) -> Option<&Self::MemoryRegion> {
-            self.regions
-                .range(..=addr)
-                .next_back()
-                .and_then(|(_, region)| {
-                    if region.contains(addr) {
-                        Some(region)
-                    } else {
-                        None
-                    }
-                })
-        }
-
-        fn find_region_mut(&mut self, addr: u64) -> Option<&mut Self::MemoryRegion> {
-            self.regions
-                .range_mut(..=addr)
-                .next_back()
-                .and_then(|(_, region)| {
-                    if region.contains(addr) {
-                        Some(region)
-                    } else {
-                        None
-                    }
-                })
-        }
-
-        fn permissions(&self, addr: u64) -> Result<Permission> {
-            let region = self
-                .find_region(addr)
-                .ok_or(EmulatorError::UnmappedMemory(addr))?;
-            Ok(region.perms())
-        }
-
-        fn map(&mut self, _addr: u64, _size: usize, _perms: Permission) -> Result<()> {
-            Err(EmulatorError::InvalidArgument(
-                "Mock memory doesn't support mapping".into(),
-            ))
-        }
-
-        fn unmap(&mut self, _addr: u64, _size: usize) -> Result<()> {
-            Err(EmulatorError::InvalidArgument(
-                "Mock memory doesn't support unmapping".into(),
-            ))
-        }
-
-        fn protect(&mut self, _addr: u64, _size: usize, _perms: Permission) -> Result<()> {
-            Ok(())
-        }
-
-        fn total_size(&self) -> usize {
-            self.regions.values().map(|r| r.size()).sum()
-        }
-    }
-
-    #[test]
-    fn test_cow_memory_with_different_region_types() {
-        // Test that CowMemory works with different underlying MemoryRegion types
-        let base = MockMemory::new();
-        let mut cow = CowMemory::new(base);
-
-        // Should be able to read from the mock memory
-        assert_eq!(cow.read_u8(0x1000).unwrap(), 0);
-        assert_eq!(cow.read_u8(0x1001).unwrap(), 1);
-
-        // Should be able to write (triggering CoW)
-        cow.write_u8(0x1000, 42).unwrap();
-
-        // Should read modified value from overlay
-        assert_eq!(cow.read_u8(0x1000).unwrap(), 42);
-        // Should read original value from base for unmodified addresses
-        assert_eq!(cow.read_u8(0x1001).unwrap(), 1);
-
-        // Should have created overlay region
-        assert_eq!(cow.overlay_regions().count(), 1);
-
-        // Base should still have original value
-        assert_eq!(cow.base().read_u8(0x1000).unwrap(), 0);
     }
 
     #[test]

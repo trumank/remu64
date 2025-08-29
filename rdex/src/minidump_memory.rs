@@ -1,40 +1,13 @@
 use minidump::{MmapMinidump, UnifiedMemory};
 use remu64::{
     EmulatorError, Permission, Result,
-    memory::{MemoryRegionTrait, MemoryTrait},
+    memory::{MemoryRegionMut, MemoryRegionRef, MemoryTrait},
 };
-use std::{collections::BTreeMap, ops::Range};
+use std::collections::BTreeMap;
 
 // MinidumpMemoryRegion holds a slice directly from the mmap'd minidump
-pub struct MinidumpMemoryRegion<'a> {
-    start: u64,
-    end: u64,
-    data: &'a [u8], // Points directly into the mmap'd memory
-    perms: Permission,
-}
-
-impl<'a> MemoryRegionTrait for MinidumpMemoryRegion<'a> {
-    fn range(&self) -> Range<u64> {
-        self.start..self.end
-    }
-
-    fn data(&self) -> &[u8] {
-        self.data
-    }
-
-    fn data_mut(&mut self) -> &mut [u8] {
-        // MinidumpMemory is read-only, so we can't provide mutable access
-        // This should never be called since MinidumpMemory doesn't allow writes
-        panic!("MinidumpMemory is read-only")
-    }
-
-    fn perms(&self) -> Permission {
-        self.perms
-    }
-}
-
 pub struct MinidumpMemory<'a> {
-    regions: BTreeMap<u64, MinidumpMemoryRegion<'a>>,
+    regions: BTreeMap<u64, MemoryRegionRef<'a>>,
 }
 
 impl<'a> MinidumpMemory<'a> {
@@ -53,11 +26,10 @@ impl<'a> MinidumpMemory<'a> {
                     continue;
                 }
 
-                let region = MinidumpMemoryRegion {
-                    start: base_address,
-                    end: base_address + size as u64,
+                let region = MemoryRegionRef {
+                    address: base_address,
                     data: bytes,
-                    perms: Permission::READ | Permission::WRITE | Permission::EXEC, // Minidump doesn't preserve original permissions
+                    permissions: Permission::READ | Permission::WRITE | Permission::EXEC, // Minidump doesn't preserve original permissions
                 };
 
                 regions.insert(base_address, region);
@@ -67,7 +39,7 @@ impl<'a> MinidumpMemory<'a> {
         Ok(MinidumpMemory { regions })
     }
 
-    pub fn regions(&self) -> impl Iterator<Item = &MinidumpMemoryRegion<'a>> {
+    pub fn regions(&self) -> impl Iterator<Item = &MemoryRegionRef<'a>> {
         self.regions.values()
     }
 
@@ -78,45 +50,34 @@ impl<'a> MinidumpMemory<'a> {
     pub fn memory_ranges(&self) -> Vec<(u64, u64)> {
         self.regions
             .values()
-            .map(|region| (region.start, region.end))
+            .map(|region| (region.start(), region.end()))
             .collect()
     }
 }
 
 impl<'a> MemoryTrait for MinidumpMemory<'a> {
-    type MemoryRegion = MinidumpMemoryRegion<'a>;
-
-    fn find_region(&self, addr: u64) -> Option<&Self::MemoryRegion> {
+    fn find_region(&self, addr: u64) -> Option<MemoryRegionRef<'_>> {
         self.regions
             .range(..=addr)
             .next_back()
             .and_then(|(_, region)| {
                 if region.contains(addr) {
-                    Some(region)
+                    Some(region.clone())
                 } else {
                     None
                 }
             })
     }
 
-    fn find_region_mut(&mut self, addr: u64) -> Option<&mut Self::MemoryRegion> {
-        self.regions
-            .range_mut(..=addr)
-            .next_back()
-            .and_then(|(_, region)| {
-                if region.contains(addr) {
-                    Some(region)
-                } else {
-                    None
-                }
-            })
+    fn find_region_mut(&mut self, _addr: u64) -> Option<MemoryRegionMut<'_>> {
+        None
     }
 
     fn permissions(&self, addr: u64) -> Result<Permission> {
         let region = self
             .find_region(addr)
             .ok_or(EmulatorError::UnmappedMemory(addr))?;
-        Ok(region.perms())
+        Ok(region.permissions)
     }
 
     fn map(&mut self, _addr: u64, _size: usize, _perms: Permission) -> Result<()> {
@@ -136,10 +97,7 @@ impl<'a> MemoryTrait for MinidumpMemory<'a> {
 
         let mut regions_to_update = Vec::new();
         for (&start, region) in &self.regions {
-            if (addr >= region.start && addr < region.end)
-                || (end > region.start && end <= region.end)
-                || (addr <= region.start && end >= region.end)
-            {
+            if addr < region.end() && region.start() < end {
                 regions_to_update.push(start);
             }
         }
@@ -150,15 +108,11 @@ impl<'a> MemoryTrait for MinidumpMemory<'a> {
 
         for start in regions_to_update {
             if let Some(region) = self.regions.get_mut(&start) {
-                region.perms = perms;
+                region.permissions = perms;
             }
         }
 
         Ok(())
-    }
-
-    fn total_size(&self) -> usize {
-        self.regions.values().map(|r| r.size()).sum()
     }
 }
 
