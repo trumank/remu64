@@ -6,10 +6,11 @@ use crossterm::{
 };
 use ratatui::{Terminal, prelude::*, widgets::ListState};
 use std::io;
-use std::{collections::HashMap, path::PathBuf};
+use std::time::{Duration, Instant};
 use tracing::{debug, info};
 
-use crate::tracer::{InstructionAction, InstructionActions, Tracer};
+use crate::config::ConfigLoader;
+use crate::tracer::Tracer;
 use crate::ui;
 use rdex::{
     DumpExec, MinidumpLoader, MinidumpMemory, ProcessTrait as _, pe_symbolizer::PeSymbolizer,
@@ -23,18 +24,26 @@ pub enum Panel {
     Controls,
 }
 
-pub struct AppState {
-    pub minidump_path: PathBuf,
-    pub function_address: u64,
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum StatusMessage {
+    ConfigReloaded,
+    ConfigError(String),
+}
 
+pub struct AppState {
     pub selected_panel: Panel,
     pub instruction_scroll: usize,
     pub stack_scroll: usize,
     pub instruction_list_state: ListState,
     pub trace_to_end: bool,
-    pub instruction_actions: InstructionActions,
 
     pub symbolizer: PeSymbolizer,
+
+    pub config_loader: ConfigLoader,
+
+    // Status message system
+    pub status_message: Option<StatusMessage>,
+    pub status_message_expires: Option<Instant>,
 }
 
 impl AppState {
@@ -42,8 +51,35 @@ impl AppState {
         self.instruction_list_state.selected().unwrap_or(0)
     }
 
+    pub fn set_status_message(&mut self, message: StatusMessage, duration: Option<Duration>) {
+        self.status_message = Some(message);
+        self.status_message_expires = duration.map(|d| Instant::now() + d);
+    }
+
+    pub fn update_status_message(&mut self) -> bool {
+        if let Some(expires) = self.status_message_expires
+            && Instant::now() >= expires
+        {
+            self.status_message = None;
+            self.status_message_expires = None;
+            return true; // Message was cleared
+        }
+        false
+    }
+
+    pub fn get_current_status_message(&self) -> Option<&StatusMessage> {
+        self.status_message.as_ref()
+    }
+
     pub fn toggle_skip_instruction(&mut self, index: usize) {
-        let actions = self.instruction_actions.entry(index).or_default();
+        use crate::tracer::InstructionAction;
+
+        let actions = self
+            .config_loader
+            .config
+            .instruction_actions
+            .entry(index)
+            .or_default();
 
         // Check if skip action already exists
         if let Some(pos) = actions
@@ -56,7 +92,7 @@ impl AppState {
 
             // Remove empty action list
             if actions.is_empty() {
-                self.instruction_actions.remove(&index);
+                self.config_loader.config.instruction_actions.remove(&index);
             }
         } else {
             // Add skip action
@@ -73,10 +109,12 @@ pub struct App {
 }
 
 impl App {
-    pub fn new(minidump_path: PathBuf, function_address: u64) -> Result<Self> {
-        debug!("Loading minidump: {:?}", minidump_path);
-        let minidump_loader = DumpExec::load_minidump(&minidump_path)?;
-        info!("Successfully loaded minidump: {:?}", minidump_path);
+    pub fn new(config_loader: ConfigLoader) -> Result<Self> {
+        let config = &config_loader.config;
+
+        debug!("Loading minidump: {}", config.minidump_path);
+        let minidump_loader = DumpExec::load_minidump(&config.minidump_path)?;
+        info!("Successfully loaded minidump: {}", config.minidump_path);
 
         // Create the memory object from the loader
         let memory = minidump_loader.create_memory()?;
@@ -90,15 +128,15 @@ impl App {
         instruction_list_state.select(Some(0));
 
         let state = AppState {
-            minidump_path,
-            function_address,
             selected_panel: Panel::Instructions,
             instruction_scroll: 0,
             stack_scroll: 0,
             instruction_list_state,
             trace_to_end: false,
-            instruction_actions: HashMap::new(),
             symbolizer,
+            config_loader,
+            status_message: None,
+            status_message_expires: None,
         };
 
         Ok(App {
@@ -146,9 +184,8 @@ impl App {
 
             // Calculate required instructions based on mode and current position
             let required_instructions = if self.state.trace_to_end {
-                // Run trace to completion (use a very large number)
-                // (actually not very big, need to implement checkpointing to go higher)
-                10000
+                // Run trace to completion (use configured max)
+                self.state.config_loader.config.tracing.max_instructions
             } else {
                 // Calculate dynamic max_instructions based on terminal size and current position
                 let terminal_size = terminal.size()?;
@@ -173,10 +210,9 @@ impl App {
 
             // Generate trace with appropriate limit
             let (trace, memory_snapshot, trace_error) = tracer.run_trace(
-                self.state.function_address,
+                &self.state.config_loader.config,
                 required_instructions,
                 current_idx,
-                &self.state.instruction_actions,
             )?;
 
             // Handle trace_to_end completion
@@ -210,7 +246,45 @@ impl App {
                 )
             })?;
 
-            if let Event::Key(key) = event::read()?
+            let mut event = None;
+            loop {
+                if event::poll(std::time::Duration::from_millis(10))? {
+                    event = Some(event::read()?);
+                    break;
+                } else {
+                    // Check if status message expired and needs redraw
+                    if self.state.update_status_message() {
+                        break;
+                    }
+
+                    // Check hot reload channel during polling timeout
+                    match self.state.config_loader.check_watcher_changes() {
+                        Ok(true) => {
+                            info!(
+                                "Config file was reloaded - breaking poll loop for immediate redraw"
+                            );
+                            self.state.set_status_message(
+                                StatusMessage::ConfigReloaded,
+                                Some(Duration::from_secs(1)),
+                            );
+                            break;
+                        }
+                        Ok(false) => {
+                            // No config change, continue polling
+                        }
+                        Err(e) => {
+                            debug!("Config watcher error: {}", e);
+                            self.state.set_status_message(
+                                StatusMessage::ConfigError(e.to_string()),
+                                None,
+                            );
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if let Some(Event::Key(key)) = event
                 && key.kind == KeyEventKind::Press
             {
                 debug!("Key pressed: {:?}", key.code);
@@ -356,6 +430,8 @@ impl App {
         self.state.instruction_scroll = 0;
         self.state.stack_scroll = 0;
         self.state.trace_to_end = false;
+        // Reset instruction actions in config
+        self.state.config_loader.config.instruction_actions.clear();
     }
 
     fn handle_go_to_beginning(&mut self) {

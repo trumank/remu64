@@ -109,10 +109,9 @@ impl<'a> Tracer<'a> {
     /// Run trace up to specified instruction index, returning trace entries
     pub fn run_trace(
         &self,
-        function_address: u64,
+        config: &crate::config::Config,
         max_instructions: usize,
         current_idx: usize,
-        actions: &InstructionActions,
     ) -> Result<(
         Vec<TraceEntry>,
         CowMemory<&'a MinidumpMemory<'static>>,
@@ -120,7 +119,7 @@ impl<'a> Tracer<'a> {
     )> {
         debug!(
             "run_trace called: addr=0x{:x}, max={}",
-            function_address, max_instructions,
+            config.function_address, max_instructions,
         );
         debug!("Creating VM context from minidump loader");
 
@@ -133,29 +132,32 @@ impl<'a> Tracer<'a> {
         engine.set_gs_base(teb_address);
         let mut vm_context = VMContext { engine };
 
-        // Set up stack
-        let stack_base = 0x7fff_f000_0000u64;
-        let stack_size = 0x100000;
+        // Set up stack using config values
+        let stack_base = config.stack.base_address;
+        let stack_size = config.stack.size;
         vm_context.setup_stack(stack_base, stack_size)?;
 
-        let initial_rsp = stack_base - 0x1000;
+        let initial_rsp = stack_base - config.stack.initial_offset;
         vm_context.engine.reg_write(Register::RSP, initial_rsp);
 
-        // let out = vm_context.push_bytes_to_stack(&u64::to_le_bytes(0x289f6333a00))?;
-        vm_context.engine.reg_write(Register::RCX, 0x289836c6200);
+        // Set initial register values from config
+        for (&register, &value) in &config.registers {
+            vm_context.engine.reg_write(register, value);
+        }
 
-        let mut capturing_tracer = CapturingTracer::new(max_instructions, current_idx, actions);
+        let mut capturing_tracer =
+            CapturingTracer::new(max_instructions, current_idx, &config.instruction_actions);
 
         debug!(
             "Executing function at 0x{:x} with CapturingTracer",
-            function_address
+            config.function_address
         );
 
         // Use ExecutionController with our custom tracer
         let return_address = 0xFFFF800000000000u64;
         let error_message = match ExecutionController::execute_with_hooks(
             &mut vm_context.engine,
-            function_address,
+            config.function_address,
             return_address,
             &mut capturing_tracer,
         ) {

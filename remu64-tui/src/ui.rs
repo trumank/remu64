@@ -11,7 +11,7 @@ use ratatui::{
 use rdex::symbolizer::Symbolizer as _;
 use remu64::{Register, memory::MemoryTrait};
 
-use crate::app::{AppState, Panel};
+use crate::app::{AppState, Panel, StatusMessage};
 use crate::tracer::TraceEntry;
 
 pub fn draw(
@@ -54,25 +54,34 @@ pub fn draw(
 }
 
 fn draw_header(f: &mut Frame, area: Rect, state: &AppState, trace_error: Option<&str>) {
-    let status = if let Some(error) = trace_error {
-        format!("Error: {}", error)
+    let status = if let Some(status_msg) = state.get_current_status_message() {
+        let msg_text = match status_msg {
+            StatusMessage::ConfigReloaded => "Config reloaded",
+            StatusMessage::ConfigError(err) => err,
+        };
+        format!(" | {}", msg_text)
+    } else if let Some(error) = trace_error {
+        format!(" | Error: {}", error)
     } else {
-        "Ready".to_string()
+        "".to_string()
     };
 
     let title = format!(
-        "remu64-tui | File: {} | Function: 0x{:x} | Status: {}",
-        state
-            .minidump_path
+        "remu64-tui | File: {} | Function: 0x{:x}{status}",
+        std::path::Path::new(&state.config_loader.config.minidump_path)
             .file_name()
             .and_then(|n| n.to_str())
             .unwrap_or("unknown"),
-        state.function_address,
-        status
+        state.config_loader.config.function_address,
     );
 
     let header_style = if trace_error.is_some() {
         Style::default().fg(Color::White).bg(Color::Red)
+    } else if let Some(status_msg) = state.get_current_status_message() {
+        match status_msg {
+            StatusMessage::ConfigReloaded => Style::default().fg(Color::White).bg(Color::DarkGray),
+            StatusMessage::ConfigError(_) => Style::default().fg(Color::White).bg(Color::Red),
+        }
     } else {
         Style::default().fg(Color::White).bg(Color::DarkGray)
     };
@@ -550,6 +559,11 @@ fn draw_controls(f: &mut Frame, area: Rect, state: &AppState) {
         Line::from(vec![
             Span::styled("q: ", Style::default().fg(Color::Cyan)),
             Span::raw("Quit"),
+        ]),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled("Config: ", Style::default().fg(Color::Green)),
+            Span::raw("Hot-reloadable"),
         ]),
     ];
 

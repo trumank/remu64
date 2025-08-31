@@ -5,29 +5,23 @@ use std::path::PathBuf;
 use tracing::{error, info};
 
 mod app;
+mod config;
 mod tracer;
 mod ui;
 
 use app::App;
+use config::{Config, ConfigLoader};
 
 #[derive(Parser)]
 #[command(name = "remu64-tui")]
 #[command(about = "Terminal user interface for remu64 minidump debugging")]
 struct Args {
-    /// Path to the minidump file
-    minidump_file: PathBuf,
+    /// Path to the configuration file
+    config_file: PathBuf,
 
-    /// Function address to execute (in hex, e.g., 0x140001000)
-    #[arg(value_parser = parse_hex)]
-    function_address: u64,
-}
-
-fn parse_hex(s: &str) -> Result<u64, std::num::ParseIntError> {
-    if let Some(hex_str) = s.strip_prefix("0x") {
-        u64::from_str_radix(hex_str, 16)
-    } else {
-        u64::from_str_radix(s, 16)
-    }
+    /// Generate a sample configuration file at the specified path and exit
+    #[arg(long, value_name = "PATH")]
+    generate_sample: Option<PathBuf>,
 }
 
 fn setup_logging() -> Result<()> {
@@ -64,15 +58,32 @@ fn main() -> Result<()> {
 
     let args = Args::parse();
 
-    info!("Starting remu64-tui");
-    info!("Minidump file: {:?}", args.minidump_file);
-    info!("Function address: 0x{:x}", args.function_address);
+    // Handle sample generation
+    if let Some(sample_path) = &args.generate_sample {
+        info!("Generating sample configuration at: {:?}", sample_path);
+        let sample_config = Config::create_sample();
+        sample_config.save_to_file(sample_path)?;
+        println!("Sample configuration saved to: {:?}", sample_path);
+        return Ok(());
+    }
 
-    run_app_with_error_handling(args)
+    info!("Starting remu64-tui");
+    info!("Config file: {:?}", args.config_file);
+
+    // Load configuration with file watcher
+    let config_loader = ConfigLoader::new(&args.config_file)?;
+    info!("Loaded configuration from: {:?}", config_loader.config_path);
+    info!("Minidump file: {}", config_loader.config.minidump_path);
+    info!(
+        "Function address: {}",
+        config_loader.config.function_address
+    );
+
+    run_app_with_error_handling(config_loader)
 }
 
-fn run_app_with_error_handling(args: Args) -> Result<()> {
-    let mut app = App::new(args.minidump_file, args.function_address)?;
+fn run_app_with_error_handling(config_loader: ConfigLoader) -> Result<()> {
+    let mut app = App::new(config_loader)?;
 
     info!("App created successfully, starting TUI");
 
