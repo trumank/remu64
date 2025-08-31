@@ -116,6 +116,33 @@ impl<'a> MemoryTrait for MinidumpMemory<'a> {
     }
 }
 
+impl<'a> MemoryTrait for &MinidumpMemory<'a> {
+    fn find_region(&self, addr: u64) -> Option<MemoryRegionRef<'_>> {
+        <MinidumpMemory>::find_region(self, addr)
+    }
+    fn find_region_mut(&mut self, _addr: u64) -> Option<MemoryRegionMut<'_>> {
+        None
+    }
+    fn permissions(&self, addr: u64) -> Result<Permission> {
+        <MinidumpMemory>::permissions(self, addr)
+    }
+    fn map(&mut self, _addr: u64, _size: usize, _perms: Permission) -> Result<()> {
+        Err(EmulatorError::InvalidArgument(
+            "Cannot map new memory regions in MinidumpMemory".into(),
+        ))
+    }
+    fn unmap(&mut self, _addr: u64, _size: usize) -> Result<()> {
+        Err(EmulatorError::InvalidArgument(
+            "Cannot unmap memory regions in MinidumpMemory".into(),
+        ))
+    }
+    fn protect(&mut self, _addr: u64, _size: usize, _perms: Permission) -> Result<()> {
+        Err(EmulatorError::InvalidArgument(
+            "Cannot protect memory regions in &MinidumpMemory".into(),
+        ))
+    }
+}
+
 #[cfg(test)]
 mod tests {
 

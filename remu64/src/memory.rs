@@ -396,6 +396,7 @@ impl<const PS: u64> MemoryTrait<PS> for OwnedMemory<PS> {
     }
 }
 
+#[derive(Clone)]
 pub struct CowMemory<T: MemoryTrait<PS>, const PS: u64 = DEFAULT_PAGE_SIZE> {
     base: T,
     overlay: BTreeMap<u64, MemoryRegion>,
