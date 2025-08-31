@@ -147,7 +147,8 @@ impl App {
             // Calculate required instructions based on mode and current position
             let required_instructions = if self.state.trace_to_end {
                 // Run trace to completion (use a very large number)
-                usize::MAX
+                // (actually not very big, need to implement checkpointing to go higher)
+                10000
             } else {
                 // Calculate dynamic max_instructions based on terminal size and current position
                 let terminal_size = terminal.size()?;
