@@ -3,7 +3,7 @@ use remu64::memory::MemoryTrait;
 /// Information about a resolved symbol
 #[derive(Debug, Clone)]
 pub struct SymbolInfo {
-    pub name: String,
+    pub name: Option<String>,
     pub module: String,
 }
 

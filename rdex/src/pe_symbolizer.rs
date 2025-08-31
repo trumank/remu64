@@ -14,6 +14,7 @@ struct ModuleRange {
     name: String,
     base_address: u64,
     analyzed: bool,
+    symbol: SymbolInfo,
 }
 
 #[derive(Debug, Clone)]
@@ -24,7 +25,7 @@ pub struct PdbInfo {
 }
 
 #[derive(Debug, Clone)]
-struct ProcedureRange {
+struct SymbolRange {
     start: u64,
     end: u64,
     symbol: SymbolInfo,
@@ -35,8 +36,44 @@ struct ProcedureRange {
 const BUCKET_SIZE: u64 = 4096;
 
 #[derive(Debug, Default)]
-struct RangeBucket {
-    ranges: Vec<ProcedureRange>,
+struct RangeBuckets {
+    buckets: HashMap<u64, Vec<SymbolRange>>,
+}
+
+impl RangeBuckets {
+    fn add_range(&mut self, range: SymbolRange) {
+        // Add this range to all buckets it overlaps
+        let start_bucket = range.start / BUCKET_SIZE;
+        let end_bucket = if range.end > range.start {
+            (range.end - 1) / BUCKET_SIZE
+        } else {
+            start_bucket
+        };
+
+        for bucket_id in start_bucket..=end_bucket {
+            self.buckets
+                .entry(bucket_id)
+                .or_default()
+                .push(range.clone());
+        }
+    }
+
+    fn find_symbol_with_offset(&self, address: u64) -> Option<ResolvedSymbol<'_>> {
+        let bucket_id = address / BUCKET_SIZE;
+
+        if let Some(ranges) = self.buckets.get(&bucket_id) {
+            for range in ranges {
+                if address >= range.start && address < range.end {
+                    return Some(ResolvedSymbol {
+                        symbol: &range.symbol,
+                        offset: address - range.start,
+                    });
+                }
+            }
+        }
+
+        None
+    }
 }
 
 /// A symbolizer that resolves symbols from PE files loaded in a minidump
@@ -44,7 +81,7 @@ pub struct PeSymbolizer {
     module_ranges: Vec<ModuleRange>, // sorted by start address for binary search
     symbol_cache: SymbolCache,       // Point symbols (exports, imports, data)
     pdb_info_cache: HashMap<u64, Option<PdbInfo>>, // base_address -> PdbInfo
-    range_buckets: HashMap<u64, RangeBucket>, // bucket_id -> ranges in bucket
+    procedure_buckets: RangeBuckets, // Function/procedure ranges
 }
 
 type SymbolCache = HashMap<u64, SymbolInfo>;
@@ -73,7 +110,7 @@ impl Symbolizer for PeSymbolizer {
                 let _res = analyze_module(
                     &mut self.symbol_cache,
                     &mut self.pdb_info_cache,
-                    &mut self.range_buckets,
+                    &mut self.procedure_buckets,
                     &module.name,
                     module.base_address,
                     memory,
@@ -82,7 +119,23 @@ impl Symbolizer for PeSymbolizer {
             module.analyzed = true;
         }
 
-        self.resolve_symbol_with_offset(address)
+        // Try to resolve with exact symbol first
+        if let Some(resolved) = self.resolve_symbol_with_offset(address) {
+            return Some(resolved);
+        }
+
+        // Fallback to module + offset if we found a module
+        if let Ok(idx) = module_idx {
+            let module = &self.module_ranges[idx];
+            let offset = address - module.base_address;
+
+            return Some(ResolvedSymbol {
+                symbol: &module.symbol,
+                offset,
+            });
+        }
+
+        None
     }
 }
 
@@ -120,9 +173,13 @@ impl PeSymbolizer {
                 ModuleRange {
                     start: module.base_address,
                     end: module.base_address + module.size,
-                    name: filename,
+                    name: filename.clone(),
                     base_address: module.base_address,
                     analyzed: false,
+                    symbol: SymbolInfo {
+                        name: None,
+                        module: filename,
+                    },
                 }
             })
             .collect();
@@ -134,35 +191,18 @@ impl PeSymbolizer {
             module_ranges,
             symbol_cache: HashMap::new(),
             pdb_info_cache: HashMap::new(),
-            range_buckets: HashMap::new(),
+            procedure_buckets: RangeBuckets::default(),
         }
     }
 
     pub fn resolve_symbol_with_offset(&self, address: u64) -> Option<ResolvedSymbol<'_>> {
-        if let Some(symbol) = self.find_procedure_symbol_with_offset(address) {
+        if let Some(symbol) = self.procedure_buckets.find_symbol_with_offset(address) {
             Some(symbol)
         } else {
             self.symbol_cache
                 .get(&address)
                 .map(|symbol| ResolvedSymbol { symbol, offset: 0 })
         }
-    }
-
-    fn find_procedure_symbol_with_offset(&self, address: u64) -> Option<ResolvedSymbol<'_>> {
-        let bucket_id = address / BUCKET_SIZE;
-
-        if let Some(bucket) = self.range_buckets.get(&bucket_id) {
-            for range in &bucket.ranges {
-                if address >= range.start && address < range.end {
-                    return Some(ResolvedSymbol {
-                        symbol: &range.symbol,
-                        offset: address - range.start,
-                    });
-                }
-            }
-        }
-
-        None
     }
 
     pub fn get_pdb_info(&self, base_address: u64) -> Option<&PdbInfo> {
@@ -173,7 +213,7 @@ impl PeSymbolizer {
 fn analyze_module(
     cache: &mut SymbolCache,
     pdb_cache: &mut HashMap<u64, Option<PdbInfo>>,
-    range_buckets: &mut HashMap<u64, RangeBucket>,
+    procedure_buckets: &mut RangeBuckets,
     module_name: &str,
     base_address: u64,
     memory: &dyn MemoryTrait,
@@ -231,7 +271,13 @@ fn analyze_module(
 
     // Attempt to load symbols from PDB file if available
     if let Some(ref pdb_info) = pdb_info {
-        let _ = load_pdb_symbols(cache, range_buckets, &pdb_info.filename, base_address);
+        let _ = load_pdb_symbols(
+            cache,
+            procedure_buckets,
+            module_name,
+            &pdb_info.filename,
+            base_address,
+        );
     }
 
     pdb_cache.insert(base_address, pdb_info);
@@ -318,18 +364,17 @@ fn parse_import_address_table(
 
         let symbol_name = if (lookup_entry & 0x8000000000000000) != 0 {
             let ordinal = lookup_entry & 0xFFFF;
-            format!("{}#{}", dll_name, ordinal)
+            format!("#{}", ordinal)
         } else {
             let name_table_rva = lookup_entry & 0x7FFFFFFF;
             let hint_name_address = base_address + name_table_rva;
-            let name = read_cstring(memory, hint_name_address + 2)?;
-            format!("{}!{}", dll_name, name)
+            read_cstring(memory, hint_name_address + 2)?
         };
 
         let iat_entry_address = iat_address + offset;
         let function_address = memory.read_u64(iat_entry_address)?;
         let symbol = SymbolInfo {
-            name: symbol_name,
+            name: Some(symbol_name),
             module: dll_name.to_string(),
         };
         cache.insert(function_address, symbol);
@@ -375,7 +420,7 @@ fn parse_export_table(
                 cache.insert(
                     function_address,
                     SymbolInfo {
-                        name: format!("{}!{}", module_name, function_name),
+                        name: Some(function_name),
                         module: module_name.to_string(),
                     },
                 );
@@ -393,7 +438,7 @@ fn parse_export_table(
             cache.entry(function_address).or_insert_with(|| {
                 let ordinal = base_ordinal + ordinal_index;
                 SymbolInfo {
-                    name: format!("{}!#{}", module_name, ordinal),
+                    name: Some(format!("#{}", ordinal)),
                     module: module_name.to_string(),
                 }
             });
@@ -472,7 +517,8 @@ fn parse_debug_directory(
 
 fn load_pdb_symbols(
     cache: &mut SymbolCache,
-    range_buckets: &mut HashMap<u64, RangeBucket>,
+    procedure_buckets: &mut RangeBuckets,
+    module_name: &str,
     pdb_filename: &str,
     base_address: u64,
 ) -> Result<()> {
@@ -503,7 +549,8 @@ fn load_pdb_symbols(
     if let Ok(symbol_table) = pdb.global_symbols() {
         load_symbols_from_iter(
             cache,
-            range_buckets,
+            procedure_buckets,
+            module_name,
             symbol_table.iter(),
             base_address,
             &address_map,
@@ -518,7 +565,14 @@ fn load_pdb_symbols(
             if let Some(info) = pdb.module_info(&module)?
                 && let Ok(symbols) = info.symbols()
             {
-                load_symbols_from_iter(cache, range_buckets, symbols, base_address, &address_map)?;
+                load_symbols_from_iter(
+                    cache,
+                    procedure_buckets,
+                    module_name,
+                    symbols,
+                    base_address,
+                    &address_map,
+                )?;
             }
         }
     }
@@ -528,7 +582,8 @@ fn load_pdb_symbols(
 
 fn load_symbols_from_iter(
     cache: &mut SymbolCache,
-    range_buckets: &mut HashMap<u64, RangeBucket>,
+    procedure_buckets: &mut RangeBuckets,
+    module_name: &str,
     mut symbols: pdb::SymbolIter<'_>,
     base_address: u64,
     address_map: &pdb::AddressMap,
@@ -540,8 +595,8 @@ fn load_symbols_from_iter(
                     if let Some(rva) = data.offset.to_rva(address_map) {
                         let address = base_address + rva.0 as u64;
                         let symbol_info = SymbolInfo {
-                            name: data.name.to_string().into_owned(),
-                            module: "pdb".to_string(),
+                            name: Some(data.name.to_string().into_owned()),
+                            module: module_name.to_string(),
                         };
                         cache.insert(address, symbol_info);
                     }
@@ -551,25 +606,25 @@ fn load_symbols_from_iter(
                         let start_address = base_address + rva.0 as u64;
                         let end_address = start_address + data.len as u64;
                         let symbol_info = SymbolInfo {
-                            name: data.name.to_string().into_owned(),
-                            module: "pdb".to_string(),
+                            name: Some(data.name.to_string().into_owned()),
+                            module: module_name.to_string(),
                         };
 
                         // Add to range buckets for fast interval lookup
-                        add_procedure_range_to_buckets(
-                            range_buckets,
-                            start_address,
-                            end_address,
-                            symbol_info,
-                        );
+                        let symbol_range = SymbolRange {
+                            start: start_address,
+                            end: end_address,
+                            symbol: symbol_info,
+                        };
+                        procedure_buckets.add_range(symbol_range);
                     }
                 }
                 pdb::SymbolData::Data(data) => {
                     if let Some(rva) = data.offset.to_rva(address_map) {
                         let address = base_address + rva.0 as u64;
                         let symbol_info = SymbolInfo {
-                            name: data.name.to_string().into_owned(),
-                            module: "pdb".to_string(),
+                            name: Some(data.name.to_string().into_owned()),
+                            module: module_name.to_string(),
                         };
                         cache.insert(address, symbol_info);
                     }
@@ -579,29 +634,4 @@ fn load_symbols_from_iter(
         }
     }
     Ok(())
-}
-
-fn add_procedure_range_to_buckets(
-    range_buckets: &mut HashMap<u64, RangeBucket>,
-    start: u64,
-    end: u64,
-    symbol: SymbolInfo,
-) {
-    let range = ProcedureRange { start, end, symbol };
-
-    // Add this range to all buckets it overlaps
-    let start_bucket = start / BUCKET_SIZE;
-    let end_bucket = if end > start {
-        (end - 1) / BUCKET_SIZE
-    } else {
-        start_bucket
-    };
-
-    for bucket_id in start_bucket..=end_bucket {
-        range_buckets
-            .entry(bucket_id)
-            .or_default()
-            .ranges
-            .push(range.clone());
-    }
 }

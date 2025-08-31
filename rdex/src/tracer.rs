@@ -1,4 +1,3 @@
-use crate::process_trait::ProcessTrait;
 use crate::symbolizer::Symbolizer;
 use anyhow::Result;
 use colored::*;
@@ -92,12 +91,11 @@ impl InstructionTracer {
         self.full_trace
     }
 
-    pub fn trace_instruction<M: MemoryTrait, P: ProcessTrait>(
+    pub fn trace_instruction<M: MemoryTrait>(
         &mut self,
         rip: u64,
         instruction_bytes: &[u8],
         engine: &Engine<M>,
-        process: &P,
         symbolizer: Option<&mut (dyn Symbolizer + '_)>,
     ) -> Result<()> {
         if !self.enabled {
@@ -152,29 +150,29 @@ impl InstructionTracer {
         let r14 = engine.reg_read(Register::R14);
         let r15 = engine.reg_read(Register::R15);
 
-        // Check if RIP is in a known module
-        let module_info = process.find_module_for_address(rip);
-
         // Try to get symbol information for the current instruction address
         let resolved_symbol = symbolizer.and_then(|s| s.resolve_address(&engine.memory, rip));
 
         // Format the symbol information (no address since it's shown separately)
-        let symbol_str = match (module_info, resolved_symbol) {
-            (_, Some(resolved)) => {
-                if resolved.offset == 0 {
-                    format!("{}", resolved.symbol.name.bright_cyan())
-                } else {
-                    format!(
-                        "{}+0x{:x}",
-                        resolved.symbol.name.bright_cyan(),
-                        resolved.offset
-                    )
+        let symbol_str = match resolved_symbol {
+            Some(resolved) => {
+                let symbol_module = resolved.symbol.module.green();
+                match &resolved.symbol.name {
+                    Some(name) => {
+                        let symbol_display = format!("{}!{}", symbol_module, name.bright_cyan());
+                        if resolved.offset == 0 {
+                            symbol_display
+                        } else {
+                            format!("{}+0x{:x}", symbol_display, resolved.offset)
+                        }
+                    }
+                    None => {
+                        // Module + offset from the symbolizer
+                        format!("{}+0x{:x}", symbol_module, resolved.offset)
+                    }
                 }
             }
-            (Some((module_name, _base, offset)), None) => {
-                format!("{}+0x{:x}", module_name.green().bold(), offset)
-            }
-            (None, None) => String::new(),
+            None => String::new(),
         };
 
         if self.full_trace {

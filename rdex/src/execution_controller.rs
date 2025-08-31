@@ -36,7 +36,6 @@ where
                     address,
                     &instruction_bytes,
                     engine,
-                    self.process,
                     self.symbolizer.as_deref_mut(),
                 )
                 .unwrap();
