@@ -17,11 +17,13 @@ rust friendly way.
 It currently only supports x86-64 via the iced_x64 disassembler.
 
 <img width="1165" height="745" alt="Instruction tracing" src="https://github.com/user-attachments/assets/bf0be54d-c112-46e7-8c68-8464ce8e7f32" />
+<img width="1572" height="912" alt="Trace TUI" src="https://github.com/user-attachments/assets/e745f623-3240-448d-8498-95acd5ea44d7" />
 
 ## Crates
 
 - [remu64](remu64): Core emulation engine (CPU, memory, hooks)
-- [rdex](rex): Minidump loader and utilities to exectue functions
+- [rdex](rex): Minidump loader and utilities to execute functions
+- [remu64-tui](remu64-tui): TUI for viewing traces and inspecting state of CPU/memory at given points in time
 
 ## Usage
 
