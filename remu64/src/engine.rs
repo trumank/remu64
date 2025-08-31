@@ -1020,17 +1020,27 @@ impl<H: HookManager<M, PS>, M: MemoryTrait<PS>, const PS: u64> ExecutionContext<
                 Ok(())
             }
             OpKind::Memory => {
-                let mut addr = inst.memory_displacement64();
+                let mut addr;
 
-                if inst.memory_base() != IcedRegister::None {
-                    let base_reg = self.convert_register(inst.memory_base())?;
-                    addr = addr.wrapping_add(self.engine.cpu.read_reg(base_reg));
-                }
+                // Handle RIP-relative addressing differently
+                if inst.memory_base() == IcedRegister::RIP {
+                    // iced_x86 already calculates the effective address for RIP-relative
+                    addr = inst.memory_displacement64();
+                } else {
+                    // Standard addressing: disp + base + index*scale
+                    addr = inst.memory_displacement64();
 
-                if inst.memory_index() != IcedRegister::None {
-                    let index_reg = self.convert_register(inst.memory_index())?;
-                    let scale = inst.memory_index_scale();
-                    addr = addr.wrapping_add(self.engine.cpu.read_reg(index_reg) * (scale as u64));
+                    if inst.memory_base() != IcedRegister::None {
+                        let base_reg = self.convert_register(inst.memory_base())?;
+                        addr = addr.wrapping_add(self.engine.cpu.read_reg(base_reg));
+                    }
+
+                    if inst.memory_index() != IcedRegister::None {
+                        let index_reg = self.convert_register(inst.memory_index())?;
+                        let scale = inst.memory_index_scale();
+                        addr =
+                            addr.wrapping_add(self.engine.cpu.read_reg(index_reg) * (scale as u64));
+                    }
                 }
 
                 // Apply segment base if segment prefix is present
