@@ -243,7 +243,7 @@ fn draw_instructions(
 fn draw_stack(
     f: &mut Frame,
     area: Rect,
-    state: &AppState,
+    state: &mut AppState,
     trace: &[TraceEntry],
     memory_snapshot: &dyn MemoryTrait,
 ) {
@@ -289,12 +289,23 @@ fn draw_stack(
                     let mut current_addr = u64::from_le_bytes(buffer);
                     let mut value_chain = vec![current_addr];
 
-                    while value_chain.len() < 3
-                        && current_addr != 0
-                        && let Ok(dereferenced) = memory_snapshot.read_u64(current_addr)
-                    {
-                        value_chain.push(dereferenced);
-                        current_addr = dereferenced;
+                    while value_chain.len() < 3 && current_addr != 0 {
+                        // Check if this address resolves to a symbol with a name
+                        if let Some(resolved_symbol) = state
+                            .symbolizer
+                            .resolve_address(memory_snapshot, current_addr)
+                            && resolved_symbol.symbol.name.is_some()
+                        {
+                            // Stop chain following when we find a named symbol
+                            break;
+                        }
+
+                        if let Ok(dereferenced) = memory_snapshot.read_u64(current_addr) {
+                            value_chain.push(dereferenced);
+                            current_addr = dereferenced;
+                        } else {
+                            break;
+                        }
                     }
 
                     let mut line_spans = vec![Span::styled(
@@ -305,22 +316,50 @@ fn draw_stack(
                     line_spans.push(Span::raw(" "));
 
                     for (i, &chain_value) in value_chain.iter().enumerate() {
+                        // Try to resolve the address to a symbol if it's not zero
+                        let mut sym_spans = vec![];
+                        if chain_value != 0
+                            && let Some(resolved_symbol) = state
+                                .symbolizer
+                                .resolve_address(memory_snapshot, chain_value)
+                            && let Some(symbol_name) = &resolved_symbol.symbol.name
+                        {
+                            sym_spans.push(Span::raw(" ("));
+                            sym_spans.push(Span::styled(
+                                resolved_symbol.symbol.module.clone(),
+                                Style::default().fg(Color::Magenta),
+                            ));
+                            sym_spans.push(Span::styled("!".to_string(), Style::default()));
+                            sym_spans.push(Span::styled(
+                                symbol_name.clone(),
+                                Style::default().fg(Color::Yellow),
+                            ));
+                            if resolved_symbol.offset > 0 {
+                                sym_spans
+                                    .push(Span::raw(format!("+0x{:x}", resolved_symbol.offset)));
+                            }
+                            sym_spans.push(Span::raw(")"));
+                        }
                         if i > 0 {
                             line_spans.push(Span::raw(" -> "));
                         }
 
                         let color = if chain_value == 0 {
+                            // null
                             Color::DarkGray
-                        } else if i == value_chain.len() - 1 {
-                            Color::Blue
-                        } else {
+                        } else if i < value_chain.len() - 1 || !sym_spans.is_empty() {
+                            // points to valid data or symbol
                             Color::Green
+                        } else {
+                            Color::Blue
                         };
 
                         line_spans.push(Span::styled(
                             format!("0x{:016x}", chain_value),
                             Style::default().fg(color),
                         ));
+
+                        line_spans.extend(sym_spans);
                     }
 
                     lines.push(Line::from(line_spans));
