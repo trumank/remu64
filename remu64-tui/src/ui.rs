@@ -1,3 +1,6 @@
+use iced_x86::{
+    Decoder, DecoderOptions, Formatter as _, FormatterOutput, FormatterTextKind, IntelFormatter,
+};
 use ratatui::{
     Frame,
     layout::{Constraint, Direction, Layout, Rect},
@@ -5,16 +8,18 @@ use ratatui::{
     text::{Line, Span},
     widgets::{Block, Borders, List, ListItem, Paragraph, Wrap},
 };
-use remu64::Register;
+use rdex::symbolizer::Symbolizer as _;
+use remu64::{Register, memory::MemoryTrait};
 
 use crate::app::{AppState, Panel};
-use crate::tracer::{TraceEntry, Tracer};
+use crate::tracer::TraceEntry;
 
 pub fn draw(
     f: &mut Frame,
     state: &mut AppState,
     trace: &[TraceEntry],
-    tracer: &mut Tracer,
+    memory: &dyn MemoryTrait,
+    memory_snapshot: &dyn MemoryTrait,
     trace_error: Option<&str>,
 ) {
     let chunks = Layout::default()
@@ -31,21 +36,21 @@ pub fn draw(
         .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
         .split(chunks[1]);
 
-    let left_chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([Constraint::Percentage(70), Constraint::Percentage(30)])
-        .split(main_chunks[0]);
-
     let right_chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Percentage(70), Constraint::Percentage(30)])
+        .constraints([Constraint::Length(12), Constraint::Min(0)])
         .split(main_chunks[1]);
 
+    let right_top_chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Length(51), Constraint::Min(0)])
+        .split(right_chunks[0]);
+
     // Draw panels
-    draw_instructions(f, left_chunks[0], state, trace, tracer);
-    draw_stack(f, left_chunks[1], state, trace);
-    draw_cpu_state(f, right_chunks[0], state, trace);
-    draw_controls(f, right_chunks[1], state);
+    draw_instructions(f, main_chunks[0], state, memory, trace);
+    draw_cpu_state(f, right_top_chunks[0], state, trace);
+    draw_controls(f, right_top_chunks[1], state);
+    draw_stack(f, right_chunks[1], state, trace, memory_snapshot);
 }
 
 fn draw_header(f: &mut Frame, area: Rect, state: &AppState, trace_error: Option<&str>) {
@@ -81,8 +86,8 @@ fn draw_instructions(
     f: &mut Frame,
     area: Rect,
     state: &mut AppState,
+    memory: &dyn MemoryTrait,
     trace: &[TraceEntry],
-    tracer: &mut Tracer,
 ) {
     let selected = state.selected_panel == Panel::Instructions;
     let border_style = if selected {
@@ -120,7 +125,7 @@ fn draw_instructions(
             ));
 
             // Add disassembled instruction (fixed width for alignment)
-            let colored_instruction = tracer.disassemble_instruction(entry.address, entry.size);
+            let colored_instruction = disassemble_instruction(memory, entry.address, entry.size);
 
             // Calculate the total length of the disassembly text
             let disasm_text: String = colored_instruction
@@ -149,7 +154,7 @@ fn draw_instructions(
 
             // Add symbol/module+offset column at the end with different colors
             instruction_spans.push(Span::raw(" "));
-            match tracer.get_symbol_info(entry.address) {
+            match state.symbolizer.resolve_address(memory, entry.address) {
                 Some(resolved_symbol) => {
                     if let Some(symbol_name) = &resolved_symbol.symbol.name {
                         // We have a specific symbol
@@ -227,15 +232,21 @@ fn draw_instructions(
         )
         .highlight_style(
             Style::default()
-                .fg(Color::Yellow)
+                .bg(Color::DarkGray)
                 .add_modifier(Modifier::BOLD),
         )
-        .highlight_symbol("> ");
+        .highlight_symbol("");
 
     f.render_stateful_widget(list, area, &mut state.instruction_list_state);
 }
 
-fn draw_stack(f: &mut Frame, area: Rect, state: &AppState, trace: &[TraceEntry]) {
+fn draw_stack(
+    f: &mut Frame,
+    area: Rect,
+    state: &AppState,
+    trace: &[TraceEntry],
+    memory_snapshot: &dyn MemoryTrait,
+) {
     let selected = state.selected_panel == Panel::Stack;
     let border_style = if selected {
         Style::default().fg(Color::Yellow)
@@ -247,31 +258,99 @@ fn draw_stack(f: &mut Frame, area: Rect, state: &AppState, trace: &[TraceEntry])
     let stack_content = if let Some(current_entry) = trace.get(state.current_trace_index()) {
         let rsp = current_entry.cpu_state.read_reg(Register::RSP);
 
-        // Create mock stack data for now
+        // Calculate how many stack entries we can display based on available height
+        let available_height = area.height.saturating_sub(2) as usize; // Subtract borders
+        let num_entries = available_height.max(1);
+
+        // Read real stack data from memory snapshot
         let mut lines = Vec::new();
-        for i in 0..16 {
-            let addr = rsp + (i * 8);
-            lines.push(Line::from(vec![
-                Span::styled(
-                    format!("0x{:016x}: ", addr),
-                    Style::default().fg(Color::Cyan),
-                ),
-                Span::raw("00 01 02 03 04 05 06 07"),
-            ]));
+        for i in 0..num_entries {
+            let addr = rsp + (i * 8) as u64;
+            let mut buffer = [0u8; 8];
+
+            match memory_snapshot.read(addr, &mut buffer) {
+                Ok(_) => {
+                    let mut hex_spans = Vec::new();
+                    for (i, b) in buffer.iter().enumerate() {
+                        if i > 0 {
+                            hex_spans.push(Span::raw(" "));
+                        }
+                        let hex_color = if *b == 0 {
+                            Color::DarkGray
+                        } else {
+                            Color::Reset
+                        };
+                        hex_spans.push(Span::styled(
+                            format!("{:02x}", b),
+                            Style::default().fg(hex_color),
+                        ));
+                    }
+
+                    let mut current_addr = u64::from_le_bytes(buffer);
+                    let mut value_chain = vec![current_addr];
+
+                    while value_chain.len() < 3
+                        && current_addr != 0
+                        && let Ok(dereferenced) = memory_snapshot.read_u64(current_addr)
+                    {
+                        value_chain.push(dereferenced);
+                        current_addr = dereferenced;
+                    }
+
+                    let mut line_spans = vec![Span::styled(
+                        format!("0x{:016x}: ", addr),
+                        Style::default().fg(Color::Cyan),
+                    )];
+                    line_spans.extend(hex_spans);
+                    line_spans.push(Span::raw(" "));
+
+                    for (i, &chain_value) in value_chain.iter().enumerate() {
+                        if i > 0 {
+                            line_spans.push(Span::raw(" -> "));
+                        }
+
+                        let color = if chain_value == 0 {
+                            Color::DarkGray
+                        } else if i == value_chain.len() - 1 {
+                            Color::Blue
+                        } else {
+                            Color::Green
+                        };
+
+                        line_spans.push(Span::styled(
+                            format!("0x{:016x}", chain_value),
+                            Style::default().fg(color),
+                        ));
+                    }
+
+                    lines.push(Line::from(line_spans));
+                }
+                Err(_) => {
+                    lines.push(Line::from(vec![
+                        Span::styled(
+                            format!("0x{:016x}: ", addr),
+                            Style::default().fg(Color::Cyan),
+                        ),
+                        Span::styled(
+                            "-- -- -- -- -- -- -- --",
+                            Style::default().fg(Color::DarkGray),
+                        ),
+                        Span::styled(" (unmapped)", Style::default().fg(Color::Red)),
+                    ]));
+                }
+            }
         }
         lines
     } else {
         vec![Line::from("No stack data available")]
     };
 
-    let paragraph = Paragraph::new(stack_content)
-        .block(
-            Block::default()
-                .title("Stack")
-                .borders(Borders::ALL)
-                .border_style(border_style),
-        )
-        .wrap(Wrap { trim: true });
+    let paragraph = Paragraph::new(stack_content).block(
+        Block::default()
+            .title("Stack")
+            .borders(Borders::ALL)
+            .border_style(border_style),
+    );
 
     f.render_widget(paragraph, area);
 }
@@ -443,4 +522,73 @@ fn draw_controls(f: &mut Frame, area: Rect, state: &AppState) {
     );
 
     f.render_widget(paragraph, area);
+}
+
+/// Disassemble instruction and return colored spans for UI
+fn disassemble_instruction(
+    memory: &dyn MemoryTrait,
+    address: u64,
+    size: usize,
+) -> Vec<Span<'static>> {
+    let mut instruction_bytes = vec![0; size];
+    match memory.read(address, &mut instruction_bytes) {
+        Ok(_) => {
+            // Disassemble the instruction
+            let mut decoder =
+                Decoder::with_ip(64, &instruction_bytes, address, DecoderOptions::NONE);
+
+            if let Some(instruction) = decoder.iter().next() {
+                let mut formatter = IntelFormatter::new();
+                let mut output = ColoredFormatterOutput::new();
+                formatter.format(&instruction, &mut output);
+                output.into_spans()
+            } else {
+                vec![Span::styled(
+                    format!("invalid @ 0x{:x}", address),
+                    Style::default().fg(Color::Red),
+                )]
+            }
+        }
+        Err(_) => vec![Span::styled(
+            format!("unmapped @ 0x{:x}", address),
+            Style::default().fg(Color::Red),
+        )],
+    }
+}
+struct ColoredFormatterOutput {
+    spans: Vec<Span<'static>>,
+}
+
+impl ColoredFormatterOutput {
+    fn new() -> Self {
+        Self { spans: Vec::new() }
+    }
+
+    fn into_spans(self) -> Vec<Span<'static>> {
+        self.spans
+    }
+}
+
+impl FormatterOutput for ColoredFormatterOutput {
+    fn write(&mut self, text: &str, kind: FormatterTextKind) {
+        let style = match kind {
+            FormatterTextKind::Directive => Style::default().fg(Color::Cyan), // Prefixes like "rep"
+            FormatterTextKind::Prefix => Style::default().fg(Color::Cyan), // Instruction prefixes
+            FormatterTextKind::Mnemonic => Style::default().fg(Color::Yellow), // Instruction mnemonic
+            FormatterTextKind::Keyword => Style::default().fg(Color::Magenta), // Keywords like "ptr", "byte"
+            FormatterTextKind::Operator => Style::default().fg(Color::White), // Operators like +, -, *
+            FormatterTextKind::Punctuation => Style::default().fg(Color::White), // Punctuation like [, ], ,
+            FormatterTextKind::Number => Style::default().fg(Color::Green), // Numbers and addresses
+            FormatterTextKind::Register => Style::default().fg(Color::Blue), // Register names
+            FormatterTextKind::SelectorValue => Style::default().fg(Color::Green), // Selector values
+            FormatterTextKind::LabelAddress => Style::default().fg(Color::Green), // Label addresses
+            FormatterTextKind::FunctionAddress => Style::default().fg(Color::Green), // Function addresses
+            FormatterTextKind::Data => Style::default().fg(Color::Green), // Data references
+            FormatterTextKind::Label => Style::default().fg(Color::Green), // Labels
+            FormatterTextKind::Function => Style::default().fg(Color::Green), // Function names
+            _ => Style::default(),                                        // Default for other types
+        };
+
+        self.spans.push(Span::styled(text.to_owned(), style));
+    }
 }

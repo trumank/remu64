@@ -1,18 +1,9 @@
 use anyhow::Result;
-use iced_x86::{
-    Decoder, DecoderOptions, Formatter, FormatterOutput, FormatterTextKind, IntelFormatter,
+use rdex::{ExecutionController, MinidumpLoader, MinidumpMemory, VMContext};
+use remu64::{
+    CowMemory, CpuState, Engine, EngineMode, HookAction, HookManager, Register, memory::MemoryTrait,
 };
-use ratatui::{
-    style::{Color, Style},
-    text::Span,
-};
-use rdex::{
-    DumpExec, ExecutionController, MinidumpLoader, ProcessTrait, VMContext,
-    pe_symbolizer::PeSymbolizer,
-    symbolizer::{ResolvedSymbol, Symbolizer},
-};
-use remu64::{CowMemory, CpuState, Engine, HookAction, HookManager, Register, memory::MemoryTrait};
-use std::{collections::HashMap, marker::PhantomData, path::PathBuf};
+use std::collections::HashMap;
 use tracing::{debug, info, warn};
 
 #[derive(Debug, Clone)]
@@ -30,68 +21,37 @@ pub enum InstructionAction {
 
 pub type InstructionActions = HashMap<usize, Vec<InstructionAction>>;
 
-struct ColoredFormatterOutput {
-    spans: Vec<Span<'static>>,
-}
-
-impl ColoredFormatterOutput {
-    fn new() -> Self {
-        Self { spans: Vec::new() }
-    }
-
-    fn into_spans(self) -> Vec<Span<'static>> {
-        self.spans
-    }
-}
-
-impl FormatterOutput for ColoredFormatterOutput {
-    fn write(&mut self, text: &str, kind: FormatterTextKind) {
-        let style = match kind {
-            FormatterTextKind::Directive => Style::default().fg(Color::Cyan), // Prefixes like "rep"
-            FormatterTextKind::Prefix => Style::default().fg(Color::Cyan), // Instruction prefixes
-            FormatterTextKind::Mnemonic => Style::default().fg(Color::Yellow), // Instruction mnemonic
-            FormatterTextKind::Keyword => Style::default().fg(Color::Magenta), // Keywords like "ptr", "byte"
-            FormatterTextKind::Operator => Style::default().fg(Color::White), // Operators like +, -, *
-            FormatterTextKind::Punctuation => Style::default().fg(Color::White), // Punctuation like [, ], ,
-            FormatterTextKind::Number => Style::default().fg(Color::Green), // Numbers and addresses
-            FormatterTextKind::Register => Style::default().fg(Color::Blue), // Register names
-            FormatterTextKind::SelectorValue => Style::default().fg(Color::Green), // Selector values
-            FormatterTextKind::LabelAddress => Style::default().fg(Color::Green), // Label addresses
-            FormatterTextKind::FunctionAddress => Style::default().fg(Color::Green), // Function addresses
-            FormatterTextKind::Data => Style::default().fg(Color::Green), // Data references
-            FormatterTextKind::Label => Style::default().fg(Color::Green), // Labels
-            FormatterTextKind::Function => Style::default().fg(Color::Green), // Function names
-            _ => Style::default(),                                        // Default for other types
-        };
-
-        self.spans.push(Span::styled(text.to_owned(), style));
-    }
-}
-
-pub struct CapturingTracer<P: ProcessTrait> {
+pub struct CapturingTracer<M> {
     pub trace_entries: Vec<TraceEntry>,
     pub max_instructions: usize,
+    pub selected_instruction: usize,
     pub actions: InstructionActions,
     pub current_instruction_index: usize,
-    _phantom: PhantomData<P>,
+    /// Snapshot of memory at selected instruction
+    pub memory_snapshot: Option<M>,
 }
 
-impl<P: ProcessTrait> CapturingTracer<P> {
-    pub fn new(max_instructions: usize, actions: &InstructionActions) -> Self {
+impl<M> CapturingTracer<M> {
+    pub fn new(
+        max_instructions: usize,
+        selected_instruction: usize,
+        actions: &InstructionActions,
+    ) -> Self {
         Self {
             trace_entries: Vec::new(),
             max_instructions,
+            selected_instruction,
             actions: actions.clone(),
             current_instruction_index: 0,
-            _phantom: PhantomData,
+            memory_snapshot: None,
         }
     }
 }
 
-impl<P: ProcessTrait> HookManager<CowMemory<P::Memory>> for CapturingTracer<P> {
+impl<M: MemoryTrait + Clone> HookManager<M> for CapturingTracer<M> {
     fn on_code(
         &mut self,
-        engine: &mut Engine<CowMemory<P::Memory>>,
+        engine: &mut Engine<M>,
         address: u64,
         size: usize,
     ) -> remu64::Result<HookAction> {
@@ -102,6 +62,9 @@ impl<P: ProcessTrait> HookManager<CowMemory<P::Memory>> for CapturingTracer<P> {
 
         // Capture CPU state at this instruction (before any modifications)
         let cpu_state = engine.cpu.clone();
+        if self.current_instruction_index == self.selected_instruction {
+            self.memory_snapshot = Some(engine.memory.clone());
+        }
 
         // Check for actions on this instruction index
         let mut was_skipped = false;
@@ -137,50 +100,38 @@ impl<P: ProcessTrait> HookManager<CowMemory<P::Memory>> for CapturingTracer<P> {
     }
 }
 
-pub struct Tracer {
-    minidump_loader: MinidumpLoader<'static>,
-    memory: rdex::MinidumpMemory<'static>,
-    symbolizer: PeSymbolizer,
+pub struct Tracer<'a> {
+    pub minidump_loader: &'a MinidumpLoader<'static>,
+    pub memory: &'a MinidumpMemory<'static>,
 }
 
-impl Tracer {
-    pub fn new(minidump_path: PathBuf) -> Result<Self> {
-        debug!("Attempting to load minidump: {:?}", minidump_path);
-        let minidump_loader = DumpExec::load_minidump(&minidump_path)?;
-        info!("Successfully loaded minidump: {:?}", minidump_path);
-
-        // Create the memory object from the loader
-        let memory = minidump_loader.create_memory()?;
-        debug!("Created MinidumpMemory from loader");
-
-        // Initialize the PeSymbolizer with the minidump loader
-        let symbolizer = PeSymbolizer::new(&minidump_loader);
-        info!("Initialized PeSymbolizer");
-
-        Ok(Tracer {
-            minidump_loader,
-            memory,
-            symbolizer,
-        })
-    }
-
+impl<'a> Tracer<'a> {
     /// Run trace up to specified instruction index, returning trace entries
     pub fn run_trace(
         &self,
         function_address: u64,
         max_instructions: usize,
+        current_idx: usize,
         actions: &InstructionActions,
-    ) -> Result<(Vec<TraceEntry>, Option<String>)> {
+    ) -> Result<(
+        Vec<TraceEntry>,
+        CowMemory<&'a MinidumpMemory<'static>>,
+        Option<String>,
+    )> {
         debug!(
             "run_trace called: addr=0x{:x}, max={}",
             function_address, max_instructions,
         );
         debug!("Creating VM context from minidump loader");
 
-        let loader = &self.minidump_loader;
+        let loader = self.minidump_loader;
 
         // Create VM context directly from the process
-        let mut vm_context = VMContext::new(loader)?;
+        let cow_memory = CowMemory::new(self.memory);
+        let mut engine = Engine::new_memory(EngineMode::Mode64, cow_memory);
+        let teb_address = loader.get_teb_address()?;
+        engine.set_gs_base(teb_address);
+        let mut vm_context = VMContext { engine };
 
         // Set up stack
         let stack_base = 0x7fff_f000_0000u64;
@@ -193,8 +144,7 @@ impl Tracer {
         // let out = vm_context.push_bytes_to_stack(&u64::to_le_bytes(0x289f6333a00))?;
         vm_context.engine.reg_write(Register::RCX, 0x289836c6200);
 
-        let mut capturing_tracer =
-            CapturingTracer::<MinidumpLoader>::new(max_instructions, actions);
+        let mut capturing_tracer = CapturingTracer::new(max_instructions, current_idx, actions);
 
         debug!(
             "Executing function at 0x{:x} with CapturingTracer",
@@ -246,39 +196,12 @@ impl Tracer {
             total_entries
         );
 
-        Ok((trace, error_message))
-    }
-
-    /// Get symbol information for an address
-    pub fn get_symbol_info(&mut self, address: u64) -> Option<ResolvedSymbol<'_>> {
-        self.symbolizer.resolve_address(&self.memory, address)
-    }
-
-    /// Disassemble instruction and return colored spans for UI
-    pub fn disassemble_instruction(&self, address: u64, size: usize) -> Vec<Span<'static>> {
-        let mut instruction_bytes = vec![0; size];
-        match self.memory.read(address, &mut instruction_bytes) {
-            Ok(_) => {
-                // Disassemble the instruction
-                let mut decoder =
-                    Decoder::with_ip(64, &instruction_bytes, address, DecoderOptions::NONE);
-
-                if let Some(instruction) = decoder.iter().next() {
-                    let mut formatter = IntelFormatter::new();
-                    let mut output = ColoredFormatterOutput::new();
-                    formatter.format(&instruction, &mut output);
-                    output.into_spans()
-                } else {
-                    vec![Span::styled(
-                        format!("invalid @ 0x{:x}", address),
-                        Style::default().fg(Color::Red),
-                    )]
-                }
-            }
-            Err(_) => vec![Span::styled(
-                format!("unmapped @ 0x{:x}", address),
-                Style::default().fg(Color::Red),
-            )],
-        }
+        Ok((
+            trace,
+            capturing_tracer
+                .memory_snapshot
+                .unwrap_or(vm_context.engine.memory),
+            error_message,
+        ))
     }
 }

@@ -11,6 +11,9 @@ use tracing::{debug, info};
 
 use crate::tracer::{InstructionAction, InstructionActions, Tracer};
 use crate::ui;
+use rdex::{
+    DumpExec, MinidumpLoader, MinidumpMemory, ProcessTrait as _, pe_symbolizer::PeSymbolizer,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Panel {
@@ -30,6 +33,8 @@ pub struct AppState {
     pub instruction_list_state: ListState,
     pub trace_to_end: bool,
     pub instruction_actions: InstructionActions,
+
+    pub symbolizer: PeSymbolizer,
 }
 
 impl AppState {
@@ -63,13 +68,23 @@ impl AppState {
 
 pub struct App {
     state: AppState,
-    tracer: Tracer,
+    minidump_loader: MinidumpLoader<'static>,
+    memory: MinidumpMemory<'static>,
 }
 
 impl App {
     pub fn new(minidump_path: PathBuf, function_address: u64) -> Result<Self> {
-        debug!("Creating tracer with minidump: {:?}", minidump_path);
-        let tracer = Tracer::new(minidump_path.clone())?;
+        debug!("Loading minidump: {:?}", minidump_path);
+        let minidump_loader = DumpExec::load_minidump(&minidump_path)?;
+        info!("Successfully loaded minidump: {:?}", minidump_path);
+
+        // Create the memory object from the loader
+        let memory = minidump_loader.create_memory()?;
+        debug!("Created MinidumpMemory from loader");
+
+        // Initialize the PeSymbolizer with the minidump loader
+        let symbolizer = PeSymbolizer::new(&minidump_loader);
+        info!("Initialized PeSymbolizer");
 
         let mut instruction_list_state = ListState::default();
         instruction_list_state.select(Some(0));
@@ -83,9 +98,14 @@ impl App {
             instruction_list_state,
             trace_to_end: false,
             instruction_actions: HashMap::new(),
+            symbolizer,
         };
 
-        Ok(App { state, tracer })
+        Ok(App {
+            state,
+            minidump_loader,
+            memory,
+        })
     }
 
     pub fn run(&mut self) -> Result<()> {
@@ -122,6 +142,8 @@ impl App {
                 );
             }
 
+            let current_idx = self.state.current_trace_index();
+
             // Calculate required instructions based on mode and current position
             let required_instructions = if self.state.trace_to_end {
                 // Run trace to completion (use a very large number)
@@ -137,16 +159,22 @@ impl App {
                 let base_instructions = (instruction_area_height as usize).max(10);
 
                 // Get the current trace index to see how far we've scrolled
-                let current_idx = self.state.current_trace_index();
 
                 // Calculate required instructions: current position + visible area + buffer
                 current_idx + base_instructions + 50 // 50 instruction buffer
             };
 
+            // Create tracer for this frame
+            let tracer = Tracer {
+                minidump_loader: &self.minidump_loader,
+                memory: &self.memory,
+            };
+
             // Generate trace with appropriate limit
-            let (trace, trace_error) = self.tracer.run_trace(
+            let (trace, memory_snapshot, trace_error) = tracer.run_trace(
                 self.state.function_address,
                 required_instructions,
+                current_idx,
                 &self.state.instruction_actions,
             )?;
 
@@ -162,7 +190,6 @@ impl App {
                 self.state.trace_to_end = false;
             } else {
                 // Ensure current trace index is within bounds
-                let current_idx = self.state.current_trace_index();
                 if current_idx >= trace.len() && !trace.is_empty() {
                     self.state
                         .instruction_list_state
@@ -176,7 +203,8 @@ impl App {
                     f,
                     &mut self.state,
                     &trace,
-                    &mut self.tracer,
+                    &self.memory,
+                    &memory_snapshot,
                     trace_error.as_deref(),
                 )
             })?;
