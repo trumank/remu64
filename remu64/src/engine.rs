@@ -618,18 +618,10 @@ impl<H: HookManager<M, PS>, M: MemoryTrait<PS>, const PS: u64> ExecutionContext<
             Mnemonic::Pmovzxwd => self.execute_pmovzxwd(inst),
             Mnemonic::Pmovzxwq => self.execute_pmovzxwq(inst),
             Mnemonic::Pmovzxdq => self.execute_pmovzxdq(inst),
-            _ => {
-                println!(
-                    "Unsupported instruction: {} ({:?}) at {:#x}",
-                    inst,
-                    inst.mnemonic(),
-                    inst.ip()
-                );
-                Err(EmulatorError::UnsupportedInstruction(format!(
-                    "{:?}",
-                    inst.mnemonic()
-                )))
-            }
+            _ => Err(EmulatorError::UnsupportedInstruction(format!(
+                "{:?}",
+                inst.mnemonic()
+            ))),
         }
     }
 
