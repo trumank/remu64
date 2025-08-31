@@ -513,4 +513,48 @@ impl<H: HookManager<M, PS>, M: MemoryTrait<PS>, const PS: u64> ExecutionContext<
         self.engine.cpu.write_reg(dst_reg, int_val as u64);
         Ok(())
     }
+
+    pub(crate) fn execute_movsd_sse(&mut self, inst: &Instruction) -> Result<()> {
+        // MOVSD: Move Scalar Double-Precision Floating-Point Value
+        // Two variants:
+        // 1. movsd xmm1, xmm2/m64 - Load double from memory/XMM to XMM (upper 64 bits zeroed)
+        // 2. movsd xmm1/m64, xmm2 - Store double from XMM to memory/XMM
+
+        match (inst.op_kind(0), inst.op_kind(1)) {
+            (OpKind::Register, OpKind::Register) => {
+                // movsd xmm1, xmm2 - Move from XMM to XMM
+                let dst_reg = self.convert_register(inst.op_register(0))?;
+                let src_reg = self.convert_register(inst.op_register(1))?;
+
+                let src_value = self.engine.cpu.read_xmm(src_reg);
+                // Only move the lower 64 bits, upper 64 bits of dst are zeroed
+                let result = src_value & 0xFFFFFFFFFFFFFFFF;
+                self.engine.cpu.write_xmm(dst_reg, result);
+                Ok(())
+            }
+            (OpKind::Register, OpKind::Memory) => {
+                // movsd xmm1, m64 - Load double from memory to XMM
+                let dst_reg = self.convert_register(inst.op_register(0))?;
+                let addr = self.calculate_memory_address(inst, 1)?;
+
+                // Read 64-bit double from memory
+                let double_value = self.read_memory_64(addr)?;
+                // Store in XMM register with upper 64 bits zeroed
+                self.engine.cpu.write_xmm(dst_reg, double_value as u128);
+                Ok(())
+            }
+            (OpKind::Memory, OpKind::Register) => {
+                // movsd m64, xmm1 - Store double from XMM to memory
+                let src_reg = self.convert_register(inst.op_register(1))?;
+                let addr = self.calculate_memory_address(inst, 0)?;
+
+                let src_value = self.engine.cpu.read_xmm(src_reg);
+                // Store only the lower 64 bits to memory
+                let double_bits = (src_value & 0xFFFFFFFFFFFFFFFF) as u64;
+                self.write_memory_sized(addr, double_bits, 8)?;
+                Ok(())
+            }
+            _ => Err(EmulatorError::UnsupportedOperandType),
+        }
+    }
 }

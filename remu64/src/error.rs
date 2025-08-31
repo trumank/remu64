@@ -17,6 +17,7 @@ pub enum EmulatorError {
     InvalidOperand,
     UnsupportedOperandType,
     InvalidOpcode,
+    UnalignedMemoryAccess(u64),
     InternalError(String),
 }
 
@@ -46,6 +47,9 @@ impl fmt::Display for EmulatorError {
             EmulatorError::InvalidOperand => write!(f, "Invalid operand"),
             EmulatorError::UnsupportedOperandType => write!(f, "Unsupported operand type"),
             EmulatorError::InvalidOpcode => write!(f, "Invalid opcode (UD2 instruction)"),
+            EmulatorError::UnalignedMemoryAccess(addr) => {
+                write!(f, "Unaligned memory access at address: {:#x}", addr)
+            }
             EmulatorError::InternalError(msg) => write!(f, "Internal error: {}", msg),
         }
     }

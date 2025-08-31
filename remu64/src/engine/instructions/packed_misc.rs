@@ -844,6 +844,47 @@ impl<H: HookManager<M, PS>, M: MemoryTrait<PS>, const PS: u64> ExecutionContext<
         Ok(())
     }
 
+    pub(crate) fn execute_psrldq(&mut self, inst: &Instruction) -> Result<()> {
+        // PSRLDQ: Packed shift right logical double quadword
+        // Shifts the entire 128-bit register right by the specified number of bytes,
+        // filling the shifted-in bytes with zeros
+
+        if inst.op_count() != 2 {
+            return Err(EmulatorError::UnsupportedInstruction(
+                "PSRLDQ requires exactly 2 operands".to_string(),
+            ));
+        }
+
+        let dst_reg = self.convert_register(inst.op_register(0))?;
+
+        if !dst_reg.is_xmm() {
+            return Err(EmulatorError::UnsupportedInstruction(
+                "PSRLDQ requires XMM register as destination".to_string(),
+            ));
+        }
+
+        let shift_bytes = match inst.op_kind(1) {
+            OpKind::Immediate8 => inst.immediate8(),
+            _ => {
+                return Err(EmulatorError::UnsupportedInstruction(
+                    "PSRLDQ requires immediate byte operand".to_string(),
+                ));
+            }
+        };
+
+        let dst_value = self.engine.cpu.read_xmm(dst_reg);
+        let result = if shift_bytes >= 16 {
+            // If shifting by 16 or more bytes, result is zero
+            0u128
+        } else {
+            // Shift right by the specified number of bytes (8 bits per byte)
+            dst_value >> (shift_bytes as u32 * 8)
+        };
+
+        self.engine.cpu.write_xmm(dst_reg, result);
+        Ok(())
+    }
+
     pub(crate) fn execute_vpmovmskb(&mut self, inst: &Instruction) -> Result<()> {
         // VPMOVMSKB: Move Byte Mask (AVX)
         // Creates a mask from the most significant bits of each byte in a YMM/XMM register

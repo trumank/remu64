@@ -1065,4 +1065,77 @@ impl<H: HookManager<M, PS>, M: MemoryTrait<PS>, const PS: u64> ExecutionContext<
 
         Ok(())
     }
+
+    pub(crate) fn execute_prefetchw(&mut self, inst: &Instruction) -> Result<()> {
+        // PREFETCHW: Prefetch Data for Write
+        // This instruction provides a hint to the processor that the cache line
+        // containing the specified memory location should be moved to the cache
+        // in anticipation of a write operation.
+        //
+        // In emulation, this is essentially a no-op since we don't have
+        // actual cache management, but we still need to validate the memory address.
+
+        // Calculate the memory address to prefetch
+        let _addr = self.calculate_memory_address(inst, 0)?;
+
+        // In a real processor, this would initiate a cache line prefetch
+        // for write access. In emulation, we don't need to do anything
+        // special since we don't model cache hierarchies.
+
+        // The instruction doesn't affect any registers or flags
+        Ok(())
+    }
+
+    pub(crate) fn execute_cmpxchg16b(&mut self, inst: &Instruction) -> Result<()> {
+        // CMPXCHG16B: Compare and Exchange 16 Bytes
+        // Compares the 128-bit value in RDX:RAX with the 128-bit value at the memory location
+        // If equal: ZF=1, memory location = RCX:RBX
+        // If not equal: ZF=0, RDX:RAX = memory location
+        //
+        // This instruction requires the LOCK prefix to be atomic
+
+        if inst.op_count() != 1 || inst.op_kind(0) != OpKind::Memory {
+            return Err(EmulatorError::UnsupportedInstruction(
+                "CMPXCHG16B requires exactly one memory operand".to_string(),
+            ));
+        }
+
+        let addr = self.calculate_memory_address(inst, 0)?;
+
+        // Ensure 16-byte alignment for CMPXCHG16B
+        if addr & 0xF != 0 {
+            return Err(EmulatorError::UnalignedMemoryAccess(addr));
+        }
+
+        // Read the 128-bit comparand from RDX:RAX (RDX = high, RAX = low)
+        let rax = self.engine.cpu.read_reg(Register::RAX);
+        let rdx = self.engine.cpu.read_reg(Register::RDX);
+        let comparand = ((rdx as u128) << 64) | (rax as u128);
+
+        // Read the 128-bit value from memory
+        let memory_value = self.read_memory_128(addr)?;
+
+        if comparand == memory_value {
+            // Values are equal: set ZF=1, store RCX:RBX to memory
+            self.engine.cpu.rflags.insert(Flags::ZF);
+
+            let rbx = self.engine.cpu.read_reg(Register::RBX);
+            let rcx = self.engine.cpu.read_reg(Register::RCX);
+            let new_value = ((rcx as u128) << 64) | (rbx as u128);
+
+            self.write_memory_128(addr, new_value)?;
+        } else {
+            // Values are not equal: set ZF=0, load memory into RDX:RAX
+            self.engine.cpu.rflags.remove(Flags::ZF);
+
+            let low_64 = (memory_value & 0xFFFFFFFFFFFFFFFF) as u64;
+            let high_64 = (memory_value >> 64) as u64;
+
+            self.engine.cpu.write_reg(Register::RAX, low_64);
+            self.engine.cpu.write_reg(Register::RDX, high_64);
+        }
+
+        // CMPXCHG16B only affects the ZF flag, no other flags are modified
+        Ok(())
+    }
 }

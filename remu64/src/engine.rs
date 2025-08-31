@@ -519,7 +519,18 @@ impl<H: HookManager<M, PS>, M: MemoryTrait<PS>, const PS: u64> ExecutionContext<
             Mnemonic::Scasb => self.execute_scasb(inst),
             Mnemonic::Cmpsb => self.execute_cmpsb(inst),
             Mnemonic::Movsw => self.execute_movsw(inst),
-            Mnemonic::Movsd => self.execute_movsd_string(inst),
+            Mnemonic::Movsd => {
+                // Differentiate between SSE movsd and string movsd
+                // SSE movsd involves XMM registers, string movsd does not
+                if inst.op_count() >= 1
+                    && (inst.op_kind(0) == OpKind::Register && inst.op_register(0).is_xmm())
+                    || (inst.op_kind(1) == OpKind::Register && inst.op_register(1).is_xmm())
+                {
+                    self.execute_movsd_sse(inst)
+                } else {
+                    self.execute_movsd_string(inst)
+                }
+            }
             Mnemonic::Movsq => self.execute_movsq(inst),
             Mnemonic::Stosw => self.execute_stosw(inst),
             Mnemonic::Stosd => self.execute_stosd(inst),
@@ -609,6 +620,7 @@ impl<H: HookManager<M, PS>, M: MemoryTrait<PS>, const PS: u64> ExecutionContext<
             Mnemonic::Psrlq => self.execute_psrlq(inst),
             Mnemonic::Psraw => self.execute_psraw(inst),
             Mnemonic::Psrad => self.execute_psrad(inst),
+            Mnemonic::Psrldq => self.execute_psrldq(inst),
             Mnemonic::Packsswb => self.execute_packsswb(inst),
             Mnemonic::Packuswb => self.execute_packuswb(inst),
             Mnemonic::Packssdw => self.execute_packssdw(inst),
@@ -632,6 +644,8 @@ impl<H: HookManager<M, PS>, M: MemoryTrait<PS>, const PS: u64> ExecutionContext<
             Mnemonic::Pmovzxwd => self.execute_pmovzxwd(inst),
             Mnemonic::Pmovzxwq => self.execute_pmovzxwq(inst),
             Mnemonic::Pmovzxdq => self.execute_pmovzxdq(inst),
+            Mnemonic::Prefetchw => self.execute_prefetchw(inst),
+            Mnemonic::Cmpxchg16b => self.execute_cmpxchg16b(inst),
             _ => Err(EmulatorError::UnsupportedInstruction(format!(
                 "{:?}",
                 inst.mnemonic()
