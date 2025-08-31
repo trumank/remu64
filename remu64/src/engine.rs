@@ -397,6 +397,7 @@ impl<H: HookManager<M, PS>, M: MemoryTrait<PS>, const PS: u64> ExecutionContext<
             Mnemonic::Movdqa => self.execute_movdqa(inst),
             Mnemonic::Movd => self.execute_movd(inst),
             Mnemonic::Movq => self.execute_movq(inst),
+            Mnemonic::Movss => self.execute_movss(inst),
             Mnemonic::Movlhps => self.execute_movlhps(inst),
             Mnemonic::Vzeroupper => self.execute_vzeroupper(inst),
             Mnemonic::Vaddps => self.execute_vaddps(inst),

@@ -259,3 +259,143 @@ fn test_addss() {
     assert_eq!(result[6], 0xCC);
     assert_eq!(result[7], 0xDD);
 }
+
+#[test]
+fn test_movss_memory_to_xmm() {
+    let mut engine = Engine::new(EngineMode::Mode64);
+
+    // Map memory
+    engine.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
+
+    // Test MOVSS - Move Scalar Single-Precision Floating-Point Value from memory to XMM
+    let code = vec![
+        // MOVSS XMM0, [rip + 0x00] - move from memory address using RIP-relative addressing
+        0xF3, 0x0F, 0x10, 0x05, 0x00, 0x00, 0x00, 0x00, // movss xmm0, [rip + 0x00]
+        // Float value to load (3.14159 as f32)
+        0xD0, 0x0F, 0x49, 0x40, // 3.14159 (float32 little-endian)
+    ];
+
+    // Set XMM0 with some initial value to test zeroing behavior
+    engine.xmm_write(Register::XMM0, 0xFFFFFFFFFFFFFFFF_AAAAAAAAAAAAAAAA);
+
+    engine.memory.write(0x1000, &code).unwrap();
+    engine.reg_write(Register::RIP, 0x1000);
+
+    // Execute instruction
+    match engine.emu_start(0x1000, 0x1008, 0, 0) {
+        Ok(_) => {}
+        Err(e) => panic!("Execution failed: {:?}", e),
+    }
+
+    // Check result directly from XMM register
+    let result = engine.xmm_read(Register::XMM0);
+
+    // Expected: lower 32 bits should contain 3.14159, upper 96 bits should be zero
+    let result_float = f32::from_bits((result & 0xFFFFFFFF) as u32);
+    assert!(
+        (result_float - 3.14159).abs() < 0.0001,
+        "Expected 3.14159, got {}",
+        result_float
+    );
+
+    // Check that upper 96 bits are zeroed (this is the key behavior of MOVSS from memory)
+    let upper_96 = result >> 32;
+    assert_eq!(
+        upper_96, 0,
+        "Upper 96 bits should be zeroed, but got {:024X}",
+        upper_96
+    );
+}
+
+#[test]
+fn test_movss_xmm_to_xmm() {
+    let mut engine = Engine::new(EngineMode::Mode64);
+
+    // Map memory
+    engine.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
+
+    // Test MOVSS - Move Scalar Single-Precision between XMM registers
+    let code = vec![
+        // MOVSS xmm1, xmm0 - move lower 32 bits from xmm0 to xmm1, preserve upper bits of xmm1
+        0xF3, 0x0F, 0x10, 0xC8, // movss xmm1, xmm0
+    ];
+
+    // Set up XMM0 with 10.0f32 in lower 32 bits + some upper bits
+    let float_bits = 10.0f32.to_bits() as u128;
+    let xmm0_value =
+        float_bits | (0x1122334455667788u64 as u128) << 32 | (0x99AABBCCDDEEFFu64 as u128) << 96;
+    engine.xmm_write(Register::XMM0, xmm0_value);
+
+    // Set up XMM1 with different values to test upper bit preservation
+    let xmm1_value = 0xAAAABBBBCCCCDDDD_EEEEFFFF12345678_u128;
+    engine.xmm_write(Register::XMM1, xmm1_value);
+
+    engine.memory.write(0x1000, &code).unwrap();
+    engine.reg_write(Register::RIP, 0x1000);
+
+    // Execute instruction
+    match engine.emu_start(0x1000, 0x1004, 0, 0) {
+        Ok(_) => {}
+        Err(e) => panic!("Execution failed: {:?}", e),
+    }
+
+    // Check result
+    let result = engine.xmm_read(Register::XMM1);
+
+    // Expected: lower 32 bits should be 10.0 from XMM0
+    let result_float = f32::from_bits((result & 0xFFFFFFFF) as u32);
+    assert_eq!(result_float, 10.0);
+
+    // Check that upper 96 bits of XMM1 are preserved (not zeroed like memory-to-register)
+    let upper_96 = result >> 32;
+    let expected_upper_96 = xmm1_value >> 32; // Should preserve original upper bits
+    assert_eq!(
+        upper_96, expected_upper_96,
+        "Upper 96 bits should be preserved"
+    );
+}
+
+#[test]
+fn test_movss_simple() {
+    use remu64::{Engine, EngineMode, Permission, Register, memory::MemoryTrait as _};
+
+    let mut engine = Engine::new(EngineMode::Mode64);
+    engine.memory.map(0x1000, 0x1000, Permission::ALL).unwrap();
+
+    // Simple MOVSS xmm0, xmm1 test
+    let code = vec![
+        0xF3, 0x0F, 0x10, 0xC1, // movss xmm0, xmm1
+    ];
+
+    // Set XMM1 with a known value (10.0f32 in lower 32 bits)
+    let float_bits = 10.0f32.to_bits() as u128;
+    engine.xmm_write(
+        Register::XMM1,
+        (0xDEADBEEF_CAFEBABE_12345678u128 << 32) | float_bits,
+    );
+
+    // Set XMM0 with different value to check preservation
+    engine.xmm_write(Register::XMM0, 0xAAAAAAAA_BBBBBBBB_CCCCCCCC_DDDDDDDD);
+
+    engine.memory.write(0x1000, &code).unwrap();
+    engine.reg_write(Register::RIP, 0x1000);
+
+    match engine.emu_start(0x1000, 0x1004, 0, 0) {
+        Ok(_) => {
+            let result = engine.xmm_read(Register::XMM0);
+            let lower_32 = (result & 0xFFFFFFFF) as u32;
+            let float_result = f32::from_bits(lower_32);
+
+            assert_eq!(float_result, 10.0);
+
+            // Check upper bits preserved
+            let upper_96 = result >> 32;
+            let expected_upper = 0xAAAAAAAA_BBBBBBBB_CCCCCCCC;
+            assert_eq!(
+                upper_96, expected_upper,
+                "Upper 96 bits should be preserved"
+            );
+        }
+        Err(e) => panic!("Execution failed: {:?}", e),
+    }
+}

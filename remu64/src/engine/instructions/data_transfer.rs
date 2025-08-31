@@ -735,4 +735,68 @@ impl<H: HookManager<M, PS>, M: MemoryTrait<PS>, const PS: u64> ExecutionContext<
 
         Ok(())
     }
+
+    pub(crate) fn execute_movss(&mut self, inst: &Instruction) -> Result<()> {
+        // MOVSS: Move Scalar Single-Precision Floating-Point Value
+        // Moves a 32-bit single-precision floating-point value between memory and XMM register
+        // When loading from memory to XMM, zeroes the upper 96 bits of the XMM register
+        // When moving between XMM registers, preserves the upper 96 bits of the destination
+
+        match (inst.op_kind(0), inst.op_kind(1)) {
+            (OpKind::Register, OpKind::Memory) => {
+                // xmm, [mem] - load 32-bit float from memory to XMM register, zero upper bits
+                let dst_reg = self.convert_register(inst.op_register(0))?;
+                if !dst_reg.is_xmm() {
+                    return Err(EmulatorError::UnsupportedInstruction(
+                        "MOVSS destination must be XMM register".to_string(),
+                    ));
+                }
+
+                let addr = self.calculate_memory_address(inst, 1)?;
+                let src_value = self.read_memory_sized(addr, 4)? as u32; // Read 32-bit float
+
+                // Zero entire XMM register and set lower 32 bits
+                self.engine.cpu.write_xmm(dst_reg, src_value as u128);
+                Ok(())
+            }
+            (OpKind::Memory, OpKind::Register) => {
+                // [mem], xmm - store lower 32 bits of XMM register to memory
+                let src_reg = self.convert_register(inst.op_register(1))?;
+                if !src_reg.is_xmm() {
+                    return Err(EmulatorError::UnsupportedInstruction(
+                        "MOVSS source must be XMM register".to_string(),
+                    ));
+                }
+
+                let addr = self.calculate_memory_address(inst, 0)?;
+                let src_value = self.engine.cpu.read_xmm(src_reg) as u32; // Get lower 32 bits
+                self.write_memory_sized(addr, src_value as u64, 4)?;
+                Ok(())
+            }
+            (OpKind::Register, OpKind::Register) => {
+                // xmm1, xmm2 - move lower 32 bits from xmm2 to xmm1, preserve upper bits of xmm1
+                let dst_reg = self.convert_register(inst.op_register(0))?;
+                let src_reg = self.convert_register(inst.op_register(1))?;
+
+                if !dst_reg.is_xmm() || !src_reg.is_xmm() {
+                    return Err(EmulatorError::UnsupportedInstruction(
+                        "MOVSS requires XMM registers".to_string(),
+                    ));
+                }
+
+                let dst_value = self.engine.cpu.read_xmm(dst_reg);
+                let src_value = self.engine.cpu.read_xmm(src_reg);
+
+                // Preserve upper 96 bits of destination, replace lower 32 bits with source
+                let result = (dst_value & !0xFFFFFFFF_u128) | (src_value & 0xFFFFFFFF);
+                self.engine.cpu.write_xmm(dst_reg, result);
+                Ok(())
+            }
+            _ => Err(EmulatorError::UnsupportedInstruction(format!(
+                "Unsupported MOVSS operand types: {:?}, {:?}",
+                inst.op_kind(0),
+                inst.op_kind(1)
+            ))),
+        }
+    }
 }
