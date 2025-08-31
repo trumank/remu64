@@ -13,10 +13,25 @@ pub enum HookType {
     Invalid,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HookAction {
+    /// Continue normal execution
+    Continue,
+    /// Skip the current instruction (advance RIP but don't execute)
+    Skip,
+    /// Stop emulation immediately
+    Stop,
+}
+
 pub trait HookManager<M: MemoryTrait<PS>, const PS: u64 = DEFAULT_PAGE_SIZE> {
-    fn on_code(&mut self, engine: &mut Engine<M, PS>, address: u64, size: usize) -> Result<()> {
+    fn on_code(
+        &mut self,
+        engine: &mut Engine<M, PS>,
+        address: u64,
+        size: usize,
+    ) -> Result<HookAction> {
         let _ = (engine, address, size);
-        Ok(())
+        Ok(HookAction::Continue)
     }
 
     fn on_mem_read(&mut self, engine: &mut Engine<M, PS>, address: u64, size: usize) -> Result<()> {

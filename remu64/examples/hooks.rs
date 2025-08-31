@@ -1,4 +1,4 @@
-use remu64::hooks::HookManager;
+use remu64::hooks::{HookAction, HookManager};
 use remu64::memory::MemoryTrait;
 use remu64::{Engine, EngineMode, Permission, Register};
 
@@ -20,14 +20,19 @@ impl CustomHooks {
 }
 
 impl<M: MemoryTrait> HookManager<M> for CustomHooks {
-    fn on_code(&mut self, engine: &mut Engine<M>, address: u64, size: usize) -> remu64::Result<()> {
+    fn on_code(
+        &mut self,
+        engine: &mut Engine<M>,
+        address: u64,
+        size: usize,
+    ) -> remu64::Result<HookAction> {
         self.code_hook_count += 1;
         println!(
             "[CODE] Executing instruction at {:#x} (size: {} bytes)",
             address, size
         );
         println!("  RAX = {:#x}", engine.reg_read(Register::RAX));
-        Ok(())
+        Ok(HookAction::Continue)
     }
 
     fn on_mem_read(

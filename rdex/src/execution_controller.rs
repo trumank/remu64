@@ -4,7 +4,7 @@ use crate::tracer::InstructionTracer;
 use anyhow::Result;
 use iced_x86::Formatter;
 use remu64::memory::MemoryTrait;
-use remu64::{CowMemory, EmulatorError, Engine, HookManager};
+use remu64::{CowMemory, EmulatorError, Engine, HookAction, HookManager};
 
 pub struct ExecutionHooks<'a, 'b, P, S>
 where
@@ -27,7 +27,7 @@ where
         engine: &mut Engine<CowMemory<P::Memory>>,
         address: u64,
         size: usize,
-    ) -> remu64::Result<()> {
+    ) -> remu64::Result<HookAction> {
         self.instruction_count += 1;
 
         if self.tracer.is_enabled() {
@@ -44,7 +44,7 @@ where
                 .unwrap();
         }
 
-        Ok(())
+        Ok(HookAction::Continue)
     }
 }
 

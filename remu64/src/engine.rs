@@ -6,7 +6,7 @@ use crate::DEFAULT_PAGE_SIZE;
 use crate::OwnedMemory;
 use crate::cpu::{CpuState, Flags, Register};
 use crate::error::{EmulatorError, Result};
-use crate::hooks::{HookManager, NoHooks};
+use crate::hooks::{HookAction, HookManager, NoHooks};
 use crate::memory::{MemoryTrait, Permission};
 use iced_x86::{Decoder, DecoderOptions, Instruction, Mnemonic, OpKind, Register as IcedRegister};
 
@@ -136,7 +136,10 @@ impl<H: HookManager<M, PS>, M: MemoryTrait<PS>, const PS: u64> ExecutionContext<
                 break;
             }
 
-            self.step()?;
+            let should_continue = self.step()?;
+            if !should_continue {
+                break;
+            }
 
             instruction_count += 1;
         }
@@ -144,7 +147,7 @@ impl<H: HookManager<M, PS>, M: MemoryTrait<PS>, const PS: u64> ExecutionContext<
         Ok(())
     }
 
-    fn step(&mut self) -> Result<()> {
+    fn step(&mut self) -> Result<bool> {
         let rip = self.engine.cpu.rip;
 
         // Check if we can execute at this address, but allow memory fault hooks to handle unmapped memory
@@ -181,13 +184,23 @@ impl<H: HookManager<M, PS>, M: MemoryTrait<PS>, const PS: u64> ExecutionContext<
 
         let inst = self.decode_instruction_with_page_boundaries(rip, bitness)?;
 
-        self.hooks.on_code(self.engine, rip, inst.len())?;
+        let hook_action = self.hooks.on_code(self.engine, rip, inst.len())?;
 
-        self.engine.cpu.rip = rip + inst.len() as u64;
-
-        self.execute_instruction(&inst)?;
-
-        Ok(())
+        match hook_action {
+            HookAction::Continue => {
+                self.engine.cpu.rip = rip + inst.len() as u64;
+                self.execute_instruction(&inst)?;
+                Ok(true) // Continue emulation
+            }
+            HookAction::Skip => {
+                // Just advance RIP, don't execute the instruction
+                self.engine.cpu.rip = rip + inst.len() as u64;
+                Ok(true) // Continue emulation
+            }
+            HookAction::Stop => {
+                Ok(false) // Stop emulation
+            }
+        }
     }
 
     fn mem_read_with_hooks(&mut self, address: u64, buf: &mut [u8]) -> Result<()> {

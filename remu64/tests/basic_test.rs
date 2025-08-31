@@ -1,4 +1,4 @@
-use remu64::{Engine, EngineMode, Permission, Register, memory::MemoryTrait};
+use remu64::{Engine, EngineMode, Permission, Register, hooks::HookAction, memory::MemoryTrait};
 
 #[test]
 fn test_mov_instruction() {
@@ -140,9 +140,9 @@ fn test_hook_code() {
             _engine: &mut remu64::Engine<M>,
             _address: u64,
             _size: usize,
-        ) -> remu64::Result<()> {
+        ) -> remu64::Result<HookAction> {
             self.count += 1;
-            Ok(())
+            Ok(HookAction::Continue)
         }
     }
 
