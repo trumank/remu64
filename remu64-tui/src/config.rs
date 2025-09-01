@@ -1,7 +1,6 @@
 use anyhow::{Result, anyhow};
-// use notify::{Event, EventKind, RecursiveMode, Watcher};
 use notify_debouncer_full::{
-    DebouncedEvent, Debouncer, NoCache, new_debouncer,
+    DebouncedEvent, Debouncer, RecommendedCache, new_debouncer,
     notify::{event::*, *},
 };
 use remu64::Register;
@@ -193,15 +192,16 @@ fn parse_register_name(name: &str) -> Result<Register> {
     }
 }
 
+type RecommendedDebouncer = Debouncer<RecommendedWatcher, RecommendedCache>;
+
 /// Structure to support hot-reloading
 /// Contains metadata about the config file for change detection
-#[derive(Debug)]
 pub struct ConfigLoader {
     pub config_path: std::path::PathBuf,
     pub config: Config,
     /// File watcher for hot-reload capability
     #[allow(unused)]
-    watcher: Option<Debouncer<INotifyWatcher, NoCache>>,
+    watcher: Option<RecommendedDebouncer>,
     /// Channel to receive file change events
     change_receiver: Option<
         mpsc::Receiver<Result<Vec<DebouncedEvent>, Vec<notify_debouncer_full::notify::Error>>>,
