@@ -3,11 +3,13 @@ use remu64::{
     EmulatorError, Permission, Result,
     memory::{MemoryRegionMut, MemoryRegionRef, MemoryTrait},
 };
+use std::cell::RefCell;
 use std::collections::BTreeMap;
 
 // MinidumpMemoryRegion holds a slice directly from the mmap'd minidump
 pub struct MinidumpMemory<'a> {
     regions: BTreeMap<u64, MemoryRegionRef<'a>>,
+    last_region: RefCell<Option<MemoryRegionRef<'a>>>,
 }
 
 impl<'a> MinidumpMemory<'a> {
@@ -36,7 +38,10 @@ impl<'a> MinidumpMemory<'a> {
             }
         }
 
-        Ok(MinidumpMemory { regions })
+        Ok(MinidumpMemory {
+            regions,
+            last_region: RefCell::new(None),
+        })
     }
 
     pub fn regions(&self) -> impl Iterator<Item = &MemoryRegionRef<'a>> {
@@ -57,7 +62,17 @@ impl<'a> MinidumpMemory<'a> {
 
 impl<'a> MemoryTrait for MinidumpMemory<'a> {
     fn find_region(&self, addr: u64) -> Option<MemoryRegionRef<'_>> {
-        self.regions
+        let mut last_region = self.last_region.borrow_mut();
+
+        if let Some(ref region) = *last_region
+            && region.contains(addr)
+        {
+            return Some(region.clone());
+        }
+
+        // Cache miss - fall back to tree search
+        let region = self
+            .regions
             .range(..=addr)
             .next_back()
             .and_then(|(_, region)| {
@@ -66,7 +81,10 @@ impl<'a> MemoryTrait for MinidumpMemory<'a> {
                 } else {
                     None
                 }
-            })
+            })?;
+
+        *last_region = Some(region.clone());
+        Some(region)
     }
 
     fn find_region_mut(&mut self, _addr: u64) -> Option<MemoryRegionMut<'_>> {

@@ -1,5 +1,6 @@
 use crate::DEFAULT_PAGE_SIZE;
 use crate::error::{EmulatorError, Result};
+use bit_vec::BitVec;
 use bitflags::bitflags;
 use std::{collections::BTreeMap, ops::Range};
 
@@ -400,13 +401,19 @@ impl<const PS: u64> MemoryTrait<PS> for OwnedMemory<PS> {
 pub struct CowMemory<T: MemoryTrait<PS>, const PS: u64 = DEFAULT_PAGE_SIZE> {
     base: T,
     overlay: BTreeMap<u64, MemoryRegion>,
+    // Bloom filter using page addresses as keys
+    page_filter: BitVec,
+    filter_mask: u64, // Size mask for the filter
 }
 
 impl<T: MemoryTrait<PS>, const PS: u64> CowMemory<T, PS> {
     pub fn new(base: T) -> Self {
+        let filter_size = 4096; // 512 bytes for 4096 bits
         Self {
             base,
             overlay: BTreeMap::new(),
+            page_filter: BitVec::from_elem(filter_size, false),
+            filter_mask: (filter_size - 1) as u64,
         }
     }
 
@@ -414,6 +421,21 @@ impl<T: MemoryTrait<PS>, const PS: u64> CowMemory<T, PS> {
     /// and returning to the original base memory state
     pub fn reset_to_base(&mut self) {
         self.overlay.clear();
+        self.page_filter.clear();
+    }
+
+    fn bloom_hash(&self, page_addr: u64) -> usize {
+        ((page_addr >> 12) & self.filter_mask) as usize
+    }
+
+    fn bloom_insert(&mut self, page_addr: u64) {
+        let hash = self.bloom_hash(page_addr);
+        self.page_filter.set(hash, true);
+    }
+
+    fn bloom_might_contain(&self, page_addr: u64) -> bool {
+        let hash = self.bloom_hash(page_addr);
+        self.page_filter[hash]
     }
 
     pub fn base(&self) -> &T {
@@ -458,6 +480,8 @@ impl<T: MemoryTrait<PS>, const PS: u64> CowMemory<T, PS> {
         cow_region.data.copy_from_slice(&page_data);
 
         self.overlay.insert(page_addr, cow_region);
+        // Update bloom filter after successful page copy
+        self.bloom_insert(page_addr);
         Ok(())
     }
 }
@@ -469,6 +493,14 @@ impl<T: MemoryTrait<PS>, const PS: u64> MemoryTrait<PS> for CowMemory<T, PS> {
     /// region is found, this returns `None` even if the address exists
     /// in the base memory. Callers must fall back to `read`/`write`.
     fn find_region(&self, addr: u64) -> Option<MemoryRegionRef<'_>> {
+        let page_addr = addr & !(PS - 1);
+
+        // Quick bloom filter check - if false, definitely not in overlay
+        if !self.bloom_might_contain(page_addr) {
+            return None;
+        }
+
+        // Proceed with existing tree search
         self.overlay
             .range(..=addr)
             .next_back()
@@ -487,6 +519,14 @@ impl<T: MemoryTrait<PS>, const PS: u64> MemoryTrait<PS> for CowMemory<T, PS> {
     /// region is found, this returns `None` even if the address exists
     /// in the base memory. Callers must fall back to `read`/`write`.
     fn find_region_mut(&mut self, addr: u64) -> Option<MemoryRegionMut<'_>> {
+        let page_addr = addr & !(PS - 1);
+
+        // Quick bloom filter check - if false, definitely not in overlay
+        if !self.bloom_might_contain(page_addr) {
+            return None;
+        }
+
+        // Proceed with existing tree search
         self.overlay
             .range_mut(..=addr)
             .next_back()
@@ -646,6 +686,13 @@ impl<T: MemoryTrait<PS>, const PS: u64> MemoryTrait<PS> for CowMemory<T, PS> {
 
         let region = MemoryRegion::new(addr, size, perms);
         self.overlay.insert(addr, region);
+        // Update bloom filter for each page in the mapped region
+        let mut page_addr = addr;
+        let end_addr = addr + size as u64;
+        while page_addr < end_addr {
+            self.bloom_insert(page_addr);
+            page_addr += PS;
+        }
         Ok(())
     }
 
@@ -1000,6 +1047,60 @@ mod tests {
 
         // Should still have only one overlay region (the original mapped region)
         assert_eq!(cow.overlay_regions().count(), 1);
+    }
+
+    #[test]
+    fn test_cow_memory_bloom_filter() {
+        let base = create_base_memory();
+        let mut cow = CowMemory::new(base);
+
+        // Initially, no pages should be in the bloom filter
+        assert!(!cow.bloom_might_contain(0x1000));
+        assert!(!cow.bloom_might_contain(0x2000));
+        assert!(!cow.bloom_might_contain(0x3000));
+
+        // Write to a page - should add it to bloom filter
+        cow.write_u8(0x1000, 42).unwrap();
+
+        // Page should now be in bloom filter
+        assert!(cow.bloom_might_contain(0x1000));
+
+        // Other pages should still not be in bloom filter
+        assert!(!cow.bloom_might_contain(0x2000));
+        assert!(!cow.bloom_might_contain(0x3000));
+
+        // Map a new region - should add all pages to bloom filter
+        cow.map(0x10000, 0x2000, Permission::READ | Permission::WRITE)
+            .unwrap();
+
+        // Both pages in the mapped region should be in bloom filter
+        assert!(cow.bloom_might_contain(0x10000));
+        assert!(cow.bloom_might_contain(0x11000));
+
+        // Reset should clear bloom filter
+        cow.reset_to_base();
+        assert!(!cow.bloom_might_contain(0x1000));
+        assert!(!cow.bloom_might_contain(0x10000));
+        assert!(!cow.bloom_might_contain(0x11000));
+    }
+
+    #[test]
+    fn test_cow_memory_bloom_filter_performance() {
+        let base = create_base_memory();
+        let mut cow = CowMemory::new(base);
+
+        // Write to one page to create overlay region
+        cow.write_u8(0x1000, 42).unwrap();
+
+        // Accessing addresses not in overlay should be fast (bloom filter miss)
+        // This is more of a correctness test - the performance improvement
+        // would be measured in benchmarks
+        for addr in [0x20000, 0x30000, 0x40000, 0x50000] {
+            assert!(cow.find_region(addr).is_none());
+        }
+
+        // Accessing address in overlay should work
+        assert!(cow.find_region(0x1000).is_some());
     }
 
     #[test]
