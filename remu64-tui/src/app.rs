@@ -184,8 +184,7 @@ impl App {
 
             // Calculate required instructions based on mode and current position
             let required_instructions = if self.state.trace_to_end {
-                // Run trace to completion (use configured max)
-                self.state.config_loader.config.tracing.max_instructions
+                usize::MAX
             } else {
                 // Calculate dynamic max_instructions based on terminal size and current position
                 let terminal_size = terminal.size()?;
@@ -200,7 +199,8 @@ impl App {
 
                 // Calculate required instructions: current position + visible area + buffer
                 current_idx + base_instructions + 50 // 50 instruction buffer
-            };
+            }
+            .min(self.state.config_loader.config.tracing.max_instructions);
 
             // Create tracer for this frame
             let tracer = Tracer {
