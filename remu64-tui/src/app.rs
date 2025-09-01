@@ -35,7 +35,7 @@ pub struct AppState {
     pub instruction_scroll: usize,
     pub stack_scroll: usize,
     pub instruction_list_state: ListState,
-    pub trace_to_end: bool,
+    pub go_to_end: bool,
 
     pub symbolizer: PeSymbolizer,
 
@@ -132,7 +132,7 @@ impl App {
             instruction_scroll: 0,
             stack_scroll: 0,
             instruction_list_state,
-            trace_to_end: false,
+            go_to_end: false,
             symbolizer,
             config_loader,
             status_message: None,
@@ -168,39 +168,10 @@ impl App {
 
     fn run_app(&mut self, terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> Result<()> {
         info!("Starting TUI main loop");
-        let mut frame_count = 0;
 
         loop {
-            frame_count += 1;
-            if frame_count % 100 == 0 {
-                debug!(
-                    "Frame {}, current trace index: {}",
-                    frame_count,
-                    self.state.current_trace_index()
-                );
-            }
-
-            let current_idx = self.state.current_trace_index();
-
-            // Calculate required instructions based on mode and current position
-            let required_instructions = if self.state.trace_to_end {
-                usize::MAX
-            } else {
-                // Calculate dynamic max_instructions based on terminal size and current position
-                let terminal_size = terminal.size()?;
-                let instruction_area_height = terminal_size.height
-                    .saturating_sub(3) // Header
-                    .saturating_sub(2) // Borders
-                    * 70
-                    / 100; // Instructions panel is 70% of the main area
-                let base_instructions = (instruction_area_height as usize).max(10);
-
-                // Get the current trace index to see how far we've scrolled
-
-                // Calculate required instructions: current position + visible area + buffer
-                current_idx + base_instructions + 50 // 50 instruction buffer
-            }
-            .min(self.state.config_loader.config.tracing.max_instructions);
+            let mut current_idx = self.state.current_trace_index();
+            let max_limit = self.state.config_loader.config.tracing.max_instructions;
 
             // Create tracer for this frame
             let tracer = Tracer {
@@ -208,43 +179,70 @@ impl App {
                 memory: &self.memory,
             };
 
-            // Generate trace with appropriate limit
-            let (trace, memory_snapshot, trace_error) = tracer.run_trace(
-                &self.state.config_loader.config,
-                required_instructions,
-                current_idx,
-            )?;
+            // Optional pre-pass: when tracing to end, determine the final instruction index
+            if self.state.go_to_end {
+                debug!("Trace-to-end pre-pass: determining total instruction count");
 
-            // Handle trace_to_end completion
-            if self.state.trace_to_end {
-                // Move to the last instruction and reset the flag
-                if !trace.is_empty() {
-                    self.state
-                        .instruction_list_state
-                        .select(Some(trace.len() - 1));
-                    debug!("Moved to end of trace: {} instructions", trace.len());
+                let pre_pass_result = tracer.run_trace(
+                    &self.state.config_loader.config,
+                    max_limit,
+                    0,      // Not capturing any entries in pre-pass
+                    (0, 0), // Empty range - capture nothing
+                )?;
+
+                let total_instructions = pre_pass_result.total_instructions;
+                debug!(
+                    "Pre-pass completed: {} total instructions",
+                    total_instructions
+                );
+
+                if total_instructions > 0 {
+                    // Update current_idx to point to the final instruction
+                    current_idx = total_instructions - 1;
+                    debug!("Updated current_idx to final instruction: {}", current_idx);
                 }
-                self.state.trace_to_end = false;
-            } else {
-                // Ensure current trace index is within bounds
-                if current_idx >= trace.len() && !trace.is_empty() {
-                    self.state
-                        .instruction_list_state
-                        .select(Some(trace.len() - 1));
-                }
+
+                // Update UI state and reset the flag
+                self.state.instruction_list_state.select(Some(current_idx));
+                debug!("Moved to end of trace: instruction {}", current_idx);
+                self.state.go_to_end = false;
             }
 
-            debug!("Generated trace with {} entries", trace.len());
-            terminal.draw(|f| {
-                ui::draw(
-                    f,
-                    &mut self.state,
-                    &trace,
-                    &self.memory,
-                    &memory_snapshot,
-                    trace_error.as_deref(),
-                )
-            })?;
+            // Calculate dynamic capture range based on terminal size and current position
+            let terminal_size = terminal.size()?;
+            let instruction_area_height = terminal_size.height
+                .saturating_sub(3) // Header
+                .saturating_sub(2) // Borders
+                * 70
+                / 100; // Instructions panel is 70% of the main area
+            let visible_instructions = (instruction_area_height as usize).max(10);
+            let buffer = 50; // Buffer around visible area
+
+            // Calculate range around current position (which may have been updated by pre-pass)
+            let start = current_idx.saturating_sub(buffer);
+            let end = current_idx + visible_instructions + buffer;
+
+            let trace_result = tracer.run_trace(
+                &self.state.config_loader.config,
+                max_limit.min(end),
+                current_idx,
+                (start, end),
+            )?;
+
+            // Ensure current trace index is within bounds for normal tracing
+            if current_idx >= trace_result.total_instructions && trace_result.total_instructions > 0
+            {
+                self.state
+                    .instruction_list_state
+                    .select(Some(trace_result.total_instructions - 1));
+            }
+
+            debug!(
+                "Generated trace with {} sparse entries from {} total instructions",
+                trace_result.entries.len(),
+                trace_result.total_instructions
+            );
+            terminal.draw(|f| ui::draw(f, &mut self.state, &trace_result, &self.memory))?;
 
             let mut event = None;
             loop {
@@ -429,7 +427,7 @@ impl App {
         self.state.instruction_list_state.select(Some(0));
         self.state.instruction_scroll = 0;
         self.state.stack_scroll = 0;
-        self.state.trace_to_end = false;
+        self.state.go_to_end = false;
         // Reset instruction actions in config
         self.state.config_loader.config.instruction_actions.clear();
     }
@@ -457,7 +455,7 @@ impl App {
         match self.state.selected_panel {
             Panel::Instructions => {
                 // Set flag to run trace to completion
-                self.state.trace_to_end = true;
+                self.state.go_to_end = true;
                 debug!("Set trace_to_end flag - will trace to function completion");
             }
             Panel::Stack => {

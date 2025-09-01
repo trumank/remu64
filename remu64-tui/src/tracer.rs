@@ -15,6 +15,27 @@ pub struct TraceEntry {
 }
 
 #[derive(Debug, Clone)]
+pub struct TraceResult<M> {
+    /// Sparse trace storage - only contains entries for instructions that have been viewed/requested
+    pub entries: HashMap<usize, TraceEntry>,
+    /// Total number of instructions executed
+    pub total_instructions: usize,
+    /// Memory snapshot at the selected instruction
+    pub memory_snapshot: Option<M>,
+    /// Error message if execution failed
+    pub error_message: Option<String>,
+    /// Time taken to execute and capture the trace
+    pub trace_duration: std::time::Duration,
+}
+
+impl<M> TraceResult<M> {
+    /// Get a trace entry by index, returning None if not captured
+    pub fn get_entry(&self, index: usize) -> Option<&TraceEntry> {
+        self.entries.get(&index)
+    }
+}
+
+#[derive(Debug, Clone)]
 pub enum InstructionAction {
     Skip,
 }
@@ -22,11 +43,15 @@ pub enum InstructionAction {
 pub type InstructionActions = HashMap<usize, Vec<InstructionAction>>;
 
 pub struct CapturingTracer<M> {
-    pub trace_entries: Vec<TraceEntry>,
+    /// Sparse trace storage
+    pub trace_entries: HashMap<usize, TraceEntry>,
+    pub total_instructions: usize,
     pub max_instructions: usize,
     pub selected_instruction: usize,
     pub actions: InstructionActions,
     pub current_instruction_index: usize,
+    /// Range of instructions to capture (start, end)
+    pub capture_range: (usize, usize),
     /// Snapshot of memory at selected instruction
     pub memory_snapshot: Option<M>,
 }
@@ -36,13 +61,16 @@ impl<M> CapturingTracer<M> {
         max_instructions: usize,
         selected_instruction: usize,
         actions: &InstructionActions,
+        capture_range: (usize, usize),
     ) -> Self {
         Self {
-            trace_entries: Vec::new(),
+            trace_entries: HashMap::new(),
+            total_instructions: 0,
             max_instructions,
             selected_instruction,
             actions: actions.clone(),
             current_instruction_index: 0,
+            capture_range,
             memory_snapshot: None,
         }
     }
@@ -56,14 +84,8 @@ impl<M: MemoryTrait + Clone> HookManager<M> for CapturingTracer<M> {
         size: usize,
     ) -> remu64::Result<HookAction> {
         // Check if we've reached the maximum number of instructions
-        if self.trace_entries.len() >= self.max_instructions {
+        if self.current_instruction_index >= self.max_instructions {
             return Ok(HookAction::Stop);
-        }
-
-        // Capture CPU state at this instruction (before any modifications)
-        let cpu_state = engine.cpu.clone();
-        if self.current_instruction_index == self.selected_instruction {
-            self.memory_snapshot = Some(engine.memory.clone());
         }
 
         // Check for actions on this instruction index
@@ -82,13 +104,30 @@ impl<M: MemoryTrait + Clone> HookManager<M> for CapturingTracer<M> {
             }
         }
 
-        // Store the trace entry (whether skipped or not)
-        self.trace_entries.push(TraceEntry {
-            address,
-            size,
-            cpu_state,
-            was_skipped,
-        });
+        // Only capture trace entry if it's within our requested range
+        let should_capture = self.current_instruction_index >= self.capture_range.0
+            && self.current_instruction_index <= self.capture_range.1;
+
+        if should_capture {
+            // Capture CPU state at this instruction (before any modifications)
+            let cpu_state = engine.cpu.clone();
+
+            // Store the trace entry (whether skipped or not)
+            self.trace_entries.insert(
+                self.current_instruction_index,
+                TraceEntry {
+                    address,
+                    size,
+                    cpu_state,
+                    was_skipped,
+                },
+            );
+        }
+
+        // Always capture memory snapshot at selected instruction regardless of range
+        if self.current_instruction_index == self.selected_instruction {
+            self.memory_snapshot = Some(engine.memory.clone());
+        }
 
         self.current_instruction_index += 1;
 
@@ -106,20 +145,19 @@ pub struct Tracer<'a> {
 }
 
 impl<'a> Tracer<'a> {
-    /// Run trace up to specified instruction index, returning trace entries
+    /// Run trace capturing only instructions in the specified range
     pub fn run_trace(
         &self,
         config: &crate::config::Config,
         max_instructions: usize,
         current_idx: usize,
-    ) -> Result<(
-        Vec<TraceEntry>,
-        CowMemory<&'a MinidumpMemory<'static>>,
-        Option<String>,
-    )> {
+        capture_range: (usize, usize),
+    ) -> Result<TraceResult<CowMemory<&'a MinidumpMemory<'static>>>> {
+        let trace_start_time = std::time::Instant::now();
+
         debug!(
-            "run_trace called: addr=0x{:x}, max={}",
-            config.function_address, max_instructions,
+            "run_trace called: addr=0x{:x}, max={}, range=({}, {})",
+            config.function_address, max_instructions, capture_range.0, capture_range.1
         );
         debug!("Creating VM context from minidump loader");
 
@@ -145,8 +183,15 @@ impl<'a> Tracer<'a> {
             vm_context.engine.reg_write(register, value);
         }
 
-        let mut capturing_tracer =
-            CapturingTracer::new(max_instructions, current_idx, &config.instruction_actions);
+        let return_address = 0xFFFF800000000000u64;
+        vm_context.push_u64(return_address)?;
+
+        let mut capturing_tracer = CapturingTracer::new(
+            max_instructions,
+            current_idx,
+            &config.instruction_actions,
+            capture_range,
+        );
 
         debug!(
             "Executing function at 0x{:x} with CapturingTracer",
@@ -154,7 +199,6 @@ impl<'a> Tracer<'a> {
         );
 
         // Use ExecutionController with our custom tracer
-        let return_address = 0xFFFF800000000000u64;
         let error_message = match ExecutionController::execute_with_hooks(
             &mut vm_context.engine,
             config.function_address,
@@ -163,24 +207,29 @@ impl<'a> Tracer<'a> {
         ) {
             Ok(_) => {
                 info!(
-                    "Function execution completed successfully with {} instructions traced",
-                    capturing_tracer.trace_entries.len()
+                    "Function execution completed successfully with {} total instructions, captured {} entries in range ({}, {})",
+                    capturing_tracer.current_instruction_index,
+                    capturing_tracer.trace_entries.len(),
+                    capture_range.0,
+                    capture_range.1
                 );
                 None
             }
             Err(e) => {
                 // Check if this was due to reaching max instructions
-                if capturing_tracer.trace_entries.len() >= max_instructions {
+                if capturing_tracer.current_instruction_index >= max_instructions {
                     debug!(
-                        "Function execution stopped after reaching max instructions: {} traced",
+                        "Function execution stopped after reaching max instructions: {} total, {} captured",
+                        capturing_tracer.current_instruction_index,
                         capturing_tracer.trace_entries.len()
                     );
                     None
                 } else {
                     let error_msg = format!("Execution failed: {}", e);
                     warn!(
-                        "Function execution failed: {}, captured {} instructions",
+                        "Function execution failed: {}, total {} instructions, captured {} entries",
                         e,
+                        capturing_tracer.current_instruction_index,
                         capturing_tracer.trace_entries.len()
                     );
                     Some(error_msg)
@@ -188,22 +237,26 @@ impl<'a> Tracer<'a> {
             }
         };
 
-        // Return the captured trace, limited by up_to_index
-        let total_entries = capturing_tracer.trace_entries.len();
-        let trace = capturing_tracer.trace_entries;
+        // Store total instructions executed
+        capturing_tracer.total_instructions = capturing_tracer.current_instruction_index;
+
+        let trace_duration = trace_start_time.elapsed();
 
         debug!(
-            "Returning {} trace entries (limited from {} total)",
-            trace.len(),
-            total_entries
+            "Returning {} sparse trace entries from {} total instructions in {:?}",
+            capturing_tracer.trace_entries.len(),
+            capturing_tracer.total_instructions,
+            trace_duration
         );
 
-        Ok((
-            trace,
-            capturing_tracer
+        Ok(TraceResult {
+            entries: capturing_tracer.trace_entries,
+            total_instructions: capturing_tracer.total_instructions,
+            memory_snapshot: capturing_tracer
                 .memory_snapshot
-                .unwrap_or(vm_context.engine.memory),
+                .or(Some(vm_context.engine.memory)),
             error_message,
-        ))
+            trace_duration,
+        })
     }
 }

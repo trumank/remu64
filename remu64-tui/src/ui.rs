@@ -12,15 +12,13 @@ use rdex::symbolizer::Symbolizer as _;
 use remu64::{Register, memory::MemoryTrait};
 
 use crate::app::{AppState, Panel, StatusMessage};
-use crate::tracer::TraceEntry;
+use crate::tracer::TraceResult;
 
-pub fn draw(
+pub fn draw<M: MemoryTrait>(
     f: &mut Frame,
     state: &mut AppState,
-    trace: &[TraceEntry],
+    trace_result: &TraceResult<M>,
     memory: &dyn MemoryTrait,
-    memory_snapshot: &dyn MemoryTrait,
-    trace_error: Option<&str>,
 ) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -28,7 +26,7 @@ pub fn draw(
         .split(f.area());
 
     // Header
-    draw_header(f, chunks[0], state, trace_error);
+    draw_header(f, chunks[0], state, trace_result);
 
     // Main content area
     let main_chunks = Layout::default()
@@ -47,23 +45,51 @@ pub fn draw(
         .split(right_chunks[0]);
 
     // Draw panels
-    draw_instructions(f, main_chunks[0], state, memory, trace);
-    draw_cpu_state(f, right_top_chunks[0], state, trace);
+    draw_instructions(f, main_chunks[0], state, memory, trace_result);
+    draw_cpu_state(f, right_top_chunks[0], state, trace_result);
     draw_controls(f, right_top_chunks[1], state);
-    draw_stack(f, right_chunks[1], state, trace, memory_snapshot);
+    draw_stack(f, right_chunks[1], state, trace_result);
 }
 
-fn draw_header(f: &mut Frame, area: Rect, state: &AppState, trace_error: Option<&str>) {
-    let status = if let Some(status_msg) = state.get_current_status_message() {
+fn draw_header<M: MemoryTrait>(
+    f: &mut Frame,
+    area: Rect,
+    state: &AppState,
+    trace_result: &TraceResult<M>,
+) {
+    let mut status_parts = Vec::new();
+
+    // Add timing and performance information
+    let duration_ms = trace_result.trace_duration.as_millis();
+    let time_str = if duration_ms < 1000 {
+        format!("{}ms", duration_ms)
+    } else {
+        format!("{:.2}s", trace_result.trace_duration.as_secs_f64())
+    };
+
+    // Include sparse capture info
+    let sparse_info = format!(
+        "{}/{} entries",
+        trace_result.entries.len(),
+        trace_result.total_instructions
+    );
+    status_parts.push(format!("Trace: {} ({})", time_str, sparse_info));
+
+    // Add other status messages
+    if let Some(status_msg) = state.get_current_status_message() {
         let msg_text = match status_msg {
             StatusMessage::ConfigReloaded => "Config reloaded",
             StatusMessage::ConfigError(err) => err,
         };
-        format!(" | {}", msg_text)
-    } else if let Some(error) = trace_error {
-        format!(" | Error: {}", error)
-    } else {
+        status_parts.push(msg_text.to_string());
+    } else if let Some(error) = &trace_result.error_message {
+        status_parts.push(format!("Error: {}", error));
+    }
+
+    let status = if status_parts.is_empty() {
         "".to_string()
+    } else {
+        format!(" | {}", status_parts.join(" | "))
     };
 
     let title = format!(
@@ -75,7 +101,7 @@ fn draw_header(f: &mut Frame, area: Rect, state: &AppState, trace_error: Option<
         state.config_loader.config.function_address,
     );
 
-    let header_style = if trace_error.is_some() {
+    let header_style = if trace_result.error_message.is_some() {
         Style::default().fg(Color::White).bg(Color::Red)
     } else if let Some(status_msg) = state.get_current_status_message() {
         match status_msg {
@@ -91,12 +117,12 @@ fn draw_header(f: &mut Frame, area: Rect, state: &AppState, trace_error: Option<
     f.render_widget(header, area);
 }
 
-fn draw_instructions(
+fn draw_instructions<M: MemoryTrait>(
     f: &mut Frame,
     area: Rect,
     state: &mut AppState,
     memory: &dyn MemoryTrait,
-    trace: &[TraceEntry],
+    trace_result: &TraceResult<M>,
 ) {
     let selected = state.selected_panel == Panel::Instructions;
     let border_style = if selected {
@@ -105,130 +131,158 @@ fn draw_instructions(
         Style::default()
     };
 
-    let instructions: Vec<ListItem> = trace
-        .iter()
-        .enumerate()
-        .map(|(index, entry)| {
-            let mut instruction_spans = vec![];
+    // Calculate the range of instructions to display
+    let current_index = state.current_trace_index();
+    let visible_height = area.height.saturating_sub(2) as usize; // Account for borders
+    let start_index = current_index.saturating_sub(visible_height / 2);
+    let end_index = (start_index + visible_height).min(trace_result.total_instructions);
 
-            // Add instruction index column
-            let index_color = if entry.was_skipped {
-                Color::DarkGray
-            } else {
-                Color::Gray
-            };
-            instruction_spans.push(Span::styled(
-                format!("{:4}: ", index),
-                Style::default().fg(index_color),
-            ));
+    let instructions: Vec<ListItem> = (start_index..end_index)
+        .map(|index| {
+            if let Some(entry) = trace_result.get_entry(index) {
+                // We have trace data for this instruction
+                let mut instruction_spans = vec![];
 
-            // Add address column
-            let addr_color = if entry.was_skipped {
-                Color::DarkGray
-            } else {
-                Color::Cyan
-            };
-            instruction_spans.push(Span::styled(
-                format!("0x{:08x}: ", entry.address),
-                Style::default().fg(addr_color),
-            ));
+                // Add instruction index column
+                let index_color = if entry.was_skipped {
+                    Color::DarkGray
+                } else {
+                    Color::Gray
+                };
+                instruction_spans.push(Span::styled(
+                    format!("{:4}: ", index),
+                    Style::default().fg(index_color),
+                ));
 
-            // Add disassembled instruction (fixed width for alignment)
-            let colored_instruction = disassemble_instruction(memory, entry.address, entry.size);
+                // Add address column
+                let addr_color = if entry.was_skipped {
+                    Color::DarkGray
+                } else {
+                    Color::Cyan
+                };
+                instruction_spans.push(Span::styled(
+                    format!("0x{:08x}: ", entry.address),
+                    Style::default().fg(addr_color),
+                ));
 
-            // Calculate the total length of the disassembly text
-            let disasm_text: String = colored_instruction
-                .iter()
-                .map(|span| span.content.as_ref())
-                .collect();
+                // Add disassembled instruction (fixed width for alignment)
+                let colored_instruction =
+                    disassemble_instruction(memory, entry.address, entry.size);
 
-            // Add the colored instruction spans, applying grey-out if skipped
-            if entry.was_skipped {
-                // Override colors for skipped instructions
-                for span in colored_instruction {
-                    instruction_spans.push(Span::styled(
-                        span.content.to_string(),
-                        Style::default().fg(Color::DarkGray),
-                    ));
+                // Calculate the total length of the disassembly text
+                let disasm_text: String = colored_instruction
+                    .iter()
+                    .map(|span| span.content.as_ref())
+                    .collect();
+
+                // Add the colored instruction spans, applying grey-out if skipped
+                if entry.was_skipped {
+                    // Override colors for skipped instructions
+                    for span in colored_instruction {
+                        instruction_spans.push(Span::styled(
+                            span.content.to_string(),
+                            Style::default().fg(Color::DarkGray),
+                        ));
+                    }
+                } else {
+                    instruction_spans.extend(colored_instruction);
                 }
-            } else {
-                instruction_spans.extend(colored_instruction);
-            }
 
-            // Pad to fixed width (40 chars) for alignment
-            let padding_needed = 40_i32.saturating_sub(disasm_text.len() as i32).max(0) as usize;
-            if padding_needed > 0 {
-                instruction_spans.push(Span::raw(" ".repeat(padding_needed)));
-            }
+                // Pad to fixed width (40 chars) for alignment
+                let padding_needed =
+                    40_i32.saturating_sub(disasm_text.len() as i32).max(0) as usize;
+                if padding_needed > 0 {
+                    instruction_spans.push(Span::raw(" ".repeat(padding_needed)));
+                }
 
-            // Add symbol/module+offset column at the end with different colors
-            instruction_spans.push(Span::raw(" "));
-            match state.symbolizer.resolve_address(memory, entry.address) {
-                Some(resolved_symbol) => {
-                    if let Some(symbol_name) = &resolved_symbol.symbol.name {
-                        // We have a specific symbol
-                        if entry.was_skipped {
-                            // Grey out everything for skipped instructions
-                            instruction_spans.push(Span::styled(
-                                format!("{}!{}", resolved_symbol.symbol.module, symbol_name),
-                                Style::default().fg(Color::DarkGray),
-                            ));
-                            if resolved_symbol.offset > 0 {
+                // Add symbol/module+offset column at the end with different colors
+                instruction_spans.push(Span::raw(" "));
+                match state.symbolizer.resolve_address(memory, entry.address) {
+                    Some(resolved_symbol) => {
+                        if let Some(symbol_name) = &resolved_symbol.symbol.name {
+                            // We have a specific symbol
+                            if entry.was_skipped {
+                                // Grey out everything for skipped instructions
                                 instruction_spans.push(Span::styled(
-                                    format!("+0x{:x}", resolved_symbol.offset),
+                                    format!("{}!{}", resolved_symbol.symbol.module, symbol_name),
                                     Style::default().fg(Color::DarkGray),
                                 ));
+                                if resolved_symbol.offset > 0 {
+                                    instruction_spans.push(Span::styled(
+                                        format!("+0x{:x}", resolved_symbol.offset),
+                                        Style::default().fg(Color::DarkGray),
+                                    ));
+                                }
+                            } else {
+                                // Normal coloring for active instructions - module in cyan, symbol in yellow
+                                instruction_spans.push(Span::styled(
+                                    resolved_symbol.symbol.module.clone(),
+                                    Style::default().fg(Color::Magenta),
+                                ));
+                                instruction_spans
+                                    .push(Span::styled("!".to_string(), Style::default()));
+                                instruction_spans.push(Span::styled(
+                                    symbol_name.clone(),
+                                    Style::default().fg(Color::Yellow),
+                                ));
+
+                                if resolved_symbol.offset > 0 {
+                                    instruction_spans.push(Span::raw(format!(
+                                        "+0x{:x}",
+                                        resolved_symbol.offset
+                                    )));
+                                }
                             }
                         } else {
-                            // Normal coloring for active instructions - module in cyan, symbol in yellow
+                            // Just module information
+                            let color = if entry.was_skipped {
+                                Color::DarkGray
+                            } else {
+                                Color::Magenta
+                            };
                             instruction_spans.push(Span::styled(
                                 resolved_symbol.symbol.module.clone(),
-                                Style::default().fg(Color::Magenta),
+                                Style::default().fg(color),
                             ));
-                            instruction_spans.push(Span::styled("!".to_string(), Style::default()));
+                            let offset_style = if entry.was_skipped {
+                                Style::default().fg(Color::DarkGray)
+                            } else {
+                                Style::default()
+                            };
                             instruction_spans.push(Span::styled(
-                                symbol_name.clone(),
-                                Style::default().fg(Color::Yellow),
+                                format!("+0x{:x}", resolved_symbol.offset),
+                                offset_style,
                             ));
-
-                            if resolved_symbol.offset > 0 {
-                                instruction_spans
-                                    .push(Span::raw(format!("+0x{:x}", resolved_symbol.offset)));
-                            }
                         }
-                    } else {
-                        // Just module information
+                    }
+                    None => {
                         let color = if entry.was_skipped {
                             Color::DarkGray
                         } else {
-                            Color::Magenta
+                            Color::Red
                         };
-                        instruction_spans.push(Span::styled(
-                            resolved_symbol.symbol.module.clone(),
-                            Style::default().fg(color),
-                        ));
-                        let offset_style = if entry.was_skipped {
-                            Style::default().fg(Color::DarkGray)
-                        } else {
-                            Style::default()
-                        };
-                        instruction_spans.push(Span::styled(
-                            format!("+0x{:x}", resolved_symbol.offset),
-                            offset_style,
-                        ));
+                        instruction_spans.push(Span::styled("unknown", Style::default().fg(color)));
                     }
                 }
-                None => {
-                    let color = if entry.was_skipped {
-                        Color::DarkGray
-                    } else {
-                        Color::Red
-                    };
-                    instruction_spans.push(Span::styled("unknown", Style::default().fg(color)));
-                }
-            }
 
-            ListItem::new(Line::from(instruction_spans))
+                ListItem::new(Line::from(instruction_spans))
+            } else {
+                // No trace data available for this instruction - show placeholder
+                let instruction_spans = vec![
+                    Span::styled(
+                        format!("{:4}: ", index),
+                        Style::default().fg(Color::DarkGray),
+                    ),
+                    Span::styled("????????: ", Style::default().fg(Color::DarkGray)),
+                    Span::styled(
+                        "[trace data not available]",
+                        Style::default()
+                            .fg(Color::DarkGray)
+                            .add_modifier(Modifier::ITALIC),
+                    ),
+                ];
+                ListItem::new(Line::from(instruction_spans))
+            }
         })
         .collect();
 
@@ -246,15 +300,22 @@ fn draw_instructions(
         )
         .highlight_symbol("");
 
-    f.render_stateful_widget(list, area, &mut state.instruction_list_state);
+    // Adjust list state to reflect the local index within the visible range
+    let mut local_list_state = state.instruction_list_state.clone();
+    if current_index >= start_index && current_index < end_index {
+        local_list_state.select(Some(current_index - start_index));
+    } else {
+        local_list_state.select(None);
+    }
+
+    f.render_stateful_widget(list, area, &mut local_list_state);
 }
 
-fn draw_stack(
+fn draw_stack<M: MemoryTrait>(
     f: &mut Frame,
     area: Rect,
     state: &mut AppState,
-    trace: &[TraceEntry],
-    memory_snapshot: &dyn MemoryTrait,
+    trace_result: &TraceResult<M>,
 ) {
     let selected = state.selected_panel == Panel::Stack;
     let border_style = if selected {
@@ -264,7 +325,9 @@ fn draw_stack(
     };
 
     // Get current CPU state to find stack pointer
-    let stack_content = if let Some(current_entry) = trace.get(state.current_trace_index()) {
+    let stack_content = if let Some(current_entry) =
+        trace_result.get_entry(state.current_trace_index())
+    {
         let rsp = current_entry.cpu_state.read_reg(Register::RSP);
 
         // Calculate how many stack entries we can display based on available height
@@ -273,10 +336,11 @@ fn draw_stack(
 
         // Read real stack data from memory snapshot
         let mut lines = Vec::new();
+        let memory_snapshot = trace_result.memory_snapshot.as_ref().unwrap();
+
         for i in 0..num_entries {
             let addr = rsp + (i * 8) as u64;
             let mut buffer = [0u8; 8];
-
             match memory_snapshot.read(addr, &mut buffer) {
                 Ok(_) => {
                     let mut hex_spans = Vec::new();
@@ -403,7 +467,12 @@ fn draw_stack(
     f.render_widget(paragraph, area);
 }
 
-fn draw_cpu_state(f: &mut Frame, area: Rect, state: &AppState, trace: &[TraceEntry]) {
+fn draw_cpu_state<M: MemoryTrait>(
+    f: &mut Frame,
+    area: Rect,
+    state: &AppState,
+    trace_result: &TraceResult<M>,
+) {
     let selected = state.selected_panel == Panel::CpuState;
     let border_style = if selected {
         Style::default().fg(Color::Yellow)
@@ -411,11 +480,13 @@ fn draw_cpu_state(f: &mut Frame, area: Rect, state: &AppState, trace: &[TraceEnt
         Style::default()
     };
 
-    let cpu_content = if let Some(current_entry) = trace.get(state.current_trace_index()) {
+    let cpu_content = if let Some(current_entry) =
+        trace_result.get_entry(state.current_trace_index())
+    {
         let cpu = &current_entry.cpu_state;
         // Get next CPU state for comparison (from next instruction)
-        let next_cpu = trace
-            .get(state.current_trace_index() + 1)
+        let next_cpu = trace_result
+            .get_entry(state.current_trace_index() + 1)
             .map(|entry| &entry.cpu_state);
 
         let create_reg_span = |reg: Register, name: &str, spacing: &str| -> Vec<Span<'static>> {
