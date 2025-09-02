@@ -247,7 +247,18 @@ impl App {
             let mut event = None;
             loop {
                 if event::poll(std::time::Duration::from_millis(10))? {
-                    event = Some(event::read()?);
+                    while event::poll(std::time::Duration::from_millis(0))? {
+                        match event::read()? {
+                            Event::Mouse(_mouse_event) => {
+                                // ignore mouse events for now because they can stack up and take a while to process
+                                // if needed in the future, can merge and handle them together in one frame
+                            }
+                            other => {
+                                event = Some(other);
+                                break;
+                            }
+                        }
+                    }
                     break;
                 } else {
                     // Check if status message expired and needs redraw
