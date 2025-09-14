@@ -136,121 +136,94 @@ impl<M: MemoryTrait + Clone> HookManager<M> for CapturingTracer<M> {
     }
 }
 
-pub struct GenericTracer<'a, M: MemoryTrait, S> {
-    pub memory: M,
-    pub symbolizer: &'a S,
-}
+/// Run trace capturing only instructions in the specified range
+/// Uses an already-configured engine from the VmSetupProvider
+pub fn run_trace<M: MemoryTrait + Clone, S>(
+    mut engine: remu64::Engine<M>,
+    symbolizer: &S,
+    function_address: u64,
+    until_address: u64,
+    max_instructions: usize,
+    current_idx: usize,
+    capture_range: (usize, usize),
+    instruction_actions: &InstructionActions,
+) -> Result<TraceResult<M>> {
+    let trace_start_time = std::time::Instant::now();
 
-impl<'a, M: MemoryTrait + Clone, S> GenericTracer<'a, M, S> {
-    pub fn new(memory: M, symbolizer: &'a S) -> Self {
-        Self { memory, symbolizer }
-    }
-    /// Run trace capturing only instructions in the specified range
-    pub fn run_trace(
-        &self,
-        initial_cpu_state: CpuState,
-        function_address: u64,
-        max_instructions: usize,
-        current_idx: usize,
-        capture_range: (usize, usize),
-        instruction_actions: &InstructionActions,
-    ) -> Result<TraceResult<M>> {
-        let trace_start_time = std::time::Instant::now();
+    debug!(
+        "run_trace called: addr=0x{:x}, max={}, range=({}, {})",
+        function_address, max_instructions, capture_range.0, capture_range.1
+    );
 
-        debug!(
-            "run_trace called: addr=0x{:x}, max={}, range=({}, {})",
-            function_address, max_instructions, capture_range.0, capture_range.1
-        );
-        debug!("Creating engine with provided memory");
+    let mut capturing_tracer = CapturingTracer::new(
+        max_instructions,
+        current_idx,
+        instruction_actions,
+        capture_range,
+    );
 
-        // Create engine with the provided memory
-        let mut engine = Engine::new_memory(remu64::EngineMode::Mode64, self.memory.clone());
+    debug!(
+        "Executing function at 0x{:x} with CapturingTracer",
+        function_address
+    );
 
-        // Set initial CPU state
-        engine.cpu = initial_cpu_state;
-
-        let return_address = 0xFFFF800000000000u64;
-
-        let mut capturing_tracer = CapturingTracer::new(
-            max_instructions,
-            current_idx,
-            instruction_actions,
-            capture_range,
-        );
-
-        debug!(
-            "Executing function at 0x{:x} with CapturingTracer",
-            function_address
-        );
-
-        // Set up return address on stack
-        let rsp = engine.reg_read(Register::RSP);
-        engine
-            .memory
-            .write(rsp - 8, &return_address.to_le_bytes())?;
-        engine.reg_write(Register::RSP, rsp - 8);
-
-        // Set initial RIP to function address
-        engine.reg_write(Register::RIP, function_address);
-
-        // Execute with hooks
-        let error_message = match engine.emu_start_with_hooks(
-            function_address,
-            return_address,
-            0, // No timeout
-            max_instructions,
-            &mut capturing_tracer,
-        ) {
-            Ok(_) => {
-                info!(
-                    "Function execution completed successfully with {} total instructions, captured {} entries in range ({}, {})",
+    // Execute with hooks - engine should already be properly set up by VmSetupProvider
+    let error_message = match engine.emu_start_with_hooks(
+        function_address,
+        until_address,
+        0, // No timeout
+        max_instructions,
+        &mut capturing_tracer,
+    ) {
+        Ok(_) => {
+            info!(
+                "Function execution completed successfully with {} total instructions, captured {} entries in range ({}, {})",
+                capturing_tracer.current_instruction_index,
+                capturing_tracer.trace_entries.len(),
+                capture_range.0,
+                capture_range.1
+            );
+            None
+        }
+        Err(e) => {
+            // Check if this was due to reaching max instructions
+            if capturing_tracer.current_instruction_index >= max_instructions {
+                debug!(
+                    "Function execution stopped after reaching max instructions: {} total, {} captured",
                     capturing_tracer.current_instruction_index,
-                    capturing_tracer.trace_entries.len(),
-                    capture_range.0,
-                    capture_range.1
+                    capturing_tracer.trace_entries.len()
                 );
                 None
+            } else {
+                let error_msg = format!("Execution failed: {}", e);
+                warn!(
+                    "Function execution failed: {}, total {} instructions, captured {} entries",
+                    e,
+                    capturing_tracer.current_instruction_index,
+                    capturing_tracer.trace_entries.len()
+                );
+                Some(error_msg)
             }
-            Err(e) => {
-                // Check if this was due to reaching max instructions
-                if capturing_tracer.current_instruction_index >= max_instructions {
-                    debug!(
-                        "Function execution stopped after reaching max instructions: {} total, {} captured",
-                        capturing_tracer.current_instruction_index,
-                        capturing_tracer.trace_entries.len()
-                    );
-                    None
-                } else {
-                    let error_msg = format!("Execution failed: {}", e);
-                    warn!(
-                        "Function execution failed: {}, total {} instructions, captured {} entries",
-                        e,
-                        capturing_tracer.current_instruction_index,
-                        capturing_tracer.trace_entries.len()
-                    );
-                    Some(error_msg)
-                }
-            }
-        };
+        }
+    };
 
-        // Store total instructions executed
-        capturing_tracer.total_instructions = capturing_tracer.current_instruction_index;
+    // Store total instructions executed
+    capturing_tracer.total_instructions = capturing_tracer.current_instruction_index;
 
-        let trace_duration = trace_start_time.elapsed();
+    let trace_duration = trace_start_time.elapsed();
 
-        debug!(
-            "Returning {} sparse trace entries from {} total instructions in {:?}",
-            capturing_tracer.trace_entries.len(),
-            capturing_tracer.total_instructions,
-            trace_duration
-        );
+    debug!(
+        "Returning {} sparse trace entries from {} total instructions in {:?}",
+        capturing_tracer.trace_entries.len(),
+        capturing_tracer.total_instructions,
+        trace_duration
+    );
 
-        Ok(TraceResult {
-            entries: capturing_tracer.trace_entries,
-            total_instructions: capturing_tracer.total_instructions,
-            memory_snapshot: capturing_tracer.memory_snapshot.or(Some(engine.memory)),
-            error_message,
-            trace_duration,
-        })
-    }
+    Ok(TraceResult {
+        entries: capturing_tracer.trace_entries,
+        total_instructions: capturing_tracer.total_instructions,
+        memory_snapshot: capturing_tracer.memory_snapshot.or(Some(engine.memory)),
+        error_message,
+        trace_duration,
+    })
 }

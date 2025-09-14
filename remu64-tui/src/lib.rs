@@ -33,6 +33,7 @@ pub trait VmSetupProvider {
 /// Configuration for a single trace run
 pub struct VmConfig {
     pub function_address: u64,
+    pub until_address: u64,
     pub max_instructions: usize,
     pub instruction_actions: InstructionActions,
 }

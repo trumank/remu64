@@ -10,7 +10,7 @@ use std::time::{Duration, Instant};
 use tracing::{debug, info};
 
 use crate::VmSetupProvider;
-use crate::tracer::GenericTracer;
+use crate::tracer;
 use crate::ui;
 use remu64::{CowMemory, Engine};
 
@@ -131,15 +131,9 @@ impl App {
             // Create fresh engine and setup for each frame
             let mut engine = Engine::new_memory(remu64::EngineMode::Mode64, memory.clone());
 
-            // Check for reload signal on first setup (always setup on first iteration)
-            // Later we'll check the channel during event polling
-
             let config = setup_provider.setup_engine(&mut engine)?;
 
             let mut current_idx = self.state.current_trace_index();
-
-            // Create tracer for this frame
-            let tracer = GenericTracer::new(engine.memory.clone(), &symbolizer);
 
             // Handle skip instruction toggle from previous frame
             let mut instruction_actions = config.instruction_actions.clone();
@@ -163,9 +157,11 @@ impl App {
             if self.state.go_to_end {
                 debug!("Trace-to-end pre-pass: determining total instruction count");
 
-                let pre_pass_result = tracer.run_trace(
-                    engine.cpu.clone(),
+                let pre_pass_result = tracer::run_trace(
+                    engine.clone(),
+                    &symbolizer,
                     config.function_address,
+                    config.until_address,
                     config.max_instructions,
                     0,      // Not capturing any entries in pre-pass
                     (0, 0), // Empty range - capture nothing
@@ -202,9 +198,11 @@ impl App {
             let start = current_idx.saturating_sub(buffer);
             let end = current_idx + visible_instructions + buffer;
 
-            let trace_result = tracer.run_trace(
-                engine.cpu.clone(),
+            let trace_result = tracer::run_trace(
+                engine,
+                &symbolizer,
                 config.function_address,
+                config.until_address,
                 config.max_instructions.min(end),
                 current_idx,
                 (start, end),
@@ -230,7 +228,7 @@ impl App {
                     f,
                     &mut self.state,
                     &trace_result,
-                    &engine.memory,
+                    &memory,
                     &mut symbolizer,
                     setup_provider.display_name(),
                 )

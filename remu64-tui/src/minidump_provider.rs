@@ -74,6 +74,7 @@ impl VmSetupProvider for MinidumpSetupProvider {
 
         Ok(VmConfig {
             function_address: config.function_address,
+            until_address: return_address,
             max_instructions: config.tracing.max_instructions,
             instruction_actions: config.instruction_actions.clone(),
         })
