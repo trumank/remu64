@@ -1,19 +1,20 @@
 use anyhow::Result;
 use remu64::memory::MemoryTrait;
+use std::rc::Rc;
+
+/// Type alias for VM memory - using Rc to allow cloning for snapshots
+pub type VmMemory = Rc<dyn MemoryTrait + 'static>;
 
 /// Process trait that provides process metadata and creates memory objects
 pub trait ProcessTrait {
-    /// The memory type this process source provides
-    type Memory: MemoryTrait;
-
     /// Module information
     fn get_module_by_name(&self, name: &str) -> Option<ModuleInfo>;
     fn get_module_base_address(&self, name: &str) -> Option<u64>;
     fn list_modules(&self) -> Vec<ModuleInfo>;
     fn find_module_for_address(&self, address: u64) -> Option<(String, u64, u64)>;
 
-    /// Create memory object for this process
-    fn create_memory(&self) -> Result<Self::Memory>;
+    /// Create memory object for this process (returns Rc trait object)
+    fn create_memory(&self) -> Result<VmMemory>;
 
     /// Thread context (for TEB and other thread-specific data)
     fn get_teb_address(&self) -> Result<u64>;

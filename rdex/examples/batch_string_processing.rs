@@ -22,7 +22,7 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-fn process_strings_batch(minidump_loader: &rdex::MinidumpLoader<'_>) -> Result<()> {
+fn process_strings_batch(minidump_loader: &rdex::MinidumpLoader<'static>) -> Result<()> {
     // Create executor once and reuse it
     let mut executor = DumpExec::create_executor(minidump_loader)?;
 
@@ -35,8 +35,8 @@ fn process_strings_batch(minidump_loader: &rdex::MinidumpLoader<'_>) -> Result<(
     Ok(())
 }
 
-fn process_single_string<P: rdex::ProcessTrait>(
-    executor: &mut rdex::FunctionExecutor<P>,
+fn process_single_string(
+    executor: &mut rdex::FunctionExecutor,
     input: (i32, i32),
 ) -> Result<String> {
     let fname_bytes = [

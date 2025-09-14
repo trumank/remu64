@@ -1,5 +1,5 @@
 use crate::minidump_memory::MinidumpMemory;
-use crate::process_trait::{ModuleInfo, ProcessArchitecture, ProcessTrait};
+use crate::process_trait::{ModuleInfo, ProcessArchitecture, ProcessTrait, VmMemory};
 use anyhow::{Context, Result};
 use minidump::*;
 use std::collections::HashMap;
@@ -115,9 +115,10 @@ impl<'a> MinidumpLoader<'a> {
     }
 }
 
-impl<'a> ProcessTrait for MinidumpLoader<'a> {
-    type Memory = MinidumpMemory<'a>;
-
+impl<'a> ProcessTrait for MinidumpLoader<'a>
+where
+    'a: 'static,
+{
     fn get_module_by_name(&self, name: &str) -> Option<ModuleInfo> {
         MinidumpLoader::get_module_by_name(self, name).map(|module| ModuleInfo {
             name: module.code_file().to_string(),
@@ -143,8 +144,8 @@ impl<'a> ProcessTrait for MinidumpLoader<'a> {
     fn find_module_for_address(&self, address: u64) -> Option<(String, u64, u64)> {
         MinidumpLoader::find_module_for_address(self, address)
     }
-    fn create_memory(&self) -> Result<Self::Memory> {
-        Ok(MinidumpMemory::new(self.dump)?)
+    fn create_memory(&self) -> Result<VmMemory> {
+        Ok(std::rc::Rc::new(MinidumpMemory::new(self.dump)?))
     }
     fn get_teb_address(&self) -> Result<u64> {
         MinidumpLoader::get_teb_address(self)
@@ -155,9 +156,10 @@ impl<'a> ProcessTrait for MinidumpLoader<'a> {
 }
 
 // Also implement for &MinidumpLoader to support borrowing
-impl<'a> ProcessTrait for &MinidumpLoader<'a> {
-    type Memory = MinidumpMemory<'a>;
-
+impl<'a> ProcessTrait for &MinidumpLoader<'a>
+where
+    'a: 'static,
+{
     fn get_module_by_name(&self, name: &str) -> Option<ModuleInfo> {
         <MinidumpLoader<'a> as ProcessTrait>::get_module_by_name(*self, name)
     }
@@ -170,7 +172,7 @@ impl<'a> ProcessTrait for &MinidumpLoader<'a> {
     fn find_module_for_address(&self, address: u64) -> Option<(String, u64, u64)> {
         <MinidumpLoader<'a> as ProcessTrait>::find_module_for_address(*self, address)
     }
-    fn create_memory(&self) -> Result<Self::Memory> {
+    fn create_memory(&self) -> Result<VmMemory> {
         <MinidumpLoader<'a> as ProcessTrait>::create_memory(*self)
     }
     fn get_teb_address(&self) -> Result<u64> {

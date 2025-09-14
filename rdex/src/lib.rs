@@ -35,14 +35,14 @@ impl DumpExec {
         MinidumpLoader::from_minidump(dump)
     }
 
-    pub fn create_executor<P: ProcessTrait>(process: P) -> Result<FunctionExecutor<P>> {
+    pub fn create_executor<P: ProcessTrait>(process: &P) -> Result<FunctionExecutor<'_>> {
         FunctionExecutor::new(process)
     }
 
     pub fn create_executor_with_symbolizer<P: ProcessTrait>(
-        process: P,
+        process: &P,
         symbolizer: Box<dyn Symbolizer>,
-    ) -> Result<FunctionExecutor<P>> {
+    ) -> Result<FunctionExecutor<'_>> {
         FunctionExecutor::new_with_symbolizer(process, symbolizer)
     }
 }

@@ -13,7 +13,8 @@ use crate::config::ConfigLoader;
 use crate::tracer::Tracer;
 use crate::ui;
 use rdex::{
-    DumpExec, MinidumpLoader, MinidumpMemory, ProcessTrait as _, pe_symbolizer::PeSymbolizer,
+    DumpExec, MinidumpLoader, ProcessTrait as _, pe_symbolizer::PeSymbolizer,
+    process_trait::VmMemory,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -105,7 +106,7 @@ impl AppState {
 pub struct App {
     state: AppState,
     minidump_loader: MinidumpLoader<'static>,
-    memory: MinidumpMemory<'static>,
+    memory: VmMemory,
 }
 
 impl App {
@@ -176,7 +177,6 @@ impl App {
             // Create tracer for this frame
             let tracer = Tracer {
                 minidump_loader: &self.minidump_loader,
-                memory: &self.memory,
             };
 
             // Optional pre-pass: when tracing to end, determine the final instruction index

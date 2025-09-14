@@ -38,10 +38,7 @@ impl CallingConvention {
         }
     }
 
-    pub fn push_fname_to_stack<M: remu64::memory::MemoryTrait>(
-        vm_context: &mut VMContext<M>,
-        fname: &FName,
-    ) -> Result<u64> {
+    pub fn push_fname_to_stack(vm_context: &mut VMContext, fname: &FName) -> Result<u64> {
         let fname_bytes = [
             fname.comparison_index.to_le_bytes(),
             fname.value.to_le_bytes(),
@@ -50,10 +47,7 @@ impl CallingConvention {
         vm_context.push_bytes_to_stack(&fname_bytes)
     }
 
-    pub fn push_fstring_to_stack<M: remu64::memory::MemoryTrait>(
-        vm_context: &mut VMContext<M>,
-        fstring: &FString,
-    ) -> Result<u64> {
+    pub fn push_fstring_to_stack(vm_context: &mut VMContext, fstring: &FString) -> Result<u64> {
         let data_ptr = if let Some(ref data) = fstring.data {
             let mut data_bytes = Vec::with_capacity(data.len() * 2);
             for &wchar in data {
@@ -71,8 +65,8 @@ impl CallingConvention {
         vm_context.push_bytes_to_stack(&fstring_bytes)
     }
 
-    pub fn setup_fastcall<M: remu64::memory::MemoryTrait>(
-        vm_context: &mut VMContext<M>,
+    pub fn setup_fastcall(
+        vm_context: &mut VMContext,
         args: Vec<ArgumentType>,
         return_address: u64,
     ) -> Result<(Vec<u64>, Vec<u64>)> {

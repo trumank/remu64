@@ -1,8 +1,6 @@
 use anyhow::Result;
-use rdex::{ExecutionController, MinidumpLoader, MinidumpMemory, VMContext};
-use remu64::{
-    CowMemory, CpuState, Engine, EngineMode, HookAction, HookManager, Register, memory::MemoryTrait,
-};
+use rdex::{ExecutionController, MinidumpLoader, VMContext, process_trait::VmMemory};
+use remu64::{CowMemory, CpuState, Engine, HookAction, HookManager, Register, memory::MemoryTrait};
 use std::collections::HashMap;
 use tracing::{debug, info, warn};
 
@@ -141,7 +139,6 @@ impl<M: MemoryTrait + Clone> HookManager<M> for CapturingTracer<M> {
 
 pub struct Tracer<'a> {
     pub minidump_loader: &'a MinidumpLoader<'static>,
-    pub memory: &'a MinidumpMemory<'static>,
 }
 
 impl<'a> Tracer<'a> {
@@ -152,7 +149,7 @@ impl<'a> Tracer<'a> {
         max_instructions: usize,
         current_idx: usize,
         capture_range: (usize, usize),
-    ) -> Result<TraceResult<CowMemory<&'a MinidumpMemory<'static>>>> {
+    ) -> Result<TraceResult<CowMemory<VmMemory>>> {
         let trace_start_time = std::time::Instant::now();
 
         debug!(
@@ -163,12 +160,8 @@ impl<'a> Tracer<'a> {
 
         let loader = self.minidump_loader;
 
-        // Create VM context directly from the process
-        let cow_memory = CowMemory::new(self.memory);
-        let mut engine = Engine::new_memory(EngineMode::Mode64, cow_memory);
-        let teb_address = loader.get_teb_address()?;
-        engine.set_gs_base(teb_address);
-        let mut vm_context = VMContext { engine };
+        // Create VM context using the new API
+        let mut vm_context = VMContext::new(loader)?;
 
         // Set up stack using config values
         let stack_base = config.stack.base_address;

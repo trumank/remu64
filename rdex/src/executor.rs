@@ -7,24 +7,18 @@ use crate::vm_context::VMContext;
 use anyhow::Result;
 use remu64::Register;
 
-pub struct FunctionExecutor<P>
-where
-    P: ProcessTrait,
-{
-    pub vm_context: VMContext<P::Memory>,
-    pub process: P,
+pub struct FunctionExecutor<'a> {
+    pub vm_context: VMContext,
+    pub process: &'a dyn ProcessTrait,
     pub stack_base: u64,
     pub tracer: InstructionTracer,
     pub fstring_addresses: Vec<u64>,
     pub symbolizer: Option<Box<dyn Symbolizer>>,
 }
 
-impl<P> FunctionExecutor<P>
-where
-    P: ProcessTrait,
-{
-    pub fn new(process: P) -> Result<Self> {
-        let vm_context = VMContext::new(&process)?;
+impl<'a> FunctionExecutor<'a> {
+    pub fn new(process: &'a dyn ProcessTrait) -> Result<Self> {
+        let vm_context = VMContext::new(process)?;
         let stack_base = 0x7fff_f000_0000u64;
         let tracer = InstructionTracer::new(false);
 
@@ -41,7 +35,10 @@ where
         Ok(executor)
     }
 
-    pub fn new_with_symbolizer(process: P, symbolizer: Box<dyn Symbolizer>) -> Result<Self> {
+    pub fn new_with_symbolizer(
+        process: &'a dyn ProcessTrait,
+        symbolizer: Box<dyn Symbolizer>,
+    ) -> Result<Self> {
         let mut executor = Self::new(process)?;
         executor.symbolizer = Some(symbolizer);
         Ok(executor)
@@ -74,7 +71,7 @@ where
             .reg_write(Register::RIP, function_address);
 
         let mut hooks = ExecutionHooks {
-            process: &self.process,
+            process: self.process,
             tracer: &mut self.tracer,
             instruction_count: 0,
             symbolizer: match &mut self.symbolizer {
@@ -144,25 +141,5 @@ where
     /// Convenience method that delegates to VMContext
     pub fn push_bytes_to_stack(&mut self, data: &[u8]) -> Result<u64> {
         self.vm_context.push_bytes_to_stack(data)
-    }
-
-    /// Get module by name from the process
-    pub fn get_module_by_name(&self, name: &str) -> Option<crate::process_trait::ModuleInfo> {
-        self.process.get_module_by_name(name)
-    }
-
-    /// Get module base address by name
-    pub fn get_module_base_address(&self, name: &str) -> Option<u64> {
-        self.process.get_module_base_address(name)
-    }
-
-    /// List all modules in the process
-    pub fn list_modules(&self) -> Vec<crate::process_trait::ModuleInfo> {
-        self.process.list_modules()
-    }
-
-    /// Find module for a given address
-    pub fn find_module_for_address(&self, address: u64) -> Option<(String, u64, u64)> {
-        self.process.find_module_for_address(address)
     }
 }

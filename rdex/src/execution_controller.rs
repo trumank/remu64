@@ -1,4 +1,4 @@
-use crate::process_trait::ProcessTrait;
+use crate::process_trait::{ProcessTrait, VmMemory};
 use crate::symbolizer::Symbolizer;
 use crate::tracer::InstructionTracer;
 use anyhow::Result;
@@ -8,7 +8,7 @@ use remu64::{CowMemory, EmulatorError, Engine, HookAction, HookManager};
 
 pub struct ExecutionHooks<'a, 'b, P>
 where
-    P: ProcessTrait,
+    P: ProcessTrait + ?Sized,
 {
     pub process: &'a P,
     pub tracer: &'b mut InstructionTracer,
@@ -16,13 +16,13 @@ where
     pub instruction_count: u64,
 }
 
-impl<'a, 'b, P> HookManager<CowMemory<P::Memory>> for ExecutionHooks<'a, 'b, P>
+impl<'a, 'b, P> HookManager<CowMemory<VmMemory>> for ExecutionHooks<'a, 'b, P>
 where
-    P: ProcessTrait,
+    P: ProcessTrait + ?Sized,
 {
     fn on_code(
         &mut self,
-        engine: &mut Engine<CowMemory<P::Memory>>,
+        engine: &mut Engine<CowMemory<VmMemory>>,
         address: u64,
         size: usize,
     ) -> remu64::Result<HookAction> {
@@ -64,7 +64,7 @@ impl ExecutionController {
         }
     }
 
-    pub fn format_instruction_error<P: ProcessTrait>(
+    pub fn format_instruction_error<P: ProcessTrait + ?Sized>(
         process: &P,
         rip: u64,
         instruction_bytes: &[u8],

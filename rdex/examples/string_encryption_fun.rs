@@ -25,10 +25,7 @@ fn main() -> Result<()> {
 }
 
 // Helper function to allocate memory (simplified version)
-fn allocate_memory<P: rdex::ProcessTrait>(
-    executor: &mut rdex::FunctionExecutor<P>,
-    size: usize,
-) -> Result<u64> {
+fn allocate_memory(executor: &mut rdex::FunctionExecutor, size: usize) -> Result<u64> {
     use remu64::{DEFAULT_PAGE_SIZE, Permission};
 
     // Use a fixed allocation area for simplicity
@@ -55,10 +52,7 @@ fn allocate_memory<P: rdex::ProcessTrait>(
 }
 
 // Helper function to read null-terminated string
-fn read_string<P: rdex::ProcessTrait>(
-    executor: &mut rdex::FunctionExecutor<P>,
-    addr: u64,
-) -> Result<String> {
+fn read_string(executor: &mut rdex::FunctionExecutor, addr: u64) -> Result<String> {
     let mut string_bytes = Vec::new();
     let mut offset = 0u64;
 

@@ -1,14 +1,14 @@
-use crate::process_trait::ProcessTrait;
+use crate::process_trait::{ProcessTrait, VmMemory};
 use anyhow::Result;
 use remu64::memory::{CowMemory, MemoryTrait};
 use remu64::{Engine, EngineMode, Permission, Register};
 
-pub struct VMContext<M: MemoryTrait> {
-    pub engine: Engine<CowMemory<M>>,
+pub struct VMContext {
+    pub engine: Engine<CowMemory<VmMemory>>,
 }
 
-impl<M: MemoryTrait> VMContext<M> {
-    pub fn new<P: ProcessTrait<Memory = M>>(process: &P) -> Result<Self> {
+impl VMContext {
+    pub fn new(process: &dyn ProcessTrait) -> Result<Self> {
         let base_memory = process.create_memory()?;
         let cow_memory = CowMemory::new(base_memory);
         let mut engine = Engine::new_memory(EngineMode::Mode64, cow_memory);
@@ -97,8 +97,6 @@ mod tests {
     }
 
     impl ProcessTrait for MockProcess {
-        type Memory = OwnedMemory;
-
         fn get_module_by_name(&self, _name: &str) -> Option<crate::process_trait::ModuleInfo> {
             None
         }
@@ -115,8 +113,8 @@ mod tests {
             None
         }
 
-        fn create_memory(&self) -> Result<Self::Memory> {
-            Ok(OwnedMemory::new())
+        fn create_memory(&self) -> Result<VmMemory> {
+            Ok(std::rc::Rc::new(OwnedMemory::new()))
         }
 
         fn get_teb_address(&self) -> Result<u64> {
