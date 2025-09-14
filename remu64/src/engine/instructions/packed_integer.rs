@@ -819,4 +819,98 @@ impl<H: HookManager<M, PS>, M: MemoryTrait<PS>, const PS: u64> ExecutionContext<
 
         Ok(())
     }
+
+    pub(crate) fn execute_vpcmpeqb(&mut self, inst: &Instruction) -> Result<()> {
+        // VPCMPEQB: Compare packed bytes for equality (AVX-512)
+        // Format: VPCMPEQB k1 {k2}, zmm2, zmm3/m512
+        //         VPCMPEQB k1 {k2}, ymm2, ymm3/m256
+        //         VPCMPEQB k1 {k2}, xmm2, xmm3/m128
+
+        if inst.op_count() != 3 {
+            return Err(EmulatorError::UnsupportedInstruction(
+                "VPCMPEQB requires exactly 3 operands".to_string(),
+            ));
+        }
+
+        // Destination is a mask register
+        let dst_reg = self.convert_register(inst.op_register(0))?;
+
+        // Source 1 is a vector register (XMM/YMM/ZMM)
+        let src1_reg = self.convert_register(inst.op_register(1))?;
+
+        // Determine operation size based on source register
+        let is_ymm = inst.op_register(1).is_ymm();
+
+        if is_ymm {
+            // 256-bit YMM operation (32 bytes)
+            let src1_data = self.engine.cpu.read_ymm(src1_reg);
+
+            let src2_data = match inst.op_kind(2) {
+                OpKind::Register => {
+                    let src2_reg = self.convert_register(inst.op_register(2))?;
+                    self.engine.cpu.read_ymm(src2_reg)
+                }
+                OpKind::Memory => self.read_ymm_memory(inst, 2)?,
+                _ => {
+                    return Err(EmulatorError::UnsupportedInstruction(format!(
+                        "Unsupported VPCMPEQB source operand type: {:?}",
+                        inst.op_kind(2)
+                    )));
+                }
+            };
+
+            // Compare each of the 32 bytes and create mask
+            let mut mask = 0u64;
+            for i in 0..32 {
+                let part_idx = i / 16; // Which 128-bit part (0 or 1)
+                let byte_idx = i % 16; // Which byte within that part
+
+                let src1_byte = ((src1_data[part_idx] >> (byte_idx * 8)) & 0xFF) as u8;
+                let src2_byte = ((src2_data[part_idx] >> (byte_idx * 8)) & 0xFF) as u8;
+
+                if src1_byte == src2_byte {
+                    mask |= 1u64 << i;
+                }
+            }
+
+            // Write result to mask register
+            self.engine.cpu.write_reg(dst_reg, mask);
+        } else {
+            // 128-bit XMM operation (16 bytes)
+            let src1_data = self.engine.cpu.read_xmm(src1_reg);
+
+            let src2_data = match inst.op_kind(2) {
+                OpKind::Register => {
+                    let src2_reg = self.convert_register(inst.op_register(2))?;
+                    self.engine.cpu.read_xmm(src2_reg)
+                }
+                OpKind::Memory => {
+                    let addr = self.calculate_memory_address(inst, 2)?;
+                    self.read_memory_128(addr)?
+                }
+                _ => {
+                    return Err(EmulatorError::UnsupportedInstruction(format!(
+                        "Unsupported VPCMPEQB source operand type: {:?}",
+                        inst.op_kind(2)
+                    )));
+                }
+            };
+
+            // Compare each of the 16 bytes and create mask
+            let mut mask = 0u64;
+            for i in 0..16 {
+                let src1_byte = ((src1_data >> (i * 8)) & 0xFF) as u8;
+                let src2_byte = ((src2_data >> (i * 8)) & 0xFF) as u8;
+
+                if src1_byte == src2_byte {
+                    mask |= 1u64 << i;
+                }
+            }
+
+            // Write result to mask register
+            self.engine.cpu.write_reg(dst_reg, mask);
+        }
+
+        Ok(())
+    }
 }

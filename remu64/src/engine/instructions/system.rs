@@ -379,4 +379,113 @@ impl<H: HookManager<M, PS>, M: MemoryTrait<PS>, const PS: u64> ExecutionContext<
             )),
         }
     }
+
+    pub(crate) fn execute_endbr64(&mut self, _inst: &Instruction) -> Result<()> {
+        // ENDBR64: End Branch 64-bit
+        // CET (Control-flow Enforcement Technology) instruction
+        // This is a landing pad instruction for indirect branches and calls
+        // In emulation, this is effectively a no-op since we don't enforce CET
+        // The instruction serves as a valid target for indirect control flow transfers
+
+        // No registers or flags are affected by this instruction
+        // It simply marks a valid landing point for indirect jumps/calls
+
+        Ok(())
+    }
+
+    pub(crate) fn execute_kmovd(&mut self, inst: &Instruction) -> Result<()> {
+        // KMOVD: Move 32-bit mask register value
+        // Format: KMOVD r32, k
+        //         KMOVD k, r32
+        //         KMOVD k, m32
+        //         KMOVD m32, k
+
+        if inst.op_count() != 2 {
+            return Err(EmulatorError::UnsupportedInstruction(
+                "KMOVD requires exactly 2 operands".to_string(),
+            ));
+        }
+
+        // Determine direction based on operand types
+        match (inst.op_kind(0), inst.op_kind(1)) {
+            // KMOVD r32, k - Move from mask register to general register
+            (OpKind::Register, OpKind::Register) => {
+                let dst_iced_reg = inst.op_register(0);
+                let src_iced_reg = inst.op_register(1);
+
+                // Check if source is mask register and destination is general register
+                if src_iced_reg.is_k() {
+                    let src_reg = self.convert_register(src_iced_reg)?;
+                    let dst_reg = self.convert_register(dst_iced_reg)?;
+
+                    // Read from mask register (K0-K7)
+                    let mask_value = self.engine.cpu.read_reg(src_reg);
+
+                    // Write to general register (only lower 32 bits for KMOVD)
+                    // Zero-extend to 64 bits for 64-bit registers
+                    let value_32 = (mask_value & 0xFFFFFFFF) as u32;
+                    self.engine.cpu.write_reg(dst_reg, value_32 as u64);
+                } else if dst_iced_reg.is_k() {
+                    // KMOVD k, r32 - Move from general register to mask register
+                    let dst_reg = self.convert_register(dst_iced_reg)?;
+                    let src_reg = self.convert_register(src_iced_reg)?;
+
+                    // Read from general register (only lower 32 bits)
+                    let src_value = self.engine.cpu.read_reg(src_reg);
+                    let value_32 = (src_value & 0xFFFFFFFF) as u32;
+
+                    // Write to mask register
+                    self.engine.cpu.write_reg(dst_reg, value_32 as u64);
+                } else {
+                    return Err(EmulatorError::UnsupportedInstruction(
+                        "KMOVD requires one operand to be a mask register".to_string(),
+                    ));
+                }
+            }
+            // KMOVD k, m32 - Move from memory to mask register
+            (OpKind::Register, OpKind::Memory) => {
+                let dst_iced_reg = inst.op_register(0);
+                if !dst_iced_reg.is_k() {
+                    return Err(EmulatorError::UnsupportedInstruction(
+                        "KMOVD destination must be a mask register for memory source".to_string(),
+                    ));
+                }
+
+                let dst_reg = self.convert_register(dst_iced_reg)?;
+                let addr = self.calculate_memory_address(inst, 1)?;
+
+                // Read 32-bit value from memory
+                let value = self.read_memory_32(addr)? as u64;
+
+                // Write to mask register
+                self.engine.cpu.write_reg(dst_reg, value);
+            }
+            // KMOVD m32, k - Move from mask register to memory
+            (OpKind::Memory, OpKind::Register) => {
+                let src_iced_reg = inst.op_register(1);
+                if !src_iced_reg.is_k() {
+                    return Err(EmulatorError::UnsupportedInstruction(
+                        "KMOVD source must be a mask register for memory destination".to_string(),
+                    ));
+                }
+
+                let src_reg = self.convert_register(src_iced_reg)?;
+                let addr = self.calculate_memory_address(inst, 0)?;
+
+                // Read from mask register (only lower 32 bits)
+                let mask_value = self.engine.cpu.read_reg(src_reg);
+                let value_32 = (mask_value & 0xFFFFFFFF) as u32;
+
+                // Write to memory
+                self.write_memory_sized(addr, value_32 as u64, 4)?;
+            }
+            _ => {
+                return Err(EmulatorError::UnsupportedInstruction(
+                    "Unsupported KMOVD operand combination".to_string(),
+                ));
+            }
+        }
+
+        Ok(())
+    }
 }

@@ -95,6 +95,22 @@ pub enum Register {
     XMM13,
     XMM14,
     XMM15,
+    XMM16,
+    XMM17,
+    XMM18,
+    XMM19,
+    XMM20,
+    XMM21,
+    XMM22,
+    XMM23,
+    XMM24,
+    XMM25,
+    XMM26,
+    XMM27,
+    XMM28,
+    XMM29,
+    XMM30,
+    XMM31,
     YMM0,
     YMM1,
     YMM2,
@@ -111,6 +127,30 @@ pub enum Register {
     YMM13,
     YMM14,
     YMM15,
+    YMM16,
+    YMM17,
+    YMM18,
+    YMM19,
+    YMM20,
+    YMM21,
+    YMM22,
+    YMM23,
+    YMM24,
+    YMM25,
+    YMM26,
+    YMM27,
+    YMM28,
+    YMM29,
+    YMM30,
+    YMM31,
+    K0,
+    K1,
+    K2,
+    K3,
+    K4,
+    K5,
+    K6,
+    K7,
 }
 
 impl Register {
@@ -118,9 +158,12 @@ impl Register {
         use Register::*;
         match self {
             XMM0 | XMM1 | XMM2 | XMM3 | XMM4 | XMM5 | XMM6 | XMM7 | XMM8 | XMM9 | XMM10 | XMM11
-            | XMM12 | XMM13 | XMM14 | XMM15 => 16,
+            | XMM12 | XMM13 | XMM14 | XMM15 | XMM16 | XMM17 | XMM18 | XMM19 | XMM20 | XMM21
+            | XMM22 | XMM23 | XMM24 | XMM25 | XMM26 | XMM27 | XMM28 | XMM29 | XMM30 | XMM31 => 16,
             YMM0 | YMM1 | YMM2 | YMM3 | YMM4 | YMM5 | YMM6 | YMM7 | YMM8 | YMM9 | YMM10 | YMM11
-            | YMM12 | YMM13 | YMM14 | YMM15 => 32,
+            | YMM12 | YMM13 | YMM14 | YMM15 | YMM16 | YMM17 | YMM18 | YMM19 | YMM20 | YMM21
+            | YMM22 | YMM23 | YMM24 | YMM25 | YMM26 | YMM27 | YMM28 | YMM29 | YMM30 | YMM31 => 32,
+            K0 | K1 | K2 | K3 | K4 | K5 | K6 | K7 => 8,
             RAX | RBX | RCX | RDX | RSI | RDI | RBP | RSP | R8 | R9 | R10 | R11 | R12 | R13
             | R14 | R15 | RIP | RFLAGS => 8,
             EAX | EBX | ECX | EDX | ESI | EDI | EBP | ESP | R8D | R9D | R10D | R11D | R12D
@@ -176,6 +219,22 @@ impl Register {
                 | XMM13
                 | XMM14
                 | XMM15
+                | XMM16
+                | XMM17
+                | XMM18
+                | XMM19
+                | XMM20
+                | XMM21
+                | XMM22
+                | XMM23
+                | XMM24
+                | XMM25
+                | XMM26
+                | XMM27
+                | XMM28
+                | XMM29
+                | XMM30
+                | XMM31
         )
     }
 
@@ -198,6 +257,22 @@ impl Register {
                 | YMM13
                 | YMM14
                 | YMM15
+                | YMM16
+                | YMM17
+                | YMM18
+                | YMM19
+                | YMM20
+                | YMM21
+                | YMM22
+                | YMM23
+                | YMM24
+                | YMM25
+                | YMM26
+                | YMM27
+                | YMM28
+                | YMM29
+                | YMM30
+                | YMM31
         )
     }
 }
@@ -228,7 +303,8 @@ bitflags! {
 #[derive(Debug, Clone)]
 pub struct CpuState {
     pub regs: [u64; 16],
-    pub ymm_regs: [[u128; 2]; 16], // YMM as two u128 parts: [low_128, high_128] - XMM is ymm_regs[i][0]
+    pub ymm_regs: [[u128; 2]; 32], // YMM as two u128 parts: [low_128, high_128] - XMM is ymm_regs[i][0]
+    pub k_regs: [u64; 8],          // Mask registers K0-K7
     pub rip: u64,
     pub rflags: Flags,
     pub segments: SegmentRegisters,
@@ -289,7 +365,8 @@ impl CpuState {
     pub fn new() -> Self {
         Self {
             regs: [0; 16],
-            ymm_regs: [[0; 2]; 16],
+            ymm_regs: [[0; 2]; 32],
+            k_regs: [0; 8],
             rip: 0,
             rflags: Flags::empty(),
             segments: SegmentRegisters::default(),
@@ -376,13 +453,23 @@ impl CpuState {
             GS => self.segments.gs.selector as u64,
             SS => self.segments.ss.selector as u64,
             XMM0 | XMM1 | XMM2 | XMM3 | XMM4 | XMM5 | XMM6 | XMM7 | XMM8 | XMM9 | XMM10 | XMM11
-            | XMM12 | XMM13 | XMM14 | XMM15 => {
+            | XMM12 | XMM13 | XMM14 | XMM15 | XMM16 | XMM17 | XMM18 | XMM19 | XMM20 | XMM21
+            | XMM22 | XMM23 | XMM24 | XMM25 | XMM26 | XMM27 | XMM28 | XMM29 | XMM30 | XMM31 => {
                 panic!("Cannot read XMM register as u64, use read_xmm instead")
             }
             YMM0 | YMM1 | YMM2 | YMM3 | YMM4 | YMM5 | YMM6 | YMM7 | YMM8 | YMM9 | YMM10 | YMM11
-            | YMM12 | YMM13 | YMM14 | YMM15 => {
+            | YMM12 | YMM13 | YMM14 | YMM15 | YMM16 | YMM17 | YMM18 | YMM19 | YMM20 | YMM21
+            | YMM22 | YMM23 | YMM24 | YMM25 | YMM26 | YMM27 | YMM28 | YMM29 | YMM30 | YMM31 => {
                 panic!("Cannot read YMM register as u64, use read_ymm instead")
             }
+            K0 => self.k_regs[0],
+            K1 => self.k_regs[1],
+            K2 => self.k_regs[2],
+            K3 => self.k_regs[3],
+            K4 => self.k_regs[4],
+            K5 => self.k_regs[5],
+            K6 => self.k_regs[6],
+            K7 => self.k_regs[7],
         }
     }
 
@@ -405,6 +492,22 @@ impl CpuState {
             XMM13 => self.ymm_regs[13][0],
             XMM14 => self.ymm_regs[14][0],
             XMM15 => self.ymm_regs[15][0],
+            XMM16 => self.ymm_regs[16][0],
+            XMM17 => self.ymm_regs[17][0],
+            XMM18 => self.ymm_regs[18][0],
+            XMM19 => self.ymm_regs[19][0],
+            XMM20 => self.ymm_regs[20][0],
+            XMM21 => self.ymm_regs[21][0],
+            XMM22 => self.ymm_regs[22][0],
+            XMM23 => self.ymm_regs[23][0],
+            XMM24 => self.ymm_regs[24][0],
+            XMM25 => self.ymm_regs[25][0],
+            XMM26 => self.ymm_regs[26][0],
+            XMM27 => self.ymm_regs[27][0],
+            XMM28 => self.ymm_regs[28][0],
+            XMM29 => self.ymm_regs[29][0],
+            XMM30 => self.ymm_regs[30][0],
+            XMM31 => self.ymm_regs[31][0],
             _ => panic!("Not an XMM register"),
         }
     }
@@ -428,6 +531,22 @@ impl CpuState {
             YMM13 => self.ymm_regs[13],
             YMM14 => self.ymm_regs[14],
             YMM15 => self.ymm_regs[15],
+            YMM16 => self.ymm_regs[16],
+            YMM17 => self.ymm_regs[17],
+            YMM18 => self.ymm_regs[18],
+            YMM19 => self.ymm_regs[19],
+            YMM20 => self.ymm_regs[20],
+            YMM21 => self.ymm_regs[21],
+            YMM22 => self.ymm_regs[22],
+            YMM23 => self.ymm_regs[23],
+            YMM24 => self.ymm_regs[24],
+            YMM25 => self.ymm_regs[25],
+            YMM26 => self.ymm_regs[26],
+            YMM27 => self.ymm_regs[27],
+            YMM28 => self.ymm_regs[28],
+            YMM29 => self.ymm_regs[29],
+            YMM30 => self.ymm_regs[30],
+            YMM31 => self.ymm_regs[31],
             _ => panic!("Not a YMM register"),
         }
     }
@@ -512,13 +631,23 @@ impl CpuState {
             GS => self.segments.gs.selector = value as u16,
             SS => self.segments.ss.selector = value as u16,
             XMM0 | XMM1 | XMM2 | XMM3 | XMM4 | XMM5 | XMM6 | XMM7 | XMM8 | XMM9 | XMM10 | XMM11
-            | XMM12 | XMM13 | XMM14 | XMM15 => {
+            | XMM12 | XMM13 | XMM14 | XMM15 | XMM16 | XMM17 | XMM18 | XMM19 | XMM20 | XMM21
+            | XMM22 | XMM23 | XMM24 | XMM25 | XMM26 | XMM27 | XMM28 | XMM29 | XMM30 | XMM31 => {
                 panic!("Cannot write XMM register with u64, use write_xmm instead")
             }
             YMM0 | YMM1 | YMM2 | YMM3 | YMM4 | YMM5 | YMM6 | YMM7 | YMM8 | YMM9 | YMM10 | YMM11
-            | YMM12 | YMM13 | YMM14 | YMM15 => {
+            | YMM12 | YMM13 | YMM14 | YMM15 | YMM16 | YMM17 | YMM18 | YMM19 | YMM20 | YMM21
+            | YMM22 | YMM23 | YMM24 | YMM25 | YMM26 | YMM27 | YMM28 | YMM29 | YMM30 | YMM31 => {
                 panic!("Cannot write YMM register with u64, use write_ymm instead")
             }
+            K0 => self.k_regs[0] = value,
+            K1 => self.k_regs[1] = value,
+            K2 => self.k_regs[2] = value,
+            K3 => self.k_regs[3] = value,
+            K4 => self.k_regs[4] = value,
+            K5 => self.k_regs[5] = value,
+            K6 => self.k_regs[6] = value,
+            K7 => self.k_regs[7] = value,
         }
     }
 
@@ -589,6 +718,70 @@ impl CpuState {
                 self.ymm_regs[15][0] = value;
                 self.ymm_regs[15][1] = 0;
             }
+            XMM16 => {
+                self.ymm_regs[16][0] = value;
+                self.ymm_regs[16][1] = 0;
+            }
+            XMM17 => {
+                self.ymm_regs[17][0] = value;
+                self.ymm_regs[17][1] = 0;
+            }
+            XMM18 => {
+                self.ymm_regs[18][0] = value;
+                self.ymm_regs[18][1] = 0;
+            }
+            XMM19 => {
+                self.ymm_regs[19][0] = value;
+                self.ymm_regs[19][1] = 0;
+            }
+            XMM20 => {
+                self.ymm_regs[20][0] = value;
+                self.ymm_regs[20][1] = 0;
+            }
+            XMM21 => {
+                self.ymm_regs[21][0] = value;
+                self.ymm_regs[21][1] = 0;
+            }
+            XMM22 => {
+                self.ymm_regs[22][0] = value;
+                self.ymm_regs[22][1] = 0;
+            }
+            XMM23 => {
+                self.ymm_regs[23][0] = value;
+                self.ymm_regs[23][1] = 0;
+            }
+            XMM24 => {
+                self.ymm_regs[24][0] = value;
+                self.ymm_regs[24][1] = 0;
+            }
+            XMM25 => {
+                self.ymm_regs[25][0] = value;
+                self.ymm_regs[25][1] = 0;
+            }
+            XMM26 => {
+                self.ymm_regs[26][0] = value;
+                self.ymm_regs[26][1] = 0;
+            }
+            XMM27 => {
+                self.ymm_regs[27][0] = value;
+                self.ymm_regs[27][1] = 0;
+            }
+            XMM28 => {
+                self.ymm_regs[28][0] = value;
+                self.ymm_regs[28][1] = 0;
+            }
+            XMM29 => {
+                self.ymm_regs[29][0] = value;
+                self.ymm_regs[29][1] = 0;
+            }
+            XMM30 => {
+                self.ymm_regs[30][0] = value;
+                self.ymm_regs[30][1] = 0;
+            }
+            XMM31 => {
+                self.ymm_regs[31][0] = value;
+                self.ymm_regs[31][1] = 0;
+            }
             _ => panic!("Not an XMM register"),
         }
     }
@@ -612,6 +805,22 @@ impl CpuState {
             YMM13 => self.ymm_regs[13] = value,
             YMM14 => self.ymm_regs[14] = value,
             YMM15 => self.ymm_regs[15] = value,
+            YMM16 => self.ymm_regs[16] = value,
+            YMM17 => self.ymm_regs[17] = value,
+            YMM18 => self.ymm_regs[18] = value,
+            YMM19 => self.ymm_regs[19] = value,
+            YMM20 => self.ymm_regs[20] = value,
+            YMM21 => self.ymm_regs[21] = value,
+            YMM22 => self.ymm_regs[22] = value,
+            YMM23 => self.ymm_regs[23] = value,
+            YMM24 => self.ymm_regs[24] = value,
+            YMM25 => self.ymm_regs[25] = value,
+            YMM26 => self.ymm_regs[26] = value,
+            YMM27 => self.ymm_regs[27] = value,
+            YMM28 => self.ymm_regs[28] = value,
+            YMM29 => self.ymm_regs[29] = value,
+            YMM30 => self.ymm_regs[30] = value,
+            YMM31 => self.ymm_regs[31] = value,
             _ => panic!("Not a YMM register"),
         }
     }

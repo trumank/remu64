@@ -589,4 +589,16 @@ impl<H: HookManager<M, PS>, M: MemoryTrait<PS>, const PS: u64> ExecutionContext<
 
         Ok(())
     }
+
+    pub(crate) fn execute_vpxorq(&mut self, inst: &Instruction) -> Result<()> {
+        // VPXORQ - Packed Logical XOR of Quadwords
+        // EVEX.512: VPXORQ zmm1 {k1}{z}, zmm2, zmm3/m512/m64bcst
+        // EVEX.256: VPXORQ ymm1 {k1}{z}, ymm2, ymm3/m256/m64bcst
+        // EVEX.128: VPXORQ xmm1 {k1}{z}, xmm2, xmm3/m128/m64bcst
+        // This is the same as VPXOR but specifically for 64-bit operations
+
+        // For now, we implement it the same as VPXOR since the underlying operation is identical
+        // The difference is mainly in the EVEX encoding and potential masking/broadcasting
+        self.execute_vpxor(inst)
+    }
 }
