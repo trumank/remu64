@@ -745,6 +745,167 @@ impl<T: MemoryTrait<PS>, const PS: u64> MemoryTrait<PS> for CowMemory<T, PS> {
     }
 }
 
+// Implementation for Box<dyn MemoryTrait> to enable trait object usage
+impl<const PS: u64> MemoryTrait<PS> for Box<dyn MemoryTrait<PS> + 'static> {
+    fn find_region(&self, addr: u64) -> Option<MemoryRegionRef<'_>> {
+        (**self).find_region(addr)
+    }
+
+    fn find_region_mut(&mut self, addr: u64) -> Option<MemoryRegionMut<'_>> {
+        (**self).find_region_mut(addr)
+    }
+
+    fn permissions(&self, addr: u64) -> Result<Permission> {
+        (**self).permissions(addr)
+    }
+
+    fn read(&self, addr: u64, buf: &mut [u8]) -> Result<()> {
+        (**self).read(addr, buf)
+    }
+
+    fn write(&mut self, addr: u64, data: &[u8]) -> Result<()> {
+        (**self).write(addr, data)
+    }
+
+    fn write_code(&mut self, addr: u64, data: &[u8]) -> Result<()> {
+        (**self).write_code(addr, data)
+    }
+
+    fn map(&mut self, addr: u64, size: usize, perms: Permission) -> Result<()> {
+        (**self).map(addr, size, perms)
+    }
+
+    fn unmap(&mut self, addr: u64, size: usize) -> Result<()> {
+        (**self).unmap(addr, size)
+    }
+
+    fn protect(&mut self, addr: u64, size: usize, perms: Permission) -> Result<()> {
+        (**self).protect(addr, size, perms)
+    }
+}
+
+// Implementation for generic Rc<M> where M: MemoryTrait
+impl<M: MemoryTrait<PS>, const PS: u64> MemoryTrait<PS> for std::rc::Rc<M> {
+    fn find_region(&self, addr: u64) -> Option<MemoryRegionRef<'_>> {
+        (**self).find_region(addr)
+    }
+
+    fn find_region_mut(&mut self, addr: u64) -> Option<MemoryRegionMut<'_>> {
+        // Note: Rc doesn't allow mutable access when there are multiple references
+        if std::rc::Rc::strong_count(self) > 1 {
+            panic!("Cannot get mutable reference to Rc with multiple references");
+        }
+        std::rc::Rc::get_mut(self).unwrap().find_region_mut(addr)
+    }
+
+    fn permissions(&self, addr: u64) -> Result<Permission> {
+        (**self).permissions(addr)
+    }
+
+    fn read(&self, addr: u64, buf: &mut [u8]) -> Result<()> {
+        (**self).read(addr, buf)
+    }
+
+    fn write(&mut self, addr: u64, data: &[u8]) -> Result<()> {
+        if std::rc::Rc::strong_count(self) > 1 {
+            panic!("Cannot write to Rc with multiple references");
+        }
+        std::rc::Rc::get_mut(self).unwrap().write(addr, data)
+    }
+
+    fn write_code(&mut self, addr: u64, data: &[u8]) -> Result<()> {
+        if std::rc::Rc::strong_count(self) > 1 {
+            panic!("Cannot write to Rc with multiple references");
+        }
+        std::rc::Rc::get_mut(self).unwrap().write_code(addr, data)
+    }
+
+    fn map(&mut self, addr: u64, size: usize, perms: Permission) -> Result<()> {
+        if std::rc::Rc::strong_count(self) > 1 {
+            panic!("Cannot map to Rc with multiple references");
+        }
+        std::rc::Rc::get_mut(self).unwrap().map(addr, size, perms)
+    }
+
+    fn unmap(&mut self, addr: u64, size: usize) -> Result<()> {
+        if std::rc::Rc::strong_count(self) > 1 {
+            panic!("Cannot unmap from Rc with multiple references");
+        }
+        std::rc::Rc::get_mut(self).unwrap().unmap(addr, size)
+    }
+
+    fn protect(&mut self, addr: u64, size: usize, perms: Permission) -> Result<()> {
+        if std::rc::Rc::strong_count(self) > 1 {
+            panic!("Cannot protect Rc with multiple references");
+        }
+        std::rc::Rc::get_mut(self)
+            .unwrap()
+            .protect(addr, size, perms)
+    }
+}
+
+// Implementation for Rc<dyn MemoryTrait> to enable trait object usage with cloning
+impl<const PS: u64> MemoryTrait<PS> for std::rc::Rc<dyn MemoryTrait<PS> + 'static> {
+    fn find_region(&self, addr: u64) -> Option<MemoryRegionRef<'_>> {
+        (**self).find_region(addr)
+    }
+
+    fn find_region_mut(&mut self, addr: u64) -> Option<MemoryRegionMut<'_>> {
+        // Note: Rc doesn't allow mutable access to the inner value when there are multiple references
+        // This is a fundamental limitation of Rc - we can't get mutable references
+        // For now, we'll panic if this is called with multiple references
+        if std::rc::Rc::strong_count(self) > 1 {
+            panic!("Cannot get mutable reference to Rc<dyn MemoryTrait> with multiple references");
+        }
+        std::rc::Rc::get_mut(self).unwrap().find_region_mut(addr)
+    }
+
+    fn permissions(&self, addr: u64) -> Result<Permission> {
+        (**self).permissions(addr)
+    }
+
+    fn read(&self, addr: u64, buf: &mut [u8]) -> Result<()> {
+        (**self).read(addr, buf)
+    }
+
+    fn write(&mut self, addr: u64, data: &[u8]) -> Result<()> {
+        if std::rc::Rc::strong_count(self) > 1 {
+            panic!("Cannot write to Rc<dyn MemoryTrait> with multiple references");
+        }
+        std::rc::Rc::get_mut(self).unwrap().write(addr, data)
+    }
+
+    fn write_code(&mut self, addr: u64, data: &[u8]) -> Result<()> {
+        if std::rc::Rc::strong_count(self) > 1 {
+            panic!("Cannot write to Rc<dyn MemoryTrait> with multiple references");
+        }
+        std::rc::Rc::get_mut(self).unwrap().write_code(addr, data)
+    }
+
+    fn map(&mut self, addr: u64, size: usize, perms: Permission) -> Result<()> {
+        if std::rc::Rc::strong_count(self) > 1 {
+            panic!("Cannot map to Rc<dyn MemoryTrait> with multiple references");
+        }
+        std::rc::Rc::get_mut(self).unwrap().map(addr, size, perms)
+    }
+
+    fn unmap(&mut self, addr: u64, size: usize) -> Result<()> {
+        if std::rc::Rc::strong_count(self) > 1 {
+            panic!("Cannot unmap from Rc<dyn MemoryTrait> with multiple references");
+        }
+        std::rc::Rc::get_mut(self).unwrap().unmap(addr, size)
+    }
+
+    fn protect(&mut self, addr: u64, size: usize, perms: Permission) -> Result<()> {
+        if std::rc::Rc::strong_count(self) > 1 {
+            panic!("Cannot protect Rc<dyn MemoryTrait> with multiple references");
+        }
+        std::rc::Rc::get_mut(self)
+            .unwrap()
+            .protect(addr, size, perms)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1141,106 +1302,5 @@ mod tests {
 
         // Test addresses not in either overlay or base
         assert!(cow.permissions(0x50000).is_err());
-    }
-}
-
-// Implementation for Box<dyn MemoryTrait> to enable trait object usage
-impl<const PS: u64> MemoryTrait<PS> for Box<dyn MemoryTrait<PS> + 'static> {
-    fn find_region(&self, addr: u64) -> Option<MemoryRegionRef<'_>> {
-        (**self).find_region(addr)
-    }
-
-    fn find_region_mut(&mut self, addr: u64) -> Option<MemoryRegionMut<'_>> {
-        (**self).find_region_mut(addr)
-    }
-
-    fn permissions(&self, addr: u64) -> Result<Permission> {
-        (**self).permissions(addr)
-    }
-
-    fn read(&self, addr: u64, buf: &mut [u8]) -> Result<()> {
-        (**self).read(addr, buf)
-    }
-
-    fn write(&mut self, addr: u64, data: &[u8]) -> Result<()> {
-        (**self).write(addr, data)
-    }
-
-    fn write_code(&mut self, addr: u64, data: &[u8]) -> Result<()> {
-        (**self).write_code(addr, data)
-    }
-
-    fn map(&mut self, addr: u64, size: usize, perms: Permission) -> Result<()> {
-        (**self).map(addr, size, perms)
-    }
-
-    fn unmap(&mut self, addr: u64, size: usize) -> Result<()> {
-        (**self).unmap(addr, size)
-    }
-
-    fn protect(&mut self, addr: u64, size: usize, perms: Permission) -> Result<()> {
-        (**self).protect(addr, size, perms)
-    }
-}
-
-// Implementation for Rc<dyn MemoryTrait> to enable trait object usage with cloning
-impl<const PS: u64> MemoryTrait<PS> for std::rc::Rc<dyn MemoryTrait<PS> + 'static> {
-    fn find_region(&self, addr: u64) -> Option<MemoryRegionRef<'_>> {
-        (**self).find_region(addr)
-    }
-
-    fn find_region_mut(&mut self, addr: u64) -> Option<MemoryRegionMut<'_>> {
-        // Note: Rc doesn't allow mutable access to the inner value when there are multiple references
-        // This is a fundamental limitation of Rc - we can't get mutable references
-        // For now, we'll panic if this is called with multiple references
-        if std::rc::Rc::strong_count(self) > 1 {
-            panic!("Cannot get mutable reference to Rc<dyn MemoryTrait> with multiple references");
-        }
-        std::rc::Rc::get_mut(self).unwrap().find_region_mut(addr)
-    }
-
-    fn permissions(&self, addr: u64) -> Result<Permission> {
-        (**self).permissions(addr)
-    }
-
-    fn read(&self, addr: u64, buf: &mut [u8]) -> Result<()> {
-        (**self).read(addr, buf)
-    }
-
-    fn write(&mut self, addr: u64, data: &[u8]) -> Result<()> {
-        if std::rc::Rc::strong_count(self) > 1 {
-            panic!("Cannot write to Rc<dyn MemoryTrait> with multiple references");
-        }
-        std::rc::Rc::get_mut(self).unwrap().write(addr, data)
-    }
-
-    fn write_code(&mut self, addr: u64, data: &[u8]) -> Result<()> {
-        if std::rc::Rc::strong_count(self) > 1 {
-            panic!("Cannot write to Rc<dyn MemoryTrait> with multiple references");
-        }
-        std::rc::Rc::get_mut(self).unwrap().write_code(addr, data)
-    }
-
-    fn map(&mut self, addr: u64, size: usize, perms: Permission) -> Result<()> {
-        if std::rc::Rc::strong_count(self) > 1 {
-            panic!("Cannot map to Rc<dyn MemoryTrait> with multiple references");
-        }
-        std::rc::Rc::get_mut(self).unwrap().map(addr, size, perms)
-    }
-
-    fn unmap(&mut self, addr: u64, size: usize) -> Result<()> {
-        if std::rc::Rc::strong_count(self) > 1 {
-            panic!("Cannot unmap from Rc<dyn MemoryTrait> with multiple references");
-        }
-        std::rc::Rc::get_mut(self).unwrap().unmap(addr, size)
-    }
-
-    fn protect(&mut self, addr: u64, size: usize, perms: Permission) -> Result<()> {
-        if std::rc::Rc::strong_count(self) > 1 {
-            panic!("Cannot protect Rc<dyn MemoryTrait> with multiple references");
-        }
-        std::rc::Rc::get_mut(self)
-            .unwrap()
-            .protect(addr, size, perms)
     }
 }
