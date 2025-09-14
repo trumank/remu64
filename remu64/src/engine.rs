@@ -17,6 +17,7 @@ pub enum EngineMode {
     Mode64,
 }
 
+#[derive(Clone)]
 pub struct Engine<M: MemoryTrait<PS>, const PS: u64 = DEFAULT_PAGE_SIZE> {
     pub cpu: CpuState,
     pub memory: M,
