@@ -7,7 +7,7 @@ use remu64::Register;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, fs, path::Path, sync::mpsc, time::Duration};
 
-use crate::tracer::{InstructionAction, InstructionActions};
+use remu64_tui::{InstructionAction, InstructionActions};
 
 /// Configuration for the TUI application
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -369,7 +369,7 @@ mod register_map {
 /// Custom deserializer for instruction actions map
 mod instruction_actions_map {
     use super::{InstructionAction, InstructionActionConfig};
-    use crate::tracer::InstructionActions;
+    use remu64_tui::InstructionActions;
     use serde::{Deserialize, Deserializer, Serialize, Serializer};
     use std::collections::HashMap;
 

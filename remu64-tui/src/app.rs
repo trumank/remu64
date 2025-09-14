@@ -9,13 +9,10 @@ use std::io;
 use std::time::{Duration, Instant};
 use tracing::{debug, info};
 
-use crate::config::ConfigLoader;
-use crate::tracer::Tracer;
+use crate::VmSetupProvider;
+use crate::tracer::GenericTracer;
 use crate::ui;
-use rdex::{
-    DumpExec, MinidumpLoader, ProcessTrait as _, pe_symbolizer::PeSymbolizer,
-    process_trait::VmMemory,
-};
+use remu64::{CowMemory, Engine};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Panel {
@@ -37,10 +34,6 @@ pub struct AppState {
     pub stack_scroll: usize,
     pub instruction_list_state: ListState,
     pub go_to_end: bool,
-
-    pub symbolizer: PeSymbolizer,
-
-    pub config_loader: ConfigLoader,
 
     // Status message system
     pub status_message: Option<StatusMessage>,
@@ -72,59 +65,19 @@ impl AppState {
         self.status_message.as_ref()
     }
 
-    pub fn toggle_skip_instruction(&mut self, index: usize) {
-        use crate::tracer::InstructionAction;
-
-        let actions = self
-            .config_loader
-            .config
-            .instruction_actions
-            .entry(index)
-            .or_default();
-
-        // Check if skip action already exists
-        if let Some(pos) = actions
-            .iter()
-            .position(|action| matches!(action, InstructionAction::Skip))
-        {
-            // Remove skip action
-            actions.remove(pos);
-            debug!("Removed skip action for instruction {}", index);
-
-            // Remove empty action list
-            if actions.is_empty() {
-                self.config_loader.config.instruction_actions.remove(&index);
-            }
-        } else {
-            // Add skip action
-            actions.push(InstructionAction::Skip);
-            debug!("Added skip action for instruction {}", index);
-        }
+    // Skip instruction toggle will be handled at the provider level
+    pub fn should_toggle_skip_instruction(&self, _index: usize) -> bool {
+        // Return signal that skip should be toggled - provider will handle the actual toggle
+        true
     }
 }
 
 pub struct App {
     state: AppState,
-    minidump_loader: MinidumpLoader<'static>,
-    memory: VmMemory,
 }
 
 impl App {
-    pub fn new(config_loader: ConfigLoader) -> Result<Self> {
-        let config = &config_loader.config;
-
-        debug!("Loading minidump: {}", config.minidump_path);
-        let minidump_loader = DumpExec::load_minidump(&config.minidump_path)?;
-        info!("Successfully loaded minidump: {}", config.minidump_path);
-
-        // Create the memory object from the loader
-        let memory = minidump_loader.create_memory()?;
-        debug!("Created MinidumpMemory from loader");
-
-        // Initialize the PeSymbolizer with the minidump loader
-        let symbolizer = PeSymbolizer::new(&minidump_loader);
-        info!("Initialized PeSymbolizer");
-
+    pub fn new() -> Result<Self> {
         let mut instruction_list_state = ListState::default();
         instruction_list_state.select(Some(0));
 
@@ -134,27 +87,21 @@ impl App {
             stack_scroll: 0,
             instruction_list_state,
             go_to_end: false,
-            symbolizer,
-            config_loader,
             status_message: None,
             status_message_expires: None,
         };
 
-        Ok(App {
-            state,
-            minidump_loader,
-            memory,
-        })
+        Ok(App { state })
     }
 
-    pub fn run(&mut self) -> Result<()> {
+    pub fn run_with_provider<P: VmSetupProvider>(&mut self, setup_provider: P) -> Result<()> {
         enable_raw_mode()?;
         let mut stdout = io::stdout();
         execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
         let backend = CrosstermBackend::new(stdout);
         let mut terminal = Terminal::new(backend)?;
 
-        let result = self.run_app(&mut terminal);
+        let result = self.run_app_with_provider(&mut terminal, setup_provider);
 
         disable_raw_mode()?;
         execute!(
@@ -167,27 +114,62 @@ impl App {
         result
     }
 
-    fn run_app(&mut self, terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> Result<()> {
+    fn run_app_with_provider<P: VmSetupProvider>(
+        &mut self,
+        terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
+        mut setup_provider: P,
+    ) -> Result<()> {
         info!("Starting TUI main loop");
 
+        // Create backend once
+        let (vm_memory, mut symbolizer) = setup_provider.create_backend()?;
+        let memory = CowMemory::new(vm_memory);
+
+        let mut toggle_skip_index: Option<usize> = None;
+
         loop {
+            // Create fresh engine and setup for each frame
+            let mut engine = Engine::new_memory(remu64::EngineMode::Mode64, memory.clone());
+
+            // Check for reload signal on first setup (always setup on first iteration)
+            // Later we'll check the channel during event polling
+
+            let config = setup_provider.setup_engine(&mut engine)?;
+
             let mut current_idx = self.state.current_trace_index();
-            let max_limit = self.state.config_loader.config.tracing.max_instructions;
 
             // Create tracer for this frame
-            let tracer = Tracer {
-                minidump_loader: &self.minidump_loader,
-            };
+            let tracer = GenericTracer::new(engine.memory.clone(), &symbolizer);
+
+            // Handle skip instruction toggle from previous frame
+            let mut instruction_actions = config.instruction_actions.clone();
+            if let Some(skip_idx) = toggle_skip_index.take() {
+                use crate::InstructionAction;
+                let actions = instruction_actions.entry(skip_idx).or_default();
+                if let Some(pos) = actions
+                    .iter()
+                    .position(|a| matches!(a, InstructionAction::Skip))
+                {
+                    actions.remove(pos);
+                    if actions.is_empty() {
+                        instruction_actions.remove(&skip_idx);
+                    }
+                } else {
+                    actions.push(InstructionAction::Skip);
+                }
+            }
 
             // Optional pre-pass: when tracing to end, determine the final instruction index
             if self.state.go_to_end {
                 debug!("Trace-to-end pre-pass: determining total instruction count");
 
                 let pre_pass_result = tracer.run_trace(
-                    &self.state.config_loader.config,
-                    max_limit,
+                    engine.cpu.clone(),
+                    config.function_address,
+                    config.max_instructions,
                     0,      // Not capturing any entries in pre-pass
                     (0, 0), // Empty range - capture nothing
+                    &instruction_actions,
                 )?;
 
                 let total_instructions = pre_pass_result.total_instructions;
@@ -197,12 +179,10 @@ impl App {
                 );
 
                 if total_instructions > 0 {
-                    // Update current_idx to point to the final instruction
                     current_idx = total_instructions - 1;
                     debug!("Updated current_idx to final instruction: {}", current_idx);
                 }
 
-                // Update UI state and reset the flag
                 self.state.instruction_list_state.select(Some(current_idx));
                 debug!("Moved to end of trace: instruction {}", current_idx);
                 self.state.go_to_end = false;
@@ -218,18 +198,20 @@ impl App {
             let visible_instructions = (instruction_area_height as usize).max(10);
             let buffer = 50; // Buffer around visible area
 
-            // Calculate range around current position (which may have been updated by pre-pass)
+            // Calculate range around current position
             let start = current_idx.saturating_sub(buffer);
             let end = current_idx + visible_instructions + buffer;
 
             let trace_result = tracer.run_trace(
-                &self.state.config_loader.config,
-                max_limit.min(end),
+                engine.cpu.clone(),
+                config.function_address,
+                config.max_instructions.min(end),
                 current_idx,
                 (start, end),
+                &instruction_actions,
             )?;
 
-            // Ensure current trace index is within bounds for normal tracing
+            // Ensure current trace index is within bounds
             if current_idx >= trace_result.total_instructions && trace_result.total_instructions > 0
             {
                 self.state
@@ -242,7 +224,17 @@ impl App {
                 trace_result.entries.len(),
                 trace_result.total_instructions
             );
-            terminal.draw(|f| ui::draw(f, &mut self.state, &trace_result, &self.memory))?;
+
+            terminal.draw(|f| {
+                ui::draw(
+                    f,
+                    &mut self.state,
+                    &trace_result,
+                    &engine.memory,
+                    &mut symbolizer,
+                    setup_provider.display_name(),
+                )
+            })?;
 
             let mut event = None;
             loop {
@@ -250,8 +242,7 @@ impl App {
                     while event::poll(std::time::Duration::from_millis(0))? {
                         match event::read()? {
                             Event::Mouse(_mouse_event) => {
-                                // ignore mouse events for now because they can stack up and take a while to process
-                                // if needed in the future, can merge and handle them together in one frame
+                                // ignore mouse events for now
                             }
                             other => {
                                 event = Some(other);
@@ -266,11 +257,11 @@ impl App {
                         break;
                     }
 
-                    // Check hot reload channel during polling timeout
-                    match self.state.config_loader.check_watcher_changes() {
+                    // Check for reload signal from provider during polling timeout
+                    match setup_provider.check_reload_signal() {
                         Ok(true) => {
                             info!(
-                                "Config file was reloaded - breaking poll loop for immediate redraw"
+                                "Config reload signal received - breaking poll loop for immediate redraw"
                             );
                             self.state.set_status_message(
                                 StatusMessage::ConfigReloaded,
@@ -279,10 +270,10 @@ impl App {
                             break;
                         }
                         Ok(false) => {
-                            // No config change, continue polling
+                            // No reload signal, continue polling
                         }
                         Err(e) => {
-                            debug!("Config watcher error: {}", e);
+                            debug!("Reload signal check error: {}", e);
                             self.state.set_status_message(
                                 StatusMessage::ConfigError(e.to_string()),
                                 None,
@@ -340,7 +331,7 @@ impl App {
                     }
                     KeyCode::Char('s') => {
                         debug!("'s' key - toggle skip instruction");
-                        self.handle_toggle_skip();
+                        toggle_skip_index = Some(self.state.current_trace_index());
                     }
                     _ => {
                         debug!("Unhandled key: {:?}", key.code);
@@ -439,8 +430,6 @@ impl App {
         self.state.instruction_scroll = 0;
         self.state.stack_scroll = 0;
         self.state.go_to_end = false;
-        // Reset instruction actions in config
-        self.state.config_loader.config.instruction_actions.clear();
     }
 
     fn handle_go_to_beginning(&mut self) {
@@ -477,21 +466,6 @@ impl App {
             _ => {
                 debug!(
                     "'G' key pressed but not handled for panel: {:?}",
-                    self.state.selected_panel
-                );
-            }
-        }
-    }
-
-    fn handle_toggle_skip(&mut self) {
-        match self.state.selected_panel {
-            Panel::Instructions => {
-                let current_idx = self.state.current_trace_index();
-                self.state.toggle_skip_instruction(current_idx);
-            }
-            _ => {
-                debug!(
-                    "'s' key pressed but not handled for panel: {:?}",
                     self.state.selected_panel
                 );
             }

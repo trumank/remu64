@@ -7,19 +7,18 @@ description = "Terminal user interface for remu64 minidump debugging"
 license.workspace = true
 
 [dependencies]
+# Core library dependencies
 remu64 = { path = "../remu64" }
-rdex = { path = "../rdex" }
 ratatui = "0.29"
 crossterm = "0.28"
-clap = { version = "4.5", features = ["derive"] }
 anyhow = "1.0"
 tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 iced-x86 = "1.21"
+
+# Binary-only dependencies
+rdex = { path = "../rdex" }
+clap = { version = "4.5", features = ["derive"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 serde = { version = "1.0", features = ["derive"] }
 toml = "0.8"
 notify-debouncer-full = "0.6.0"
-
-[[bin]]
-name = "remu64-tui"
-path = "src/main.rs"

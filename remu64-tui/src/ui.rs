@@ -8,17 +8,19 @@ use ratatui::{
     text::{Line, Span},
     widgets::{Block, Borders, List, ListItem, Paragraph, Wrap},
 };
-use rdex::symbolizer::Symbolizer as _;
+use rdex::symbolizer::Symbolizer;
 use remu64::{Register, memory::MemoryTrait};
 
 use crate::app::{AppState, Panel, StatusMessage};
 use crate::tracer::TraceResult;
 
-pub fn draw<M: MemoryTrait>(
+pub fn draw<M: MemoryTrait, S: Symbolizer>(
     f: &mut Frame,
     state: &mut AppState,
     trace_result: &TraceResult<M>,
-    memory: &dyn MemoryTrait,
+    memory: &M,
+    symbolizer: &mut S,
+    display_name: &str,
 ) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -26,7 +28,7 @@ pub fn draw<M: MemoryTrait>(
         .split(f.area());
 
     // Header
-    draw_header(f, chunks[0], state, trace_result);
+    draw_header(f, chunks[0], display_name, trace_result, state);
 
     // Main content area
     let main_chunks = Layout::default()
@@ -45,17 +47,18 @@ pub fn draw<M: MemoryTrait>(
         .split(right_chunks[0]);
 
     // Draw panels
-    draw_instructions(f, main_chunks[0], state, memory, trace_result);
+    draw_instructions(f, main_chunks[0], state, memory, symbolizer, trace_result);
     draw_cpu_state(f, right_top_chunks[0], state, trace_result);
     draw_controls(f, right_top_chunks[1], state);
-    draw_stack(f, right_chunks[1], state, trace_result);
+    draw_stack(f, right_chunks[1], state, trace_result, memory, symbolizer);
 }
 
 fn draw_header<M: MemoryTrait>(
     f: &mut Frame,
     area: Rect,
-    state: &AppState,
+    display_name: &str,
     trace_result: &TraceResult<M>,
+    state: &AppState,
 ) {
     let mut status_parts = Vec::new();
 
@@ -92,14 +95,7 @@ fn draw_header<M: MemoryTrait>(
         format!(" | {}", status_parts.join(" | "))
     };
 
-    let title = format!(
-        "remu64-tui | File: {} | Function: 0x{:x}{status}",
-        std::path::Path::new(&state.config_loader.config.minidump_path)
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or("unknown"),
-        state.config_loader.config.function_address,
-    );
+    let title = format!("remu64-tui | {}{status}", display_name,);
 
     let header_style = if trace_result.error_message.is_some() {
         Style::default().fg(Color::White).bg(Color::Red)
@@ -117,11 +113,12 @@ fn draw_header<M: MemoryTrait>(
     f.render_widget(header, area);
 }
 
-fn draw_instructions<M: MemoryTrait>(
+fn draw_instructions<M: MemoryTrait, S: Symbolizer>(
     f: &mut Frame,
     area: Rect,
     state: &mut AppState,
-    memory: &dyn MemoryTrait,
+    memory: &M,
+    symbolizer: &mut S,
     trace_result: &TraceResult<M>,
 ) {
     let selected = state.selected_panel == Panel::Instructions;
@@ -197,7 +194,8 @@ fn draw_instructions<M: MemoryTrait>(
 
                 // Add symbol/module+offset column at the end with different colors
                 instruction_spans.push(Span::raw(" "));
-                match state.symbolizer.resolve_address(memory, entry.address) {
+
+                match symbolizer.resolve_address(memory, entry.address) {
                     Some(resolved_symbol) => {
                         if let Some(symbol_name) = &resolved_symbol.symbol.name {
                             // We have a specific symbol
@@ -234,34 +232,35 @@ fn draw_instructions<M: MemoryTrait>(
                                 }
                             }
                         } else {
-                            // Just module information
-                            let color = if entry.was_skipped {
-                                Color::DarkGray
+                            // We have a module but no specific symbol
+                            if entry.was_skipped {
+                                instruction_spans.push(Span::styled(
+                                    format!(
+                                        "{}+0x{:x}",
+                                        resolved_symbol.symbol.module, resolved_symbol.offset
+                                    ),
+                                    Style::default().fg(Color::DarkGray),
+                                ));
                             } else {
-                                Color::Magenta
-                            };
-                            instruction_spans.push(Span::styled(
-                                resolved_symbol.symbol.module.clone(),
-                                Style::default().fg(color),
-                            ));
-                            let offset_style = if entry.was_skipped {
-                                Style::default().fg(Color::DarkGray)
-                            } else {
-                                Style::default()
-                            };
-                            instruction_spans.push(Span::styled(
-                                format!("+0x{:x}", resolved_symbol.offset),
-                                offset_style,
-                            ));
+                                instruction_spans.push(Span::styled(
+                                    resolved_symbol.symbol.module.clone(),
+                                    Style::default().fg(Color::Magenta),
+                                ));
+                                instruction_spans
+                                    .push(Span::raw(format!("+0x{:x}", resolved_symbol.offset)));
+                            }
                         }
                     }
                     None => {
-                        let color = if entry.was_skipped {
-                            Color::DarkGray
+                        // No symbol information available
+                        let addr_str = format!("+0x{:x}", entry.address);
+                        if entry.was_skipped {
+                            instruction_spans
+                                .push(Span::styled(addr_str, Style::default().fg(Color::DarkGray)));
                         } else {
-                            Color::Red
-                        };
-                        instruction_spans.push(Span::styled("unknown", Style::default().fg(color)));
+                            instruction_spans
+                                .push(Span::styled(addr_str, Style::default().fg(Color::Cyan)));
+                        }
                     }
                 }
 
@@ -311,11 +310,13 @@ fn draw_instructions<M: MemoryTrait>(
     f.render_stateful_widget(list, area, &mut local_list_state);
 }
 
-fn draw_stack<M: MemoryTrait>(
+fn draw_stack<M: MemoryTrait, S: Symbolizer>(
     f: &mut Frame,
     area: Rect,
     state: &mut AppState,
     trace_result: &TraceResult<M>,
+    memory: &M,
+    symbolizer: &mut S,
 ) {
     let selected = state.selected_panel == Panel::Stack;
     let border_style = if selected {
@@ -364,9 +365,8 @@ fn draw_stack<M: MemoryTrait>(
 
                     while value_chain.len() < 3 && current_addr != 0 {
                         // Check if this address resolves to a symbol with a name
-                        if let Some(resolved_symbol) = state
-                            .symbolizer
-                            .resolve_address(memory_snapshot, current_addr)
+                        if let Some(resolved_symbol) =
+                            symbolizer.resolve_address(memory_snapshot, current_addr)
                             && resolved_symbol.symbol.name.is_some()
                         {
                             // Stop chain following when we find a named symbol
@@ -391,27 +391,30 @@ fn draw_stack<M: MemoryTrait>(
                     for (i, &chain_value) in value_chain.iter().enumerate() {
                         // Try to resolve the address to a symbol if it's not zero
                         let mut sym_spans = vec![];
-                        if chain_value != 0
-                            && let Some(resolved_symbol) = state
-                                .symbolizer
-                                .resolve_address(memory_snapshot, chain_value)
-                            && let Some(symbol_name) = &resolved_symbol.symbol.name
-                        {
-                            sym_spans.push(Span::raw(" ("));
-                            sym_spans.push(Span::styled(
-                                resolved_symbol.symbol.module.clone(),
-                                Style::default().fg(Color::Magenta),
-                            ));
-                            sym_spans.push(Span::styled("!".to_string(), Style::default()));
-                            sym_spans.push(Span::styled(
-                                symbol_name.clone(),
-                                Style::default().fg(Color::Yellow),
-                            ));
-                            if resolved_symbol.offset > 0 {
-                                sym_spans
-                                    .push(Span::raw(format!("+0x{:x}", resolved_symbol.offset)));
+                        if chain_value != 0 {
+                            if let Some(resolved_symbol) =
+                                symbolizer.resolve_address(memory, chain_value)
+                            {
+                                if let Some(symbol_name) = &resolved_symbol.symbol.name {
+                                    sym_spans.push(Span::raw(" ("));
+                                    sym_spans.push(Span::styled(
+                                        resolved_symbol.symbol.module.clone(),
+                                        Style::default().fg(Color::Magenta),
+                                    ));
+                                    sym_spans.push(Span::styled("!".to_string(), Style::default()));
+                                    sym_spans.push(Span::styled(
+                                        symbol_name.clone(),
+                                        Style::default().fg(Color::Yellow),
+                                    ));
+                                    if resolved_symbol.offset > 0 {
+                                        sym_spans.push(Span::raw(format!(
+                                            "+0x{:x}",
+                                            resolved_symbol.offset
+                                        )));
+                                    }
+                                    sym_spans.push(Span::raw(")"));
+                                }
                             }
-                            sym_spans.push(Span::raw(")"));
                         }
                         if i > 0 {
                             line_spans.push(Span::raw(" -> "));

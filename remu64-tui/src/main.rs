@@ -4,13 +4,11 @@ use std::panic;
 use std::path::PathBuf;
 use tracing::{error, info};
 
-mod app;
 mod config;
-mod tracer;
-mod ui;
+mod minidump_provider;
 
-use app::App;
-use config::{Config, ConfigLoader};
+use config::Config;
+use minidump_provider::MinidumpSetupProvider;
 
 #[derive(Parser)]
 #[command(name = "remu64-tui")]
@@ -70,25 +68,20 @@ fn main() -> Result<()> {
     info!("Starting remu64-tui");
     info!("Config file: {:?}", args.config_file);
 
-    // Load configuration with file watcher
-    let config_loader = ConfigLoader::new(&args.config_file)?;
-    info!("Loaded configuration from: {:?}", config_loader.config_path);
-    info!("Minidump file: {}", config_loader.config.minidump_path);
-    info!(
-        "Function address: {}",
-        config_loader.config.function_address
-    );
+    // Create minidump setup provider
+    let setup_provider = MinidumpSetupProvider::new(&args.config_file)?;
+    info!("Loaded minidump configuration from: {:?}", args.config_file);
 
-    run_app_with_error_handling(config_loader)
+    run_app_with_error_handling(setup_provider)
 }
 
-fn run_app_with_error_handling(config_loader: ConfigLoader) -> Result<()> {
-    let mut app = App::new(config_loader)?;
-
-    info!("App created successfully, starting TUI");
+fn run_app_with_error_handling(setup_provider: MinidumpSetupProvider) -> Result<()> {
+    info!("Starting TUI with library API");
 
     // Catch panics during TUI operation
-    let result = panic::catch_unwind(panic::AssertUnwindSafe(|| app.run()));
+    let result = panic::catch_unwind(panic::AssertUnwindSafe(|| {
+        remu64_tui::run_tui(setup_provider)
+    }));
 
     match result {
         Ok(Ok(())) => {

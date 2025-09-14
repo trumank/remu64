@@ -1,6 +1,5 @@
 use anyhow::Result;
-use rdex::{ExecutionController, MinidumpLoader, VMContext, process_trait::VmMemory};
-use remu64::{CowMemory, CpuState, Engine, HookAction, HookManager, Register, memory::MemoryTrait};
+use remu64::{CpuState, Engine, HookAction, HookManager, Register, memory::MemoryTrait};
 use std::collections::HashMap;
 use tracing::{debug, info, warn};
 
@@ -137,65 +136,69 @@ impl<M: MemoryTrait + Clone> HookManager<M> for CapturingTracer<M> {
     }
 }
 
-pub struct Tracer<'a> {
-    pub minidump_loader: &'a MinidumpLoader<'static>,
+pub struct GenericTracer<'a, M: MemoryTrait, S> {
+    pub memory: M,
+    pub symbolizer: &'a S,
 }
 
-impl<'a> Tracer<'a> {
+impl<'a, M: MemoryTrait + Clone, S> GenericTracer<'a, M, S> {
+    pub fn new(memory: M, symbolizer: &'a S) -> Self {
+        Self { memory, symbolizer }
+    }
     /// Run trace capturing only instructions in the specified range
     pub fn run_trace(
         &self,
-        config: &crate::config::Config,
+        initial_cpu_state: CpuState,
+        function_address: u64,
         max_instructions: usize,
         current_idx: usize,
         capture_range: (usize, usize),
-    ) -> Result<TraceResult<CowMemory<VmMemory>>> {
+        instruction_actions: &InstructionActions,
+    ) -> Result<TraceResult<M>> {
         let trace_start_time = std::time::Instant::now();
 
         debug!(
             "run_trace called: addr=0x{:x}, max={}, range=({}, {})",
-            config.function_address, max_instructions, capture_range.0, capture_range.1
+            function_address, max_instructions, capture_range.0, capture_range.1
         );
-        debug!("Creating VM context from minidump loader");
+        debug!("Creating engine with provided memory");
 
-        let loader = self.minidump_loader;
+        // Create engine with the provided memory
+        let mut engine = Engine::new_memory(remu64::EngineMode::Mode64, self.memory.clone());
 
-        // Create VM context using the new API
-        let mut vm_context = VMContext::new(loader)?;
-
-        // Set up stack using config values
-        let stack_base = config.stack.base_address;
-        let stack_size = config.stack.size;
-        vm_context.setup_stack(stack_base, stack_size)?;
-
-        let initial_rsp = stack_base - config.stack.initial_offset;
-        vm_context.engine.reg_write(Register::RSP, initial_rsp);
-
-        // Set initial register values from config
-        for (&register, &value) in &config.registers {
-            vm_context.engine.reg_write(register, value);
-        }
+        // Set initial CPU state
+        engine.cpu = initial_cpu_state;
 
         let return_address = 0xFFFF800000000000u64;
-        vm_context.push_u64(return_address)?;
 
         let mut capturing_tracer = CapturingTracer::new(
             max_instructions,
             current_idx,
-            &config.instruction_actions,
+            instruction_actions,
             capture_range,
         );
 
         debug!(
             "Executing function at 0x{:x} with CapturingTracer",
-            config.function_address
+            function_address
         );
 
-        // Use ExecutionController with our custom tracer
-        let error_message = match ExecutionController::execute_with_hooks(
-            &mut vm_context.engine,
-            config.function_address,
+        // Set up return address on stack
+        let rsp = engine.reg_read(Register::RSP);
+        engine
+            .memory
+            .write(rsp - 8, &return_address.to_le_bytes())?;
+        engine.reg_write(Register::RSP, rsp - 8);
+
+        // Set initial RIP to function address
+        engine.reg_write(Register::RIP, function_address);
+
+        // Execute with hooks
+        let error_message = match engine.emu_start_with_hooks(
+            function_address,
             return_address,
+            0, // No timeout
+            max_instructions,
             &mut capturing_tracer,
         ) {
             Ok(_) => {
@@ -245,9 +248,7 @@ impl<'a> Tracer<'a> {
         Ok(TraceResult {
             entries: capturing_tracer.trace_entries,
             total_instructions: capturing_tracer.total_instructions,
-            memory_snapshot: capturing_tracer
-                .memory_snapshot
-                .or(Some(vm_context.engine.memory)),
+            memory_snapshot: capturing_tracer.memory_snapshot.or(Some(engine.memory)),
             error_message,
             trace_duration,
         })
