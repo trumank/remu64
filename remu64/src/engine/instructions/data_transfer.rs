@@ -14,7 +14,7 @@ impl<H: HookManager<M, PS>, M: MemoryTrait<PS>, const PS: u64> ExecutionContext<
     pub(crate) fn execute_push(&mut self, inst: &Instruction) -> Result<()> {
         let value = self.read_operand(inst, 0)?;
         let stack_size = match inst.code() {
-            Code::Push_r64 | Code::Push_rm64 | Code::Pushd_imm32 => 8,
+            Code::Push_r64 | Code::Push_rm64 | Code::Pushd_imm32 | Code::Pushq_imm32 => 8,
             Code::Push_r32 | Code::Push_rm32 => 4,
             Code::Push_r16 | Code::Push_rm16 | Code::Pushw_imm8 => 2,
             _ => {
@@ -732,6 +732,33 @@ impl<H: HookManager<M, PS>, M: MemoryTrait<PS>, const PS: u64> ExecutionContext<
 
         // Write RFLAGS value to stack
         self.write_memory_sized(new_rsp, rflags_value, 8)?;
+
+        Ok(())
+    }
+
+    pub(crate) fn execute_popfq(&mut self, inst: &Instruction) -> Result<()> {
+        // POPFQ: Pop RFLAGS register from the stack (64-bit)
+        // Loads the 64-bit value from the stack into RFLAGS and increments RSP by 8
+
+        if inst.op_count() != 0 {
+            return Err(EmulatorError::UnsupportedInstruction(
+                "POPFQ takes no operands".to_string(),
+            ));
+        }
+
+        // Get current RSP
+        let rsp = self.engine.cpu.read_reg(Register::RSP);
+
+        // Read RFLAGS value from stack
+        let rflags_value = self.read_memory_sized(rsp, 8)?;
+
+        // Update RSP (increment by 8 for 64-bit pop)
+        let new_rsp = rsp.wrapping_add(8);
+        self.engine.cpu.write_reg(Register::RSP, new_rsp);
+
+        // Restore RFLAGS register
+        use crate::cpu::Flags;
+        self.engine.cpu.rflags = Flags::from_bits_truncate(rflags_value);
 
         Ok(())
     }

@@ -393,6 +393,91 @@ impl<H: HookManager<M, PS>, M: MemoryTrait<PS>, const PS: u64> ExecutionContext<
         Ok(())
     }
 
+    pub(crate) fn execute_fxrstor(&mut self, inst: &Instruction) -> Result<()> {
+        // FXRSTOR: Restore x87 FPU, MMX, XMM, and MXCSR register state from memory
+        // Restores the x87 FPU, MMX, XMM, and MXCSR registers from a 512-byte memory area
+        // Format: FXRSTOR m512byte
+
+        if inst.op_count() != 1 {
+            return Err(EmulatorError::UnsupportedInstruction(
+                "FXRSTOR requires exactly 1 operand".to_string(),
+            ));
+        }
+
+        match inst.op_kind(0) {
+            OpKind::Memory => {
+                let addr = self.calculate_memory_address(inst, 0)?;
+
+                // FXRSTOR memory layout (512 bytes total):
+                // Bytes 0-1: FCW (FPU Control Word)
+                // Bytes 2-3: FSW (FPU Status Word)
+                // Byte 4: FTW (FPU Tag Word)
+                // Byte 5: Reserved
+                // Bytes 6-7: FOP (FPU Opcode)
+                // Bytes 8-15: FPU IP (Instruction Pointer)
+                // Bytes 16-23: FPU DP (Data Pointer)
+                // Bytes 24-27: MXCSR
+                // Bytes 28-31: MXCSR_MASK
+                // Bytes 32-159: ST0-ST7 (x87 registers, 16 bytes each)
+                // Bytes 160-287: XMM0-XMM7 (16 bytes each)
+                // Bytes 288-511: XMM8-XMM15 (16 bytes each, x86-64 only)
+
+                // For emulation purposes, we focus on the key registers that affect execution:
+                // - MXCSR (SSE control/status register)
+                // - XMM registers (XMM0-XMM15)
+
+                // Read MXCSR from offset 24
+                let _mxcsr = self.read_memory_32(addr + 24)?;
+                // For emulation, we don't need to actually restore MXCSR as we use default behavior
+
+                // Restore XMM0-XMM7 (160 bytes offset, 16 bytes each)
+                for i in 0..8 {
+                    let xmm_addr = addr + 160 + (i * 16);
+                    let xmm_value = self.read_memory_128(xmm_addr)?;
+                    let xmm_reg = match i {
+                        0 => Register::XMM0,
+                        1 => Register::XMM1,
+                        2 => Register::XMM2,
+                        3 => Register::XMM3,
+                        4 => Register::XMM4,
+                        5 => Register::XMM5,
+                        6 => Register::XMM6,
+                        7 => Register::XMM7,
+                        _ => unreachable!(),
+                    };
+                    self.engine.cpu.write_xmm(xmm_reg, xmm_value);
+                }
+
+                // Restore XMM8-XMM15 (288 bytes offset, 16 bytes each) - x86-64 only
+                for i in 0..8 {
+                    let xmm_addr = addr + 288 + (i * 16);
+                    let xmm_value = self.read_memory_128(xmm_addr)?;
+                    let xmm_reg = match i {
+                        0 => Register::XMM8,
+                        1 => Register::XMM9,
+                        2 => Register::XMM10,
+                        3 => Register::XMM11,
+                        4 => Register::XMM12,
+                        5 => Register::XMM13,
+                        6 => Register::XMM14,
+                        7 => Register::XMM15,
+                        _ => unreachable!(),
+                    };
+                    self.engine.cpu.write_xmm(xmm_reg, xmm_value);
+                }
+
+                // Note: We skip restoring x87 FPU state (ST0-ST7) and MMX registers
+                // as they're less commonly used and more complex to emulate properly.
+                // The XMM register restoration is the most important for modern code.
+
+                Ok(())
+            }
+            _ => Err(EmulatorError::UnsupportedInstruction(
+                "FXRSTOR requires memory operand".to_string(),
+            )),
+        }
+    }
+
     pub(crate) fn execute_kmovd(&mut self, inst: &Instruction) -> Result<()> {
         // KMOVD: Move 32-bit mask register value
         // Format: KMOVD r32, k

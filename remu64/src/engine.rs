@@ -297,6 +297,7 @@ impl<H: HookManager<M, PS>, M: MemoryTrait<PS>, const PS: u64> ExecutionContext<
             Mnemonic::Mov => self.execute_mov(inst),
             Mnemonic::Push => self.execute_push(inst),
             Mnemonic::Pushfq => self.execute_pushfq(inst),
+            Mnemonic::Popfq => self.execute_popfq(inst),
             Mnemonic::Sub => self.execute_sub(inst),
             Mnemonic::Call => self.execute_call(inst),
             Mnemonic::Test => self.execute_test(inst),
@@ -564,6 +565,7 @@ impl<H: HookManager<M, PS>, M: MemoryTrait<PS>, const PS: u64> ExecutionContext<
             Mnemonic::Clflush => self.execute_clflush(inst),
             Mnemonic::Fnstcw => self.execute_fnstcw(inst),
             Mnemonic::Stmxcsr => self.execute_stmxcsr(inst),
+            Mnemonic::Fxrstor => self.execute_fxrstor(inst),
             Mnemonic::Rdsspq => self.execute_rdsspq(inst),
             Mnemonic::Clflushopt => self.execute_clflush(inst), // Same as CLFLUSH for emulation
             Mnemonic::Adc => self.execute_adc(inst),
