@@ -306,6 +306,7 @@ mod tests {
 
         assert_eq!(config.minidump_path, parsed_config.minidump_path);
         assert_eq!(config.function_address, parsed_config.function_address);
+        assert_eq!(config.stack.base_address, parsed_config.stack.base_address);
     }
 }
 

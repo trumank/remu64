@@ -394,25 +394,24 @@ fn draw_stack<M: MemoryTrait, S: Symbolizer>(
                         if chain_value != 0
                             && let Some(resolved_symbol) =
                                 symbolizer.resolve_address(memory, chain_value)
-                                && let Some(symbol_name) = &resolved_symbol.symbol.name {
-                                    sym_spans.push(Span::raw(" ("));
-                                    sym_spans.push(Span::styled(
-                                        resolved_symbol.symbol.module.clone(),
-                                        Style::default().fg(Color::Magenta),
-                                    ));
-                                    sym_spans.push(Span::styled("!".to_string(), Style::default()));
-                                    sym_spans.push(Span::styled(
-                                        symbol_name.clone(),
-                                        Style::default().fg(Color::Yellow),
-                                    ));
-                                    if resolved_symbol.offset > 0 {
-                                        sym_spans.push(Span::raw(format!(
-                                            "+0x{:x}",
-                                            resolved_symbol.offset
-                                        )));
-                                    }
-                                    sym_spans.push(Span::raw(")"));
-                                }
+                            && let Some(symbol_name) = &resolved_symbol.symbol.name
+                        {
+                            sym_spans.push(Span::raw(" ("));
+                            sym_spans.push(Span::styled(
+                                resolved_symbol.symbol.module.clone(),
+                                Style::default().fg(Color::Magenta),
+                            ));
+                            sym_spans.push(Span::styled("!".to_string(), Style::default()));
+                            sym_spans.push(Span::styled(
+                                symbol_name.clone(),
+                                Style::default().fg(Color::Yellow),
+                            ));
+                            if resolved_symbol.offset > 0 {
+                                sym_spans
+                                    .push(Span::raw(format!("+0x{:x}", resolved_symbol.offset)));
+                            }
+                            sym_spans.push(Span::raw(")"));
+                        }
                         if i > 0 {
                             line_spans.push(Span::raw(" -> "));
                         }

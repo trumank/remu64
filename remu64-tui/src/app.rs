@@ -12,7 +12,9 @@ use tracing::{debug, info};
 use crate::VmSetupProvider;
 use crate::tracer;
 use crate::ui;
+use remu64::memory::MemoryTrait;
 use remu64::{CowMemory, Engine};
+use std::collections::BTreeMap;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Panel {
@@ -28,6 +30,13 @@ pub enum StatusMessage {
     ConfigError(String),
 }
 
+#[derive(Clone)]
+pub struct Snapshot<M: MemoryTrait + Clone, H: Clone> {
+    pub engine: Engine<CowMemory<M>>,
+    pub config: crate::VmConfig<H>,
+    pub instruction_index: usize,
+}
+
 pub struct AppState {
     pub selected_panel: Panel,
     pub instruction_scroll: usize,
@@ -38,6 +47,9 @@ pub struct AppState {
     // Status message system
     pub status_message: Option<StatusMessage>,
     pub status_message_expires: Option<Instant>,
+
+    // Snapshot system
+    pub snapshot_interval: usize,
 }
 
 impl AppState {
@@ -64,12 +76,6 @@ impl AppState {
     pub fn get_current_status_message(&self) -> Option<&StatusMessage> {
         self.status_message.as_ref()
     }
-
-    // Skip instruction toggle will be handled at the provider level
-    pub fn should_toggle_skip_instruction(&self, _index: usize) -> bool {
-        // Return signal that skip should be toggled - provider will handle the actual toggle
-        true
-    }
 }
 
 pub struct App {
@@ -89,6 +95,7 @@ impl App {
             go_to_end: false,
             status_message: None,
             status_message_expires: None,
+            snapshot_interval: 100000,
         };
 
         Ok(App { state })
@@ -119,6 +126,8 @@ impl App {
         terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
         mut setup_provider: P,
     ) -> Result<()> {
+        // Snapshots are stored per instruction index for fast seeking
+        let mut snapshots: BTreeMap<usize, Snapshot<P::Memory, P::Hooks>> = BTreeMap::new();
         info!("Starting TUI main loop");
 
         // Create backend and hooks once
@@ -128,45 +137,27 @@ impl App {
         let mut toggle_skip_index: Option<usize> = None;
 
         loop {
-            // Create fresh engine and setup for each frame
-            let mut pre_pass_engine =
-                Engine::new_memory(remu64::EngineMode::Mode64, memory.clone());
-            let pre_pass_config = setup_provider.setup_engine(&mut pre_pass_engine)?;
-
-            let mut main_engine = Engine::new_memory(remu64::EngineMode::Mode64, memory.clone());
-            let main_config = setup_provider.setup_engine(&mut main_engine)?;
-
             let mut current_idx = self.state.current_trace_index();
 
-            // Handle skip instruction toggle from previous frame
-            let mut instruction_actions = main_config.instruction_actions.clone();
-            if let Some(skip_idx) = toggle_skip_index.take() {
-                use crate::InstructionAction;
-                let actions = instruction_actions.entry(skip_idx).or_default();
-                if let Some(pos) = actions
-                    .iter()
-                    .position(|a| matches!(a, InstructionAction::Skip))
-                {
-                    actions.remove(pos);
-                    if actions.is_empty() {
-                        instruction_actions.remove(&skip_idx);
-                    }
-                } else {
-                    actions.push(InstructionAction::Skip);
-                }
-            }
+            // Create fresh engine and setup for each frame - only time we call setup_engine
+            let mut base_engine = Engine::new_memory(remu64::EngineMode::Mode64, memory.clone());
+            let base_config = setup_provider.setup_engine(&mut base_engine)?;
 
             // Optional pre-pass: when tracing to end, determine the final instruction index
             if self.state.go_to_end {
                 debug!("Trace-to-end pre-pass: determining total instruction count");
 
-                let pre_pass_result = tracer::run_trace(
-                    pre_pass_engine,
-                    pre_pass_config,
-                    0,      // Not capturing any entries in pre-pass
-                    (0, 0), // Empty range - capture nothing
-                    &instruction_actions,
-                )?;
+                let max_instructions = base_config.max_instructions;
+                let pre_pass_result = tracer::TraceRunner {
+                    base_engine: base_engine.clone(),
+                    base_config: base_config.clone(),
+                    capture_idx_memory: None, // Not capturing memory snapshot in pre-pass
+                    capture_inst_range: None, // Empty range - capture nothing, also signal to use latest snapshot
+                    snapshots: &mut snapshots,
+                    snapshot_interval: self.state.snapshot_interval,
+                    max_instructions,
+                }
+                .run()?;
 
                 let total_instructions = pre_pass_result.total_instructions;
                 debug!(
@@ -198,17 +189,17 @@ impl App {
             let start = current_idx.saturating_sub(buffer);
             let end = current_idx + visible_instructions + buffer;
 
-            // Modify max_instructions for the main trace
-            let mut main_config_modified = main_config;
-            main_config_modified.max_instructions = main_config_modified.max_instructions.min(end);
-
-            let trace_result = tracer::run_trace(
-                main_engine,
-                main_config_modified,
-                current_idx,
-                (start, end),
-                &instruction_actions,
-            )?;
+            let max_instructions = base_config.max_instructions.min(end);
+            let trace_result = tracer::TraceRunner {
+                base_engine,
+                base_config,
+                capture_idx_memory: Some(current_idx),
+                capture_inst_range: Some((start, end)),
+                snapshots: &mut snapshots,
+                snapshot_interval: self.state.snapshot_interval,
+                max_instructions,
+            }
+            .run()?;
 
             // Ensure current trace index is within bounds
             if current_idx >= trace_result.total_instructions && trace_result.total_instructions > 0

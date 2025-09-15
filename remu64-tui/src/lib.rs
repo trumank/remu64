@@ -6,13 +6,14 @@ mod app;
 mod tracer;
 mod ui;
 
+pub use app::Snapshot;
 pub use tracer::{InstructionAction, InstructionActions};
 
 /// User-provided trait for VM initialization and per-frame setup
 pub trait VmSetupProvider {
     type Memory: MemoryTrait + Clone;
     type Symbolizer: Symbolizer;
-    type Hooks: HookManager<CowMemory<Self::Memory>>;
+    type Hooks: HookManager<CowMemory<Self::Memory>> + Clone;
 
     /// Create the memory and symbolizer instances (called once)
     fn create_backend(&self) -> Result<(Self::Memory, Self::Symbolizer)>;
@@ -32,8 +33,8 @@ pub trait VmSetupProvider {
 }
 
 /// Configuration for a single trace run
+#[derive(Clone)]
 pub struct VmConfig<H> {
-    pub function_address: u64,
     pub until_address: u64,
     pub max_instructions: usize,
     pub instruction_actions: InstructionActions,
