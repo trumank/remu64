@@ -24,6 +24,13 @@ pub enum HookAction {
 }
 
 pub trait HookManager<M: MemoryTrait<PS>, const PS: u64 = DEFAULT_PAGE_SIZE> {
+    /// Called before instruction decode/execution at the given address
+    /// This allows checking conditions like until address before memory access
+    fn on_pre_code(&mut self, engine: &mut Engine<M, PS>, address: u64) -> Result<HookAction> {
+        let _ = (engine, address);
+        Ok(HookAction::Continue)
+    }
+
     fn on_code(
         &mut self,
         engine: &mut Engine<M, PS>,

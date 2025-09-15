@@ -88,6 +88,20 @@ impl<M: MemoryTrait<PS>, const PS: u64> Engine<M, PS> {
         self.emu_start_with_hooks(begin, until, timeout, count, &mut no_hooks)
     }
 
+    /// Low-level execution function that simply resumes from current state
+    /// - Does NOT modify RIP/instruction pointer
+    /// - Does NOT handle timeouts or instruction limits
+    /// - Does NOT reset any state
+    /// - Simply executes instructions until hook returns Stop
+    /// - Returns Ok(()) on normal completion, Err on execution error
+    pub fn emu_resume_with_hooks<H: HookManager<M, PS>>(&mut self, hooks: &mut H) -> Result<()> {
+        ExecutionContext {
+            engine: self,
+            hooks,
+        }
+        .emu_resume()
+    }
+
     pub fn emu_start_with_hooks<H: HookManager<M, PS>>(
         &mut self,
         begin: u64,
@@ -109,47 +123,159 @@ struct ExecutionContext<'a, H: HookManager<M, PS>, M: MemoryTrait<PS>, const PS:
     hooks: &'a mut H,
 }
 
+/// Orchestrating hook wrapper that adds timeout, instruction counting, and until address logic
+/// on top of user-provided hooks for the high-level emu_start functions
+struct OrchestratingHooks<'a, H, M, const PS: u64>
+where
+    H: HookManager<M, PS>,
+    M: MemoryTrait<PS>,
+{
+    user_hooks: &'a mut H,
+    until_address: u64,
+    instruction_count: u64,
+    max_instructions: usize,
+    start_time: std::time::Instant,
+    timeout_duration: Option<std::time::Duration>,
+    _phantom: std::marker::PhantomData<M>,
+}
+
+impl<'a, H, M, const PS: u64> HookManager<M, PS> for OrchestratingHooks<'a, H, M, PS>
+where
+    H: HookManager<M, PS>,
+    M: MemoryTrait<PS>,
+{
+    fn on_pre_code(&mut self, engine: &mut Engine<M, PS>, address: u64) -> Result<HookAction> {
+        // Check until address condition before any decoding/memory access
+        if self.until_address != 0 && address == self.until_address {
+            return Ok(HookAction::Stop);
+        }
+
+        // Check timeout condition
+        if let Some(timeout) = self.timeout_duration
+            && self.start_time.elapsed() > timeout
+        {
+            return Ok(HookAction::Stop);
+        }
+
+        // Call user pre_code hook
+        self.user_hooks.on_pre_code(engine, address)
+    }
+
+    fn on_code(
+        &mut self,
+        engine: &mut Engine<M, PS>,
+        address: u64,
+        size: usize,
+    ) -> Result<HookAction> {
+        // Check instruction count limit
+        if self.max_instructions > 0 && self.instruction_count >= self.max_instructions as u64 {
+            return Ok(HookAction::Stop);
+        }
+
+        // Call user hooks
+        let user_action = self.user_hooks.on_code(engine, address, size)?;
+
+        // Increment instruction count only if we're not skipping/stopping
+        match user_action {
+            HookAction::Continue => self.instruction_count += 1,
+            HookAction::Skip => self.instruction_count += 1,
+            HookAction::Stop => {}
+        }
+
+        Ok(user_action)
+    }
+
+    fn on_mem_read(&mut self, engine: &mut Engine<M, PS>, address: u64, size: usize) -> Result<()> {
+        self.user_hooks.on_mem_read(engine, address, size)
+    }
+
+    fn on_mem_write(
+        &mut self,
+        engine: &mut Engine<M, PS>,
+        address: u64,
+        size: usize,
+    ) -> Result<()> {
+        self.user_hooks.on_mem_write(engine, address, size)
+    }
+
+    fn on_mem_access(
+        &mut self,
+        engine: &mut Engine<M, PS>,
+        address: u64,
+        size: usize,
+    ) -> Result<()> {
+        self.user_hooks.on_mem_access(engine, address, size)
+    }
+
+    fn on_mem_fault(
+        &mut self,
+        engine: &mut Engine<M, PS>,
+        address: u64,
+        size: usize,
+    ) -> Result<bool> {
+        self.user_hooks.on_mem_fault(engine, address, size)
+    }
+
+    fn on_interrupt(&mut self, engine: &mut Engine<M, PS>, intno: u64, size: usize) -> Result<()> {
+        self.user_hooks.on_interrupt(engine, intno, size)
+    }
+
+    fn on_invalid(&mut self, engine: &mut Engine<M, PS>, address: u64, size: usize) -> Result<()> {
+        self.user_hooks.on_invalid(engine, address, size)
+    }
+}
+
 impl<H: HookManager<M, PS>, M: MemoryTrait<PS>, const PS: u64> ExecutionContext<'_, H, M, PS> {
+    /// Low-level execution that resumes from current state
+    /// Executes instructions until hook returns Stop
+    fn emu_resume(&mut self) -> Result<()> {
+        while self.step()? {}
+        Ok(())
+    }
+
     /// Start emulation with custom hooks
     fn emu_start(&mut self, begin: u64, until: u64, timeout: u64, count: usize) -> Result<()> {
+        // Set initial RIP
         self.engine.cpu.rip = begin;
-        let mut instruction_count = 0;
 
-        let start_time = std::time::Instant::now();
+        // Create orchestrating hooks wrapper
         let timeout_duration = if timeout > 0 {
             Some(std::time::Duration::from_micros(timeout))
         } else {
             None
         };
 
-        loop {
-            if self.engine.cpu.rip == until && until != 0 {
-                break;
-            }
+        let mut orchestrating_hooks = OrchestratingHooks {
+            user_hooks: self.hooks,
+            until_address: until,
+            instruction_count: 0,
+            max_instructions: count,
+            start_time: std::time::Instant::now(),
+            timeout_duration,
+            _phantom: std::marker::PhantomData,
+        };
 
-            if count > 0 && instruction_count >= count as u64 {
-                break;
-            }
-
-            if let Some(timeout) = timeout_duration
-                && start_time.elapsed() > timeout
-            {
-                break;
-            }
-
-            let should_continue = self.step()?;
-            if !should_continue {
-                break;
-            }
-
-            instruction_count += 1;
+        // Use the low-level resume function
+        ExecutionContext {
+            engine: self.engine,
+            hooks: &mut orchestrating_hooks,
         }
-
-        Ok(())
+        .emu_resume()
     }
 
     fn step(&mut self) -> Result<bool> {
         let rip = self.engine.cpu.rip;
+
+        // Call pre-code hook before any memory access or decoding
+        let pre_action = self.hooks.on_pre_code(self.engine, rip)?;
+        match pre_action {
+            HookAction::Stop => return Ok(false),
+            HookAction::Skip => {
+                // Skip is invalid for pre_code hook since we don't know instruction size yet
+                return Err(EmulatorError::InvalidInstruction(rip));
+            }
+            HookAction::Continue => {}
+        }
 
         // Check if we can execute at this address, but allow memory fault hooks to handle unmapped memory
         match self.engine.memory.permissions(rip) {
