@@ -2,7 +2,7 @@ use anyhow::Result;
 use rdex::{
     DumpExec, MinidumpLoader, ProcessTrait, pe_symbolizer::PeSymbolizer, process_trait::VmMemory,
 };
-use remu64::{CowMemory, Engine, Register, memory::MemoryTrait as _};
+use remu64::{CowMemory, Engine, Register, hooks::NoHooks, memory::MemoryTrait as _};
 use remu64_tui::{VmConfig, VmSetupProvider};
 
 use crate::config::ConfigLoader;
@@ -27,6 +27,7 @@ impl MinidumpSetupProvider {
 impl VmSetupProvider for MinidumpSetupProvider {
     type Memory = VmMemory;
     type Symbolizer = PeSymbolizer;
+    type Hooks = NoHooks;
 
     fn create_backend(&self) -> Result<(Self::Memory, Self::Symbolizer)> {
         // Create memory from minidump
@@ -38,7 +39,10 @@ impl VmSetupProvider for MinidumpSetupProvider {
         Ok((memory, symbolizer))
     }
 
-    fn setup_engine(&mut self, engine: &mut Engine<CowMemory<Self::Memory>>) -> Result<VmConfig> {
+    fn setup_engine(
+        &mut self,
+        engine: &mut Engine<CowMemory<Self::Memory>>,
+    ) -> Result<VmConfig<Self::Hooks>> {
         let config = &self.config_loader.config;
 
         // Set up stack memory region
@@ -77,6 +81,7 @@ impl VmSetupProvider for MinidumpSetupProvider {
             until_address: return_address,
             max_instructions: config.tracing.max_instructions,
             instruction_actions: config.instruction_actions.clone(),
+            hooks: NoHooks,
         })
     }
 

@@ -1,5 +1,5 @@
 use anyhow::Result;
-use remu64::{CpuState, Engine, HookAction, HookManager, Register, memory::MemoryTrait};
+use remu64::{CpuState, Engine, HookAction, HookManager, memory::MemoryTrait};
 use std::collections::HashMap;
 use tracing::{debug, info, warn};
 
@@ -136,14 +136,113 @@ impl<M: MemoryTrait + Clone> HookManager<M> for CapturingTracer<M> {
     }
 }
 
+/// Composite hook manager that combines CapturingTracer with user-provided hooks
+pub struct CompositeHookManager<M, H> {
+    pub capturing_tracer: CapturingTracer<M>,
+    pub user_hooks: H,
+}
+
+impl<M, H> CompositeHookManager<M, H> {
+    pub fn new(capturing_tracer: CapturingTracer<M>, user_hooks: H) -> Self {
+        Self {
+            capturing_tracer,
+            user_hooks,
+        }
+    }
+}
+
+impl<M: MemoryTrait + Clone, H: HookManager<M>> HookManager<M> for CompositeHookManager<M, H> {
+    fn on_code(
+        &mut self,
+        engine: &mut Engine<M>,
+        address: u64,
+        size: usize,
+    ) -> remu64::Result<HookAction> {
+        // Call user hooks first
+        let user_action = self.user_hooks.on_code(engine, address, size)?;
+
+        // If user hooks want to stop or skip, respect that
+        match user_action {
+            HookAction::Stop => return Ok(HookAction::Stop),
+            HookAction::Skip => return Ok(HookAction::Skip),
+            HookAction::Continue => {}
+        }
+
+        // Otherwise, call capturing tracer
+        self.capturing_tracer.on_code(engine, address, size)
+    }
+
+    fn on_mem_read(
+        &mut self,
+        engine: &mut Engine<M>,
+        address: u64,
+        size: usize,
+    ) -> remu64::Result<()> {
+        self.user_hooks.on_mem_read(engine, address, size)?;
+        self.capturing_tracer.on_mem_read(engine, address, size)
+    }
+
+    fn on_mem_write(
+        &mut self,
+        engine: &mut Engine<M>,
+        address: u64,
+        size: usize,
+    ) -> remu64::Result<()> {
+        self.user_hooks.on_mem_write(engine, address, size)?;
+        self.capturing_tracer.on_mem_write(engine, address, size)
+    }
+
+    fn on_mem_access(
+        &mut self,
+        engine: &mut Engine<M>,
+        address: u64,
+        size: usize,
+    ) -> remu64::Result<()> {
+        self.user_hooks.on_mem_access(engine, address, size)?;
+        self.capturing_tracer.on_mem_access(engine, address, size)
+    }
+
+    fn on_mem_fault(
+        &mut self,
+        engine: &mut Engine<M>,
+        address: u64,
+        size: usize,
+    ) -> remu64::Result<bool> {
+        // For mem_fault, try user hooks first, then capturing tracer if user doesn't handle it
+        let user_handled = self.user_hooks.on_mem_fault(engine, address, size)?;
+        if user_handled {
+            Ok(true)
+        } else {
+            self.capturing_tracer.on_mem_fault(engine, address, size)
+        }
+    }
+
+    fn on_interrupt(
+        &mut self,
+        engine: &mut Engine<M>,
+        intno: u64,
+        size: usize,
+    ) -> remu64::Result<()> {
+        self.user_hooks.on_interrupt(engine, intno, size)?;
+        self.capturing_tracer.on_interrupt(engine, intno, size)
+    }
+
+    fn on_invalid(
+        &mut self,
+        engine: &mut Engine<M>,
+        address: u64,
+        size: usize,
+    ) -> remu64::Result<()> {
+        self.user_hooks.on_invalid(engine, address, size)?;
+        self.capturing_tracer.on_invalid(engine, address, size)
+    }
+}
+
 /// Run trace capturing only instructions in the specified range
 /// Uses an already-configured engine from the VmSetupProvider
-pub fn run_trace<M: MemoryTrait + Clone, S>(
+pub fn run_trace<M: MemoryTrait + Clone, H: HookManager<M>>(
     mut engine: remu64::Engine<M>,
-    symbolizer: &S,
-    function_address: u64,
-    until_address: u64,
-    max_instructions: usize,
+    config: crate::VmConfig<H>,
     current_idx: usize,
     capture_range: (usize, usize),
     instruction_actions: &InstructionActions,
@@ -152,34 +251,36 @@ pub fn run_trace<M: MemoryTrait + Clone, S>(
 
     debug!(
         "run_trace called: addr=0x{:x}, max={}, range=({}, {})",
-        function_address, max_instructions, capture_range.0, capture_range.1
+        config.function_address, config.max_instructions, capture_range.0, capture_range.1
     );
 
-    let mut capturing_tracer = CapturingTracer::new(
-        max_instructions,
+    let capturing_tracer = CapturingTracer::new(
+        config.max_instructions,
         current_idx,
         instruction_actions,
         capture_range,
     );
 
+    let mut composite_hooks = CompositeHookManager::new(capturing_tracer, config.hooks);
+
     debug!(
-        "Executing function at 0x{:x} with CapturingTracer",
-        function_address
+        "Executing function at 0x{:x} with CompositeHookManager",
+        config.function_address
     );
 
     // Execute with hooks - engine should already be properly set up by VmSetupProvider
     let error_message = match engine.emu_start_with_hooks(
-        function_address,
-        until_address,
+        config.function_address,
+        config.until_address,
         0, // No timeout
-        max_instructions,
-        &mut capturing_tracer,
+        config.max_instructions,
+        &mut composite_hooks,
     ) {
         Ok(_) => {
             info!(
                 "Function execution completed successfully with {} total instructions, captured {} entries in range ({}, {})",
-                capturing_tracer.current_instruction_index,
-                capturing_tracer.trace_entries.len(),
+                composite_hooks.capturing_tracer.current_instruction_index,
+                composite_hooks.capturing_tracer.trace_entries.len(),
                 capture_range.0,
                 capture_range.1
             );
@@ -187,11 +288,12 @@ pub fn run_trace<M: MemoryTrait + Clone, S>(
         }
         Err(e) => {
             // Check if this was due to reaching max instructions
-            if capturing_tracer.current_instruction_index >= max_instructions {
+            if composite_hooks.capturing_tracer.current_instruction_index >= config.max_instructions
+            {
                 debug!(
                     "Function execution stopped after reaching max instructions: {} total, {} captured",
-                    capturing_tracer.current_instruction_index,
-                    capturing_tracer.trace_entries.len()
+                    composite_hooks.capturing_tracer.current_instruction_index,
+                    composite_hooks.capturing_tracer.trace_entries.len()
                 );
                 None
             } else {
@@ -199,8 +301,8 @@ pub fn run_trace<M: MemoryTrait + Clone, S>(
                 warn!(
                     "Function execution failed: {}, total {} instructions, captured {} entries",
                     e,
-                    capturing_tracer.current_instruction_index,
-                    capturing_tracer.trace_entries.len()
+                    composite_hooks.capturing_tracer.current_instruction_index,
+                    composite_hooks.capturing_tracer.trace_entries.len()
                 );
                 Some(error_msg)
             }
@@ -208,21 +310,25 @@ pub fn run_trace<M: MemoryTrait + Clone, S>(
     };
 
     // Store total instructions executed
-    capturing_tracer.total_instructions = capturing_tracer.current_instruction_index;
+    composite_hooks.capturing_tracer.total_instructions =
+        composite_hooks.capturing_tracer.current_instruction_index;
 
     let trace_duration = trace_start_time.elapsed();
 
     debug!(
         "Returning {} sparse trace entries from {} total instructions in {:?}",
-        capturing_tracer.trace_entries.len(),
-        capturing_tracer.total_instructions,
+        composite_hooks.capturing_tracer.trace_entries.len(),
+        composite_hooks.capturing_tracer.total_instructions,
         trace_duration
     );
 
     Ok(TraceResult {
-        entries: capturing_tracer.trace_entries,
-        total_instructions: capturing_tracer.total_instructions,
-        memory_snapshot: capturing_tracer.memory_snapshot.or(Some(engine.memory)),
+        entries: composite_hooks.capturing_tracer.trace_entries,
+        total_instructions: composite_hooks.capturing_tracer.total_instructions,
+        memory_snapshot: composite_hooks
+            .capturing_tracer
+            .memory_snapshot
+            .or(Some(engine.memory)),
         error_message,
         trace_duration,
     })

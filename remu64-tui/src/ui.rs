@@ -391,11 +391,10 @@ fn draw_stack<M: MemoryTrait, S: Symbolizer>(
                     for (i, &chain_value) in value_chain.iter().enumerate() {
                         // Try to resolve the address to a symbol if it's not zero
                         let mut sym_spans = vec![];
-                        if chain_value != 0 {
-                            if let Some(resolved_symbol) =
+                        if chain_value != 0
+                            && let Some(resolved_symbol) =
                                 symbolizer.resolve_address(memory, chain_value)
-                            {
-                                if let Some(symbol_name) = &resolved_symbol.symbol.name {
+                                && let Some(symbol_name) = &resolved_symbol.symbol.name {
                                     sym_spans.push(Span::raw(" ("));
                                     sym_spans.push(Span::styled(
                                         resolved_symbol.symbol.module.clone(),
@@ -414,8 +413,6 @@ fn draw_stack<M: MemoryTrait, S: Symbolizer>(
                                     }
                                     sym_spans.push(Span::raw(")"));
                                 }
-                            }
-                        }
                         if i > 0 {
                             line_spans.push(Span::raw(" -> "));
                         }

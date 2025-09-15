@@ -121,7 +121,7 @@ impl App {
     ) -> Result<()> {
         info!("Starting TUI main loop");
 
-        // Create backend once
+        // Create backend and hooks once
         let (vm_memory, mut symbolizer) = setup_provider.create_backend()?;
         let memory = CowMemory::new(vm_memory);
 
@@ -129,14 +129,17 @@ impl App {
 
         loop {
             // Create fresh engine and setup for each frame
-            let mut engine = Engine::new_memory(remu64::EngineMode::Mode64, memory.clone());
+            let mut pre_pass_engine =
+                Engine::new_memory(remu64::EngineMode::Mode64, memory.clone());
+            let pre_pass_config = setup_provider.setup_engine(&mut pre_pass_engine)?;
 
-            let config = setup_provider.setup_engine(&mut engine)?;
+            let mut main_engine = Engine::new_memory(remu64::EngineMode::Mode64, memory.clone());
+            let main_config = setup_provider.setup_engine(&mut main_engine)?;
 
             let mut current_idx = self.state.current_trace_index();
 
             // Handle skip instruction toggle from previous frame
-            let mut instruction_actions = config.instruction_actions.clone();
+            let mut instruction_actions = main_config.instruction_actions.clone();
             if let Some(skip_idx) = toggle_skip_index.take() {
                 use crate::InstructionAction;
                 let actions = instruction_actions.entry(skip_idx).or_default();
@@ -158,11 +161,8 @@ impl App {
                 debug!("Trace-to-end pre-pass: determining total instruction count");
 
                 let pre_pass_result = tracer::run_trace(
-                    engine.clone(),
-                    &symbolizer,
-                    config.function_address,
-                    config.until_address,
-                    config.max_instructions,
+                    pre_pass_engine,
+                    pre_pass_config,
                     0,      // Not capturing any entries in pre-pass
                     (0, 0), // Empty range - capture nothing
                     &instruction_actions,
@@ -198,12 +198,13 @@ impl App {
             let start = current_idx.saturating_sub(buffer);
             let end = current_idx + visible_instructions + buffer;
 
+            // Modify max_instructions for the main trace
+            let mut main_config_modified = main_config;
+            main_config_modified.max_instructions = main_config_modified.max_instructions.min(end);
+
             let trace_result = tracer::run_trace(
-                engine,
-                &symbolizer,
-                config.function_address,
-                config.until_address,
-                config.max_instructions.min(end),
+                main_engine,
+                main_config_modified,
                 current_idx,
                 (start, end),
                 &instruction_actions,

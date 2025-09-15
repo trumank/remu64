@@ -1,6 +1,6 @@
 use anyhow::Result;
 use rdex::symbolizer::Symbolizer;
-use remu64::{CowMemory, memory::MemoryTrait};
+use remu64::{CowMemory, hooks::HookManager, memory::MemoryTrait};
 
 mod app;
 mod tracer;
@@ -12,6 +12,7 @@ pub use tracer::{InstructionAction, InstructionActions};
 pub trait VmSetupProvider {
     type Memory: MemoryTrait + Clone;
     type Symbolizer: Symbolizer;
+    type Hooks: HookManager<CowMemory<Self::Memory>>;
 
     /// Create the memory and symbolizer instances (called once)
     fn create_backend(&self) -> Result<(Self::Memory, Self::Symbolizer)>;
@@ -20,7 +21,7 @@ pub trait VmSetupProvider {
     fn setup_engine(
         &mut self,
         engine: &mut remu64::Engine<CowMemory<Self::Memory>>,
-    ) -> Result<VmConfig>;
+    ) -> Result<VmConfig<Self::Hooks>>;
 
     /// Check for reload signals (called during event polling)
     /// Returns Ok(true) if reload happened, Ok(false) if no reload, Err on error
@@ -31,11 +32,12 @@ pub trait VmSetupProvider {
 }
 
 /// Configuration for a single trace run
-pub struct VmConfig {
+pub struct VmConfig<H> {
     pub function_address: u64,
     pub until_address: u64,
     pub max_instructions: usize,
     pub instruction_actions: InstructionActions,
+    pub hooks: H,
 }
 
 /// Main library entry point - runs the TUI with user-provided VM setup
