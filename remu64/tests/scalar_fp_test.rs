@@ -293,7 +293,7 @@ fn test_movss_memory_to_xmm() {
     // Expected: lower 32 bits should contain 3.14159, upper 96 bits should be zero
     let result_float = f32::from_bits((result & 0xFFFFFFFF) as u32);
     assert!(
-        (result_float - 3.14159).abs() < 0.0001,
+        (result_float - std::f32::consts::PI).abs() < 0.0001,
         "Expected 3.14159, got {}",
         result_float
     );
