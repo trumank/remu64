@@ -134,8 +134,6 @@ impl App {
         let (vm_memory, mut symbolizer) = setup_provider.create_backend()?;
         let memory = CowMemory::new(vm_memory);
 
-        let mut toggle_skip_index: Option<usize> = None;
-
         loop {
             let mut current_idx = self.state.current_trace_index();
 
@@ -143,11 +141,14 @@ impl App {
             let mut base_engine = Engine::new_memory(remu64::EngineMode::Mode64, memory.clone());
             let base_config = setup_provider.setup_engine(&mut base_engine)?;
 
-            // Optional pre-pass: when tracing to end, determine the final instruction index
+            // Incremental trace-to-end: advance by snapshot_interval each frame for responsive UI
             if self.state.go_to_end {
-                debug!("Trace-to-end pre-pass: determining total instruction count");
+                debug!("Trace-to-end operation: advancing by snapshot interval");
 
-                let max_instructions = base_config.max_instructions;
+                // Clamp max_instructions to current position + snapshot_interval for incremental progress
+                let incremental_max = current_idx + self.state.snapshot_interval;
+                let max_instructions = base_config.max_instructions.min(incremental_max);
+
                 let pre_pass_result = tracer::TraceRunner {
                     base_engine: base_engine.clone(),
                     base_config: base_config.clone(),
@@ -161,18 +162,30 @@ impl App {
 
                 let total_instructions = pre_pass_result.total_instructions;
                 debug!(
-                    "Pre-pass completed: {} total instructions",
-                    total_instructions
+                    "Incremental pre-pass completed: {} total instructions (target was {})",
+                    total_instructions, max_instructions
                 );
 
-                if total_instructions > 0 {
-                    current_idx = total_instructions - 1;
-                    debug!("Updated current_idx to final instruction: {}", current_idx);
+                // Check if we've reached the actual end of execution
+                if total_instructions < max_instructions
+                    || total_instructions >= base_config.max_instructions
+                {
+                    // We've reached the end - stop the go_to_end operation
+                    if total_instructions > 0 {
+                        current_idx = total_instructions - 1;
+                        debug!("Reached end of trace at instruction: {}", current_idx);
+                    }
+                    self.state.go_to_end = false;
+                } else {
+                    // Continue incrementally - move to the furthest instruction we executed
+                    current_idx = total_instructions;
+                    debug!(
+                        "Continuing incremental trace-to-end, now at instruction: {}",
+                        current_idx
+                    );
                 }
 
                 self.state.instruction_list_state.select(Some(current_idx));
-                debug!("Moved to end of trace: instruction {}", current_idx);
-                self.state.go_to_end = false;
             }
 
             // Calculate dynamic capture range based on terminal size and current position
@@ -228,8 +241,13 @@ impl App {
 
             let mut event = None;
             loop {
-                if event::poll(std::time::Duration::from_millis(10))? {
-                    while event::poll(std::time::Duration::from_millis(0))? {
+                let timeout = if self.state.go_to_end {
+                    std::time::Duration::ZERO
+                } else {
+                    std::time::Duration::from_millis(10)
+                };
+                if event::poll(timeout)? {
+                    while event::poll(std::time::Duration::ZERO)? {
                         match event::read()? {
                             Event::Mouse(_mouse_event) => {
                                 // ignore mouse events for now
@@ -247,9 +265,15 @@ impl App {
                         break;
                     }
 
+                    // Continue to next frame if go_to_end is still set
+                    if self.state.go_to_end {
+                        break;
+                    }
+
                     // Check for reload signal from provider during polling timeout
                     match setup_provider.check_reload_signal() {
                         Ok(true) => {
+                            snapshots.clear();
                             info!(
                                 "Config reload signal received - breaking poll loop for immediate redraw"
                             );
@@ -278,6 +302,13 @@ impl App {
                 && key.kind == KeyEventKind::Press
             {
                 debug!("Key pressed: {:?}", key.code);
+
+                // Interrupt go_to_end operation on any key press
+                if self.state.go_to_end {
+                    debug!("Interrupting go-to-end operation");
+                    self.state.go_to_end = false;
+                }
+
                 match key.code {
                     KeyCode::Char('q') => {
                         info!("User requested quit");
@@ -321,7 +352,8 @@ impl App {
                     }
                     KeyCode::Char('s') => {
                         debug!("'s' key - toggle skip instruction");
-                        toggle_skip_index = Some(self.state.current_trace_index());
+                        // TODO fix
+                        // toggle_skip_index = Some(self.state.current_trace_index());
                     }
                     _ => {
                         debug!("Unhandled key: {:?}", key.code);

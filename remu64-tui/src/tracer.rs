@@ -176,9 +176,10 @@ impl<'a, M: MemoryTrait + Clone, H: HookManager<CowMemory<M>> + Clone> HookManag
 
         // Always capture memory snapshot at selected instruction regardless of range
         if let Some(capture_idx) = self.capture_idx_memory
-            && self.current_instruction_index == capture_idx {
-                self.memory_snapshot = Some(engine.memory.clone());
-            }
+            && self.current_instruction_index == capture_idx
+        {
+            self.memory_snapshot = Some(engine.memory.clone());
+        }
 
         self.current_instruction_index += 1;
 
