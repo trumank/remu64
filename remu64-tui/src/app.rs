@@ -30,6 +30,12 @@ pub enum StatusMessage {
     ConfigError(String),
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Goto {
+    Line(usize),
+    End,
+}
+
 #[derive(Clone)]
 pub struct Snapshot<M: MemoryTrait + Clone, H: Clone> {
     pub engine: Engine<CowMemory<M>>,
@@ -42,7 +48,7 @@ pub struct AppState {
     pub instruction_scroll: usize,
     pub stack_scroll: usize,
     pub instruction_list_state: ListState,
-    pub go_to_end: bool,
+    pub goto_target: Option<Goto>,
 
     // Status message system
     pub status_message: Option<StatusMessage>,
@@ -50,6 +56,9 @@ pub struct AppState {
 
     // Snapshot system
     pub snapshot_interval: usize,
+
+    // Command mode
+    pub command_input: Option<String>,
 }
 
 impl AppState {
@@ -92,10 +101,11 @@ impl App {
             instruction_scroll: 0,
             stack_scroll: 0,
             instruction_list_state,
-            go_to_end: false,
+            goto_target: None,
             status_message: None,
             status_message_expires: None,
             snapshot_interval: 100000,
+            command_input: None,
         };
 
         Ok(App { state })
@@ -141,19 +151,23 @@ impl App {
             let mut base_engine = Engine::new_memory(remu64::EngineMode::Mode64, memory.clone());
             let base_config = setup_provider.setup_engine(&mut base_engine)?;
 
-            // Incremental trace-to-end: advance by snapshot_interval each frame for responsive UI
-            if self.state.go_to_end {
-                debug!("Trace-to-end operation: advancing by snapshot interval");
+            // Handle goto operations: advance by snapshot_interval each frame for responsive UI
+            if let Some(ref goto_target) = self.state.goto_target {
+                let target_max = match goto_target {
+                    Goto::End => base_config.max_instructions,
+                    Goto::Line(target_line) => (*target_line + 1).min(base_config.max_instructions),
+                };
 
-                // Clamp max_instructions to current position + snapshot_interval for incremental progress
-                let incremental_max = current_idx + self.state.snapshot_interval;
-                let max_instructions = base_config.max_instructions.min(incremental_max);
+                // Clamp max_instructions to last snapshot + snapshot_interval for incremental progress
+                let incremental_max = snapshots.last_key_value().map(|(i, _)| *i).unwrap_or(0)
+                    + self.state.snapshot_interval;
+                let max_instructions = target_max.min(incremental_max);
 
                 let pre_pass_result = tracer::TraceRunner {
                     base_engine: base_engine.clone(),
                     base_config: base_config.clone(),
-                    capture_idx_memory: None, // Not capturing memory snapshot in pre-pass
-                    capture_inst_range: None, // Empty range - capture nothing, also signal to use latest snapshot
+                    capture_idx_memory: None,
+                    capture_inst_range: None,
                     snapshots: &mut snapshots,
                     snapshot_interval: self.state.snapshot_interval,
                     max_instructions,
@@ -162,25 +176,32 @@ impl App {
 
                 let total_instructions = pre_pass_result.total_instructions;
                 debug!(
-                    "Incremental pre-pass completed: {} total instructions (target was {})",
+                    "Goto pre-pass completed: {} total instructions (target was {})",
                     total_instructions, max_instructions
                 );
 
-                // Check if we've reached the actual end of execution
-                if total_instructions < max_instructions
-                    || total_instructions >= base_config.max_instructions
-                {
-                    // We've reached the end - stop the go_to_end operation
-                    if total_instructions > 0 {
-                        current_idx = total_instructions - 1;
-                        debug!("Reached end of trace at instruction: {}", current_idx);
-                    }
-                    self.state.go_to_end = false;
+                // Check completion conditions
+                let mut is_complete = total_instructions < max_instructions
+                    || total_instructions >= base_config.max_instructions;
+
+                if let Goto::Line(_) = goto_target {
+                    is_complete |= total_instructions >= target_max;
+                }
+
+                if is_complete {
+                    // We've reached the target or end - stop the goto operation
+                    let last_instruction = total_instructions.saturating_sub(1);
+                    current_idx = match goto_target {
+                        Goto::End => last_instruction,
+                        Goto::Line(target_line) => (*target_line).min(last_instruction),
+                    };
+                    debug!("Reached target at instruction: {}", current_idx);
+                    self.state.goto_target = None;
                 } else {
-                    // Continue incrementally - move to the furthest instruction we executed
+                    // Continue incrementally
                     current_idx = total_instructions;
                     debug!(
-                        "Continuing incremental trace-to-end, now at instruction: {}",
+                        "Continuing incremental goto, now at instruction: {}",
                         current_idx
                     );
                 }
@@ -241,7 +262,7 @@ impl App {
 
             let mut event = None;
             loop {
-                let timeout = if self.state.go_to_end {
+                let timeout = if self.state.goto_target.is_some() {
                     std::time::Duration::ZERO
                 } else {
                     std::time::Duration::from_millis(10)
@@ -265,8 +286,8 @@ impl App {
                         break;
                     }
 
-                    // Continue to next frame if go_to_end is still set
-                    if self.state.go_to_end {
+                    // Continue to next frame if goto operation is still active
+                    if self.state.goto_target.is_some() {
                         break;
                     }
 
@@ -303,10 +324,15 @@ impl App {
             {
                 debug!("Key pressed: {:?}", key.code);
 
-                // Interrupt go_to_end operation on any key press
-                if self.state.go_to_end {
-                    debug!("Interrupting go-to-end operation");
-                    self.state.go_to_end = false;
+                // Try handling command input
+                if self.handle_command_mode_input(key.code) {
+                    continue;
+                }
+
+                // Interrupt goto operation on any key press
+                if self.state.goto_target.is_some() {
+                    debug!("Interrupting goto operation");
+                    self.state.goto_target = None;
                 }
 
                 match key.code {
@@ -354,6 +380,10 @@ impl App {
                         debug!("'s' key - toggle skip instruction");
                         // TODO fix
                         // toggle_skip_index = Some(self.state.current_trace_index());
+                    }
+                    KeyCode::Char(':') => {
+                        debug!("':' key - enter command mode");
+                        self.state.command_input = Some(String::new());
                     }
                     _ => {
                         debug!("Unhandled key: {:?}", key.code);
@@ -451,7 +481,7 @@ impl App {
         self.state.instruction_list_state.select(Some(0));
         self.state.instruction_scroll = 0;
         self.state.stack_scroll = 0;
-        self.state.go_to_end = false;
+        self.state.goto_target = None;
     }
 
     fn handle_go_to_beginning(&mut self) {
@@ -476,9 +506,9 @@ impl App {
     fn handle_go_to_end(&mut self) {
         match self.state.selected_panel {
             Panel::Instructions => {
-                // Set flag to run trace to completion
-                self.state.go_to_end = true;
-                debug!("Set trace_to_end flag - will trace to function completion");
+                // Set goto target to end of trace
+                self.state.goto_target = Some(Goto::End);
+                debug!("Set goto target to end - will trace to function completion");
             }
             Panel::Stack => {
                 // Move to a reasonable "end" position for stack view
@@ -491,6 +521,61 @@ impl App {
                     self.state.selected_panel
                 );
             }
+        }
+    }
+
+    fn handle_command_mode_input(&mut self, key_code: KeyCode) -> bool {
+        if key_code == KeyCode::Enter
+            && let Some(command) = self.state.command_input.take()
+        {
+            debug!("Executing command: {}", command);
+            self.execute_command(&command);
+            return true;
+        }
+        let Some(command) = &mut self.state.command_input else {
+            return false;
+        };
+        match key_code {
+            KeyCode::Esc => {
+                debug!("Exiting command mode");
+                self.state.command_input = None;
+            }
+            KeyCode::Backspace => {
+                command.pop();
+            }
+            KeyCode::Char(c) => {
+                command.push(c);
+            }
+            _ => {
+                // Ignore other keys in command mode
+            }
+        }
+        true
+    }
+
+    fn execute_command(&mut self, command: &str) {
+        debug!("Command received: '{}'", command);
+
+        let trimmed = command.trim();
+
+        if trimmed.is_empty() {
+            return;
+        }
+
+        if let Some(stripped) = trimmed.strip_prefix('+') {
+            if let Ok(offset) = stripped.parse::<usize>() {
+                let current_idx = self.state.current_trace_index();
+                let target_line = current_idx + offset;
+                self.state.goto_target = Some(Goto::Line(target_line));
+            }
+        } else if let Some(stripped) = trimmed.strip_prefix('-') {
+            if let Ok(offset) = stripped.parse::<usize>() {
+                let current_idx = self.state.current_trace_index();
+                let target_line = current_idx.saturating_sub(offset);
+                self.state.goto_target = Some(Goto::Line(target_line));
+            }
+        } else if let Ok(line_num) = trimmed.parse::<usize>() {
+            self.state.goto_target = Some(Goto::Line(line_num));
         }
     }
 }

@@ -22,19 +22,31 @@ pub fn draw<M: MemoryTrait, S: Symbolizer>(
     symbolizer: &mut S,
     display_name: &str,
 ) {
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([Constraint::Length(1), Constraint::Min(0)])
-        .split(f.area());
+    let chunks = if state.command_input.is_some() {
+        Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(1),
+                Constraint::Min(0),
+                Constraint::Length(1),
+            ])
+            .split(f.area())
+    } else {
+        Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Length(1), Constraint::Min(0)])
+            .split(f.area())
+    };
 
     // Header
     draw_header(f, chunks[0], display_name, trace_result, state);
 
     // Main content area
+    let main_content_area = chunks[1];
     let main_chunks = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
-        .split(chunks[1]);
+        .split(main_content_area);
 
     let right_chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -51,6 +63,11 @@ pub fn draw<M: MemoryTrait, S: Symbolizer>(
     draw_cpu_state(f, right_top_chunks[0], state, trace_result);
     draw_controls(f, right_top_chunks[1], state);
     draw_stack(f, right_chunks[1], state, trace_result, memory, symbolizer);
+
+    // Draw command bar if in command mode
+    if state.command_input.is_some() {
+        draw_command_bar(f, chunks[2], state);
+    }
 }
 
 fn draw_header<M: MemoryTrait>(
@@ -645,6 +662,14 @@ fn draw_controls(f: &mut Frame, area: Rect, state: &AppState) {
     );
 
     f.render_widget(paragraph, area);
+}
+
+fn draw_command_bar(f: &mut Frame, area: Rect, state: &AppState) {
+    let command_text = format!(":{}", state.command_input.as_ref().unwrap());
+    let command_paragraph =
+        Paragraph::new(command_text).style(Style::default().fg(Color::White).bg(Color::Black));
+
+    f.render_widget(command_paragraph, area);
 }
 
 /// Disassemble instruction and return colored spans for UI
