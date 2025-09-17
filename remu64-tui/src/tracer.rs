@@ -5,8 +5,73 @@ use remu64::{
 use std::collections::{BTreeMap, HashMap};
 use tracing::{debug, info, warn};
 
-pub trait TracerHook<M: MemoryTrait>: HookManager<CowMemory<M>> + Clone {
+#[derive(Debug, Clone)]
+pub struct TuiContext {
+    pub instruction_index: usize,
+}
+
+pub trait TracerHook<M: MemoryTrait>: Clone {
     fn get_log_messages(&self) -> &[(usize, String)];
+
+    fn on_code(
+        &mut self,
+        _tui_context: TuiContext,
+        _engine: &mut Engine<CowMemory<M>>,
+        _address: u64,
+        _size: usize,
+    ) -> remu64::Result<HookAction> {
+        Ok(HookAction::Continue)
+    }
+
+    fn on_mem_read(
+        &mut self,
+        _tui_context: TuiContext,
+        _engine: &mut Engine<CowMemory<M>>,
+        _address: u64,
+        _size: usize,
+    ) -> remu64::Result<()> {
+        Ok(())
+    }
+
+    fn on_mem_write(
+        &mut self,
+        _tui_context: TuiContext,
+        _engine: &mut Engine<CowMemory<M>>,
+        _address: u64,
+        _size: usize,
+    ) -> remu64::Result<()> {
+        Ok(())
+    }
+
+    fn on_mem_fault(
+        &mut self,
+        _tui_context: TuiContext,
+        _engine: &mut Engine<CowMemory<M>>,
+        _address: u64,
+        _size: usize,
+    ) -> remu64::Result<bool> {
+        Ok(false)
+    }
+
+    fn on_interrupt(
+        &mut self,
+        _tui_context: TuiContext,
+        _engine: &mut Engine<CowMemory<M>>,
+        _intno: u64,
+        _size: usize,
+    ) -> remu64::Result<()> {
+        Ok(())
+    }
+
+    fn on_invalid(
+        &mut self,
+        _tui_context: TuiContext,
+        _engine: &mut Engine<CowMemory<M>>,
+        _address: u64,
+        _size: usize,
+    ) -> remu64::Result<()> {
+        Ok(())
+    }
 }
 
 impl<M: MemoryTrait> TracerHook<M> for NoHooks {
@@ -95,6 +160,12 @@ impl<'a, M: MemoryTrait + Clone, H: TracerHook<M>> CapturingTracer<'a, M, H> {
             config,
         }
     }
+
+    fn create_tui_context(&self) -> TuiContext {
+        TuiContext {
+            instruction_index: self.current_instruction_index,
+        }
+    }
 }
 
 impl<'a, M: MemoryTrait + Clone, H: TracerHook<M>> HookManager<CowMemory<M>>
@@ -107,7 +178,10 @@ impl<'a, M: MemoryTrait + Clone, H: TracerHook<M>> HookManager<CowMemory<M>>
         size: usize,
     ) -> remu64::Result<HookAction> {
         // Call user hooks first
-        let user_action = self.config.hooks.on_code(engine, address, size)?;
+        let user_action =
+            self.config
+                .hooks
+                .on_code(self.create_tui_context(), engine, address, size)?;
 
         // If user hooks want to stop or skip, respect that
         match user_action {
@@ -210,7 +284,9 @@ impl<'a, M: MemoryTrait + Clone, H: TracerHook<M>> HookManager<CowMemory<M>>
         address: u64,
         size: usize,
     ) -> remu64::Result<()> {
-        self.config.hooks.on_mem_read(engine, address, size)
+        self.config
+            .hooks
+            .on_mem_read(self.create_tui_context(), engine, address, size)
     }
 
     fn on_mem_write(
@@ -219,7 +295,9 @@ impl<'a, M: MemoryTrait + Clone, H: TracerHook<M>> HookManager<CowMemory<M>>
         address: u64,
         size: usize,
     ) -> remu64::Result<()> {
-        self.config.hooks.on_mem_write(engine, address, size)
+        self.config
+            .hooks
+            .on_mem_write(self.create_tui_context(), engine, address, size)
     }
 
     fn on_mem_fault(
@@ -228,7 +306,9 @@ impl<'a, M: MemoryTrait + Clone, H: TracerHook<M>> HookManager<CowMemory<M>>
         address: u64,
         size: usize,
     ) -> remu64::Result<bool> {
-        self.config.hooks.on_mem_fault(engine, address, size)
+        self.config
+            .hooks
+            .on_mem_fault(self.create_tui_context(), engine, address, size)
     }
 
     fn on_interrupt(
@@ -237,7 +317,9 @@ impl<'a, M: MemoryTrait + Clone, H: TracerHook<M>> HookManager<CowMemory<M>>
         intno: u64,
         size: usize,
     ) -> remu64::Result<()> {
-        self.config.hooks.on_interrupt(engine, intno, size)
+        self.config
+            .hooks
+            .on_interrupt(self.create_tui_context(), engine, intno, size)
     }
 
     fn on_invalid(
@@ -246,7 +328,9 @@ impl<'a, M: MemoryTrait + Clone, H: TracerHook<M>> HookManager<CowMemory<M>>
         address: u64,
         size: usize,
     ) -> remu64::Result<()> {
-        self.config.hooks.on_invalid(engine, address, size)
+        self.config
+            .hooks
+            .on_invalid(self.create_tui_context(), engine, address, size)
     }
 }
 

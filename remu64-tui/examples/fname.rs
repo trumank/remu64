@@ -2,10 +2,8 @@ use anyhow::Result;
 use rdex::{
     MinidumpLoader, ProcessTrait as _, pe_symbolizer::PeSymbolizer, process_trait::VmMemory,
 };
-use remu64::{
-    CowMemory, Engine, HookAction, HookManager, Register, hooks::NoHooks, memory::MemoryTrait,
-};
-use remu64_tui::{TracerHook, VmConfig, VmSetupProvider, run_tui};
+use remu64::{CowMemory, Engine, HookAction, Register, memory::MemoryTrait};
+use remu64_tui::{TracerHook, TuiContext, VmConfig, VmSetupProvider, run_tui};
 
 fn main() -> Result<()> {
     // fname CTor
@@ -129,7 +127,6 @@ fn push_bytes_to_stack<M: MemoryTrait>(engine: &mut Engine<M>, data: &[u8]) -> R
 struct FNameHooks {
     fname_addr: u64,
     string: (u64, usize),
-    idx: usize,
     logs: Vec<(usize, String)>,
 }
 impl FNameHooks {
@@ -137,14 +134,8 @@ impl FNameHooks {
         Self {
             fname_addr,
             string,
-            idx: 0,
             logs: vec![],
         }
-    }
-}
-impl<M: MemoryTrait> TracerHook<M> for FNameHooks {
-    fn get_log_messages(&self) -> &[(usize, String)] {
-        &self.logs
     }
 }
 
@@ -152,17 +143,21 @@ fn overlaps(addr1: u64, size1: usize, addr2: u64, size2: usize) -> bool {
     addr1 < addr2 + size2 as u64 && addr2 < addr1 + size1 as u64
 }
 
-impl<M: MemoryTrait<PS>, const PS: u64> HookManager<M, PS> for FNameHooks {
+impl<M: MemoryTrait> TracerHook<M> for FNameHooks {
+    fn get_log_messages(&self) -> &[(usize, String)] {
+        &self.logs
+    }
     fn on_mem_write(
         &mut self,
-        engine: &mut Engine<M, PS>,
+        tui_context: TuiContext,
+        engine: &mut Engine<CowMemory<M>>,
         address: u64,
         size: usize,
     ) -> remu64::Result<()> {
         if overlaps(self.fname_addr, 8, address, size) {
             let fname = engine.memory.read_u64(self.fname_addr)?;
             self.logs.push((
-                self.idx - 1,
+                tui_context.instruction_index,
                 format!(
                     "write FName = {:08x} {:x} {:x}",
                     fname, address, self.fname_addr
@@ -173,20 +168,20 @@ impl<M: MemoryTrait<PS>, const PS: u64> HookManager<M, PS> for FNameHooks {
     }
     fn on_code(
         &mut self,
-        engine: &mut Engine<M, PS>,
+        tui_context: TuiContext,
+        engine: &mut Engine<CowMemory<M>>,
         _address: u64,
         _size: usize,
     ) -> remu64::Result<HookAction> {
         let fname = engine.memory.read_u64(self.fname_addr)?;
         self.logs.push((
-            self.idx,
+            tui_context.instruction_index,
             format!(
                 "code  FName = {:08x} = {}",
                 fname,
                 read_fname(&engine.memory, self.fname_addr)?
             ),
         ));
-        self.idx += 1;
         Ok(HookAction::Continue)
     }
 }

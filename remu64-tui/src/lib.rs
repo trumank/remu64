@@ -11,7 +11,7 @@ mod ui;
 pub use app::Snapshot;
 pub use config::{Config, ConfigLoader, StackConfig};
 pub use minidump_provider::MinidumpSetupProvider;
-pub use tracer::{InstructionAction, InstructionActions, TracerHook};
+pub use tracer::{InstructionAction, InstructionActions, TracerHook, TuiContext};
 
 /// User-provided trait for VM initialization and per-frame setup
 pub trait VmSetupProvider {
