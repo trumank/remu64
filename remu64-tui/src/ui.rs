@@ -105,7 +105,7 @@ fn draw_header<M: MemoryTrait + Clone, H: Clone>(
     let sparse_info = format!(
         "{}/{} entries",
         trace_result.entries.len(),
-        trace_result.total_instructions
+        trace_result.snapshot.instruction_index
     );
     status_parts.push(format!("Trace: {} ({})", time_str, sparse_info));
 
@@ -163,7 +163,7 @@ fn draw_instructions<M: MemoryTrait + Clone, S: Symbolizer, H: Clone>(
     let current_index = state.current_trace_index();
     let visible_height = area.height.saturating_sub(2) as usize; // Account for borders
     let start_index = current_index.saturating_sub(visible_height / 2);
-    let end_index = (start_index + visible_height).min(trace_result.total_instructions);
+    let end_index = (start_index + visible_height).min(trace_result.snapshot.instruction_index);
 
     let instructions: Vec<ListItem> = (start_index..end_index)
         .map(|index| {
@@ -769,7 +769,7 @@ fn draw_log<M: MemoryTrait + Clone, H: TracerHook<M> + Clone>(
     };
 
     let current_index = state.current_trace_index();
-    let log_messages = trace_result.snapshot.config.hooks.get_log_messages();
+    let log_messages = &trace_result.snapshot.logs;
 
     // Filter log messages to show only those up to the current instruction
     let relevant_logs: Vec<&(usize, String)> = log_messages

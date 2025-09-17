@@ -41,6 +41,7 @@ pub struct Snapshot<M: MemoryTrait + Clone, H: Clone> {
     pub engine: Engine<CowMemory<M>>,
     pub config: crate::VmConfig<H>,
     pub instruction_index: usize,
+    pub logs: Vec<(usize, String)>,
 }
 
 pub struct AppState {
@@ -156,6 +157,7 @@ impl App {
                 engine,
                 config,
                 instruction_index: 0,
+                logs: Vec::new(),
             };
 
             // Handle goto operations: advance by snapshot_interval each frame for responsive UI
@@ -186,7 +188,7 @@ impl App {
                 }
                 .run()?;
 
-                let total_instructions = pre_pass_result.total_instructions;
+                let total_instructions = pre_pass_result.snapshot.instruction_index;
                 debug!(
                     "Goto pre-pass completed: {} total instructions (target was {})",
                     total_instructions, max_instructions
@@ -247,17 +249,16 @@ impl App {
             .run()?;
 
             // Ensure current trace index is within bounds
-            if current_idx >= trace_result.total_instructions && trace_result.total_instructions > 0
-            {
+            if current_idx >= trace_result.snapshot.instruction_index {
                 self.state
                     .instruction_list_state
-                    .select(Some(trace_result.total_instructions - 1));
+                    .select(Some(trace_result.snapshot.instruction_index - 1));
             }
 
             debug!(
                 "Generated trace with {} sparse entries from {} total instructions",
                 trace_result.entries.len(),
-                trace_result.total_instructions
+                trace_result.snapshot.instruction_index + 1
             );
 
             terminal.draw(|f| {

@@ -127,15 +127,10 @@ fn push_bytes_to_stack<M: MemoryTrait>(engine: &mut Engine<M>, data: &[u8]) -> R
 struct FNameHooks {
     fname_addr: u64,
     string: (u64, usize),
-    logs: Vec<(usize, String)>,
 }
 impl FNameHooks {
     fn new(fname_addr: u64, string: (u64, usize)) -> Self {
-        Self {
-            fname_addr,
-            string,
-            logs: vec![],
-        }
+        Self { fname_addr, string }
     }
 }
 
@@ -144,43 +139,34 @@ fn overlaps(addr1: u64, size1: usize, addr2: u64, size2: usize) -> bool {
 }
 
 impl<M: MemoryTrait> TracerHook<M> for FNameHooks {
-    fn get_log_messages(&self) -> &[(usize, String)] {
-        &self.logs
-    }
     fn on_mem_write(
         &mut self,
-        tui_context: TuiContext,
+        mut ctx: TuiContext,
         engine: &mut Engine<CowMemory<M>>,
         address: u64,
         size: usize,
     ) -> remu64::Result<()> {
         if overlaps(self.fname_addr, 8, address, size) {
             let fname = engine.memory.read_u64(self.fname_addr)?;
-            self.logs.push((
-                tui_context.instruction_index,
-                format!(
-                    "write FName = {:08x} {:x} {:x}",
-                    fname, address, self.fname_addr
-                ),
+            ctx.log(format!(
+                "write FName = {:08x} {:x} {:x}",
+                fname, address, self.fname_addr
             ));
         }
         Ok(())
     }
     fn on_code(
         &mut self,
-        tui_context: TuiContext,
+        mut ctx: TuiContext,
         engine: &mut Engine<CowMemory<M>>,
         _address: u64,
         _size: usize,
     ) -> remu64::Result<HookAction> {
         let fname = engine.memory.read_u64(self.fname_addr)?;
-        self.logs.push((
-            tui_context.instruction_index,
-            format!(
-                "code  FName = {:08x} = {}",
-                fname,
-                read_fname(&engine.memory, self.fname_addr)?
-            ),
+        ctx.log(format!(
+            "code  FName = {:08x} = {}",
+            fname,
+            read_fname(&engine.memory, self.fname_addr)?
         ));
         Ok(HookAction::Continue)
     }
