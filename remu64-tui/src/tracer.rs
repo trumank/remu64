@@ -88,23 +88,23 @@ pub struct TraceEntry {
     pub was_skipped: bool,
 }
 
-#[derive(Debug, Clone)]
-pub struct TraceResult<M, H> {
+#[derive(Clone)]
+pub struct TraceResult<M: MemoryTrait + Clone, H: Clone> {
     /// Sparse trace storage - only contains entries for instructions that have been viewed/requested
     pub entries: HashMap<usize, TraceEntry>,
     /// Total number of instructions executed
     pub total_instructions: usize,
     /// Memory snapshot at the selected instruction
-    pub memory_snapshot: Option<M>,
+    pub memory_snapshot: Option<CowMemory<M>>,
     /// Error message if execution failed
     pub error_message: Option<String>,
     /// Time taken to execute and capture the trace
     pub trace_duration: std::time::Duration,
-    /// User hooks for accessing log messages
-    pub hooks: H,
+    /// Final execution snapshot
+    pub snapshot: crate::Snapshot<M, H>,
 }
 
-impl<M, H> TraceResult<M, H> {
+impl<M: MemoryTrait + Clone, H: Clone> TraceResult<M, H> {
     /// Get a trace entry by index, returning None if not captured
     pub fn get_entry(&self, index: usize) -> Option<&TraceEntry> {
         self.entries.get(&index)
@@ -375,7 +375,7 @@ impl<M: MemoryTrait + Clone, H: TracerHook<M>> TraceRunner<'_, M, H> {
         }
     }
 
-    pub fn run(mut self) -> Result<TraceResult<CowMemory<M>, H>> {
+    pub fn run(mut self) -> Result<TraceResult<M, H>> {
         // Find the optimal starting point using snapshot selection logic
         let (mut engine, config, snapshot_start) = self.find_optimal_start();
 
@@ -455,10 +455,16 @@ impl<M: MemoryTrait + Clone, H: TracerHook<M>> TraceRunner<'_, M, H> {
         Ok(TraceResult {
             entries: capturing_tracer.trace_entries,
             total_instructions: capturing_tracer.total_instructions,
-            memory_snapshot: capturing_tracer.memory_snapshot.or(Some(engine.memory)),
+            memory_snapshot: capturing_tracer
+                .memory_snapshot
+                .or(Some(engine.memory.clone())),
             error_message,
             trace_duration,
-            hooks: capturing_tracer.config.hooks,
+            snapshot: crate::Snapshot {
+                engine,
+                config: capturing_tracer.config,
+                instruction_index: capturing_tracer.total_instructions,
+            },
         })
     }
 }

@@ -14,10 +14,10 @@ use remu64::{CowMemory, Register, memory::MemoryTrait};
 use crate::app::{AppState, Panel, StatusMessage};
 use crate::tracer::{TraceResult, TracerHook};
 
-pub fn draw<M: MemoryTrait, S: Symbolizer, H: TracerHook<M>>(
+pub fn draw<M: MemoryTrait + Clone, S: Symbolizer, H: TracerHook<M> + Clone>(
     f: &mut Frame,
     state: &mut AppState,
-    trace_result: &TraceResult<CowMemory<M>, H>,
+    trace_result: &TraceResult<M, H>,
     memory: &CowMemory<M>,
     symbolizer: &mut S,
     display_name: &str,
@@ -84,11 +84,11 @@ pub fn draw<M: MemoryTrait, S: Symbolizer, H: TracerHook<M>>(
     }
 }
 
-fn draw_header<M: MemoryTrait, H>(
+fn draw_header<M: MemoryTrait + Clone, H: Clone>(
     f: &mut Frame,
     area: Rect,
     display_name: &str,
-    trace_result: &TraceResult<CowMemory<M>, H>,
+    trace_result: &TraceResult<M, H>,
     state: &AppState,
 ) {
     let mut status_parts = Vec::new();
@@ -144,13 +144,13 @@ fn draw_header<M: MemoryTrait, H>(
     f.render_widget(header, area);
 }
 
-fn draw_instructions<M: MemoryTrait, S: Symbolizer, H>(
+fn draw_instructions<M: MemoryTrait + Clone, S: Symbolizer, H: Clone>(
     f: &mut Frame,
     area: Rect,
     state: &mut AppState,
     memory: &CowMemory<M>,
     symbolizer: &mut S,
-    trace_result: &TraceResult<CowMemory<M>, H>,
+    trace_result: &TraceResult<M, H>,
 ) {
     let selected = state.selected_panel == Panel::Instructions;
     let border_style = if selected {
@@ -341,11 +341,11 @@ fn draw_instructions<M: MemoryTrait, S: Symbolizer, H>(
     f.render_stateful_widget(list, area, &mut local_list_state);
 }
 
-fn draw_stack<M: MemoryTrait, S: Symbolizer, H>(
+fn draw_stack<M: MemoryTrait + Clone, S: Symbolizer, H: Clone>(
     f: &mut Frame,
     area: Rect,
     state: &mut AppState,
-    trace_result: &TraceResult<CowMemory<M>, H>,
+    trace_result: &TraceResult<M, H>,
     memory: &CowMemory<M>,
     symbolizer: &mut S,
 ) {
@@ -497,11 +497,11 @@ fn draw_stack<M: MemoryTrait, S: Symbolizer, H>(
     f.render_widget(paragraph, area);
 }
 
-fn draw_cpu_state<M: MemoryTrait, H>(
+fn draw_cpu_state<M: MemoryTrait + Clone, H: Clone>(
     f: &mut Frame,
     area: Rect,
     state: &AppState,
-    trace_result: &TraceResult<CowMemory<M>, H>,
+    trace_result: &TraceResult<M, H>,
 ) {
     let selected = state.selected_panel == Panel::CpuState;
     let border_style = if selected {
@@ -755,11 +755,11 @@ impl FormatterOutput for ColoredFormatterOutput {
     }
 }
 
-fn draw_log<M: MemoryTrait, H: TracerHook<M>>(
+fn draw_log<M: MemoryTrait + Clone, H: TracerHook<M> + Clone>(
     f: &mut Frame,
     area: Rect,
     state: &AppState,
-    trace_result: &TraceResult<CowMemory<M>, H>,
+    trace_result: &TraceResult<M, H>,
 ) {
     let selected = state.selected_panel == Panel::Log;
     let border_style = if selected {
@@ -769,7 +769,7 @@ fn draw_log<M: MemoryTrait, H: TracerHook<M>>(
     };
 
     let current_index = state.current_trace_index();
-    let log_messages = trace_result.hooks.get_log_messages();
+    let log_messages = trace_result.snapshot.config.hooks.get_log_messages();
 
     // Filter log messages to show only those up to the current instruction
     let relevant_logs: Vec<&(usize, String)> = log_messages
