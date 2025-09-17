@@ -1086,6 +1086,28 @@ impl<H: HookManager<M, PS>, M: MemoryTrait<PS>, const PS: u64> ExecutionContext<
         Ok(())
     }
 
+    pub(crate) fn execute_prefetcht0(&mut self, inst: &Instruction) -> Result<()> {
+        // PREFETCHT0: Prefetch Data into All Cache Levels (Temporal Data)
+        // This instruction provides a hint to the processor that the cache line
+        // containing the specified memory location should be moved to all levels
+        // of the cache hierarchy (L1, L2, L3) in anticipation of future reads.
+        // The T0 hint indicates temporal data that will be used soon and should
+        // be kept in cache.
+        //
+        // In emulation, this is essentially a no-op since we don't have
+        // actual cache management, but we still need to validate the memory address.
+
+        // Calculate the memory address to prefetch
+        let _addr = self.calculate_memory_address(inst, 0)?;
+
+        // In a real processor, this would initiate a cache line prefetch
+        // into all cache levels with temporal locality hint. In emulation,
+        // we don't need to do anything special since we don't model cache hierarchies.
+
+        // The instruction doesn't affect any registers or flags
+        Ok(())
+    }
+
     pub(crate) fn execute_cmpxchg16b(&mut self, inst: &Instruction) -> Result<()> {
         // CMPXCHG16B: Compare and Exchange 16 Bytes
         // Compares the 128-bit value in RDX:RAX with the 128-bit value at the memory location

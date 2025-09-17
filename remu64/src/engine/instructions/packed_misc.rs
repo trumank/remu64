@@ -444,6 +444,71 @@ impl<H: HookManager<M, PS>, M: MemoryTrait<PS>, const PS: u64> ExecutionContext<
         }
     }
 
+    pub(crate) fn execute_pminud(&mut self, inst: &Instruction) -> Result<()> {
+        // PMINUD: Packed Minimum Unsigned Doublewords
+        // Compares unsigned doublewords and stores the minimum values
+
+        match (inst.op_kind(0), inst.op_kind(1)) {
+            (OpKind::Register, OpKind::Register) => {
+                let dst_reg = self.convert_register(inst.op_register(0))?;
+                let src_reg = self.convert_register(inst.op_register(1))?;
+
+                if !dst_reg.is_xmm() || !src_reg.is_xmm() {
+                    return Err(EmulatorError::UnsupportedInstruction(
+                        "PMINUD requires XMM registers".to_string(),
+                    ));
+                }
+
+                let dst_value = self.engine.cpu.read_xmm(dst_reg);
+                let src_value = self.engine.cpu.read_xmm(src_reg);
+                let mut result = 0u128;
+
+                // Process 4 doublewords
+                for i in 0..4 {
+                    let shift = i * 32;
+                    let dst_dword = ((dst_value >> shift) & 0xFFFFFFFF) as u32;
+                    let src_dword = ((src_value >> shift) & 0xFFFFFFFF) as u32;
+                    let min = std::cmp::min(dst_dword, src_dword) as u128;
+                    result |= min << shift;
+                }
+
+                self.engine.cpu.write_xmm(dst_reg, result);
+                Ok(())
+            }
+            (OpKind::Register, OpKind::Memory) => {
+                let dst_reg = self.convert_register(inst.op_register(0))?;
+
+                if !dst_reg.is_xmm() {
+                    return Err(EmulatorError::UnsupportedInstruction(
+                        "PMINUD requires XMM register as destination".to_string(),
+                    ));
+                }
+
+                let addr = self.calculate_memory_address(inst, 1)?;
+                let src_value = self.read_memory_128(addr)?;
+                let dst_value = self.engine.cpu.read_xmm(dst_reg);
+                let mut result = 0u128;
+
+                // Process 4 doublewords
+                for i in 0..4 {
+                    let shift = i * 32;
+                    let dst_dword = ((dst_value >> shift) & 0xFFFFFFFF) as u32;
+                    let src_dword = ((src_value >> shift) & 0xFFFFFFFF) as u32;
+                    let min = std::cmp::min(dst_dword, src_dword) as u128;
+                    result |= min << shift;
+                }
+
+                self.engine.cpu.write_xmm(dst_reg, result);
+                Ok(())
+            }
+            _ => Err(EmulatorError::UnsupportedInstruction(format!(
+                "Unsupported PMINUD operand types: {:?}, {:?}",
+                inst.op_kind(0),
+                inst.op_kind(1)
+            ))),
+        }
+    }
+
     pub(crate) fn execute_psadbw(&mut self, inst: &Instruction) -> Result<()> {
         // PSADBW: Packed Sum of Absolute Differences
         // Computes absolute differences between unsigned bytes, then sums them
