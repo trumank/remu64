@@ -56,16 +56,6 @@ pub trait HookManager<M: MemoryTrait<PS>, const PS: u64 = DEFAULT_PAGE_SIZE> {
         Ok(())
     }
 
-    fn on_mem_access(
-        &mut self,
-        engine: &mut Engine<M, PS>,
-        address: u64,
-        size: usize,
-    ) -> Result<()> {
-        let _ = (engine, address, size);
-        Ok(())
-    }
-
     fn on_mem_fault(
         &mut self,
         engine: &mut Engine<M, PS>,

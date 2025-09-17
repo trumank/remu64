@@ -198,15 +198,6 @@ where
         self.user_hooks.on_mem_write(engine, address, size)
     }
 
-    fn on_mem_access(
-        &mut self,
-        engine: &mut Engine<M, PS>,
-        address: u64,
-        size: usize,
-    ) -> Result<()> {
-        self.user_hooks.on_mem_access(engine, address, size)
-    }
-
     fn on_mem_fault(
         &mut self,
         engine: &mut Engine<M, PS>,

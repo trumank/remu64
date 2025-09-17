@@ -208,15 +208,6 @@ impl<'a, M: MemoryTrait + Clone, H: HookManager<CowMemory<M>> + Clone> HookManag
         self.config.hooks.on_mem_write(engine, address, size)
     }
 
-    fn on_mem_access(
-        &mut self,
-        engine: &mut Engine<CowMemory<M>>,
-        address: u64,
-        size: usize,
-    ) -> remu64::Result<()> {
-        self.config.hooks.on_mem_access(engine, address, size)
-    }
-
     fn on_mem_fault(
         &mut self,
         engine: &mut Engine<CowMemory<M>>,
