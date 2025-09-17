@@ -360,7 +360,9 @@ fn draw_stack<M: MemoryTrait + Clone, S: Symbolizer, H: Clone>(
     let stack_content = if let Some(current_entry) =
         trace_result.get_entry(state.current_trace_index())
     {
+        let width = 8;
         let rsp = current_entry.cpu_state.read_reg(Register::RSP);
+        let start = rsp.saturating_sub(5 * width);
 
         // Calculate how many stack entries we can display based on available height
         let available_height = area.height.saturating_sub(2) as usize; // Subtract borders
@@ -371,7 +373,8 @@ fn draw_stack<M: MemoryTrait + Clone, S: Symbolizer, H: Clone>(
         let memory_snapshot = trace_result.memory_snapshot.as_ref().unwrap();
 
         for i in 0..num_entries {
-            let addr = rsp + (i * 8) as u64;
+            let addr = start + i as u64 * width;
+            let is_current_rsp = addr == rsp;
             let mut buffer = [0u8; 8];
             match memory_snapshot.read(addr, &mut buffer) {
                 Ok(_) => {
@@ -412,10 +415,27 @@ fn draw_stack<M: MemoryTrait + Clone, S: Symbolizer, H: Clone>(
                         }
                     }
 
-                    let mut line_spans = vec![Span::styled(
-                        format!("0x{:016x}: ", addr),
-                        Style::default().fg(Color::Cyan),
-                    )];
+                    let address_style = if is_current_rsp {
+                        Style::default()
+                            .fg(Color::Yellow)
+                            .add_modifier(Modifier::BOLD)
+                    } else {
+                        Style::default().fg(Color::Cyan)
+                    };
+
+                    let mut line_spans = vec![
+                        if is_current_rsp {
+                            Span::styled(
+                                ">",
+                                Style::default()
+                                    .fg(Color::Yellow)
+                                    .add_modifier(Modifier::BOLD),
+                            )
+                        } else {
+                            Span::raw(" ")
+                        },
+                        Span::styled(format!("0x{:016x}: ", addr), address_style),
+                    ];
                     line_spans.extend(hex_spans);
                     line_spans.push(Span::raw(" "));
 
@@ -468,11 +488,26 @@ fn draw_stack<M: MemoryTrait + Clone, S: Symbolizer, H: Clone>(
                     lines.push(Line::from(line_spans));
                 }
                 Err(_) => {
+                    let address_style = if is_current_rsp {
+                        Style::default()
+                            .fg(Color::Yellow)
+                            .add_modifier(Modifier::BOLD)
+                    } else {
+                        Style::default().fg(Color::Cyan)
+                    };
+
                     lines.push(Line::from(vec![
-                        Span::styled(
-                            format!("0x{:016x}: ", addr),
-                            Style::default().fg(Color::Cyan),
-                        ),
+                        if is_current_rsp {
+                            Span::styled(
+                                ">",
+                                Style::default()
+                                    .fg(Color::Yellow)
+                                    .add_modifier(Modifier::BOLD),
+                            )
+                        } else {
+                            Span::raw(" ")
+                        },
+                        Span::styled(format!("0x{:016x}: ", addr), address_style),
                         Span::styled(
                             "-- -- -- -- -- -- -- --",
                             Style::default().fg(Color::DarkGray),
