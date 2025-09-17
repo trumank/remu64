@@ -1,7 +1,19 @@
 use anyhow::Result;
-use remu64::{CowMemory, CpuState, Engine, HookAction, HookManager, memory::MemoryTrait};
+use remu64::{
+    CowMemory, CpuState, Engine, HookAction, HookManager, hooks::NoHooks, memory::MemoryTrait,
+};
 use std::collections::{BTreeMap, HashMap};
 use tracing::{debug, info, warn};
+
+pub trait TracerHook<M: MemoryTrait>: HookManager<CowMemory<M>> + Clone {
+    fn get_log_messages(&self) -> &[(usize, String)];
+}
+
+impl<M: MemoryTrait> TracerHook<M> for NoHooks {
+    fn get_log_messages(&self) -> &[(usize, String)] {
+        &[]
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct TraceEntry {
@@ -12,7 +24,7 @@ pub struct TraceEntry {
 }
 
 #[derive(Debug, Clone)]
-pub struct TraceResult<M> {
+pub struct TraceResult<M, H> {
     /// Sparse trace storage - only contains entries for instructions that have been viewed/requested
     pub entries: HashMap<usize, TraceEntry>,
     /// Total number of instructions executed
@@ -23,9 +35,11 @@ pub struct TraceResult<M> {
     pub error_message: Option<String>,
     /// Time taken to execute and capture the trace
     pub trace_duration: std::time::Duration,
+    /// User hooks for accessing log messages
+    pub hooks: H,
 }
 
-impl<M> TraceResult<M> {
+impl<M, H> TraceResult<M, H> {
     /// Get a trace entry by index, returning None if not captured
     pub fn get_entry(&self, index: usize) -> Option<&TraceEntry> {
         self.entries.get(&index)
@@ -39,7 +53,7 @@ pub enum InstructionAction {
 
 pub type InstructionActions = HashMap<usize, Vec<InstructionAction>>;
 
-pub struct CapturingTracer<'a, M: MemoryTrait + Clone, H: Clone> {
+pub struct CapturingTracer<'a, M: MemoryTrait + Clone, H: TracerHook<M>> {
     /// Sparse trace storage
     pub trace_entries: HashMap<usize, TraceEntry>,
     pub total_instructions: usize,
@@ -58,7 +72,7 @@ pub struct CapturingTracer<'a, M: MemoryTrait + Clone, H: Clone> {
     pub config: crate::VmConfig<H>,
 }
 
-impl<'a, M: MemoryTrait + Clone, H: Clone> CapturingTracer<'a, M, H> {
+impl<'a, M: MemoryTrait + Clone, H: TracerHook<M>> CapturingTracer<'a, M, H> {
     pub fn new(
         max_instructions: usize,
         capture_idx_memory: Option<usize>,
@@ -83,7 +97,7 @@ impl<'a, M: MemoryTrait + Clone, H: Clone> CapturingTracer<'a, M, H> {
     }
 }
 
-impl<'a, M: MemoryTrait + Clone, H: HookManager<CowMemory<M>> + Clone> HookManager<CowMemory<M>>
+impl<'a, M: MemoryTrait + Clone, H: TracerHook<M>> HookManager<CowMemory<M>>
     for CapturingTracer<'a, M, H>
 {
     fn on_code(
@@ -237,7 +251,7 @@ impl<'a, M: MemoryTrait + Clone, H: HookManager<CowMemory<M>> + Clone> HookManag
 }
 
 /// Runner for trace capturing with configurable parameters
-pub struct TraceRunner<'a, M: MemoryTrait + Clone, H: HookManager<CowMemory<M>> + Clone> {
+pub struct TraceRunner<'a, M: MemoryTrait + Clone, H: TracerHook<M>> {
     pub base_engine: remu64::Engine<CowMemory<M>>,
     pub base_config: crate::VmConfig<H>,
     pub capture_idx_memory: Option<usize>,
@@ -247,7 +261,7 @@ pub struct TraceRunner<'a, M: MemoryTrait + Clone, H: HookManager<CowMemory<M>> 
     pub max_instructions: usize,
 }
 
-impl<M: MemoryTrait + Clone, H: HookManager<CowMemory<M>> + Clone> TraceRunner<'_, M, H> {
+impl<M: MemoryTrait + Clone, H: TracerHook<M>> TraceRunner<'_, M, H> {
     /// Find the optimal starting point (engine, config, start_idx) based on available snapshots
     fn find_optimal_start(&mut self) -> (remu64::Engine<CowMemory<M>>, crate::VmConfig<H>, usize) {
         // Determine the range start for snapshot selection
@@ -277,7 +291,7 @@ impl<M: MemoryTrait + Clone, H: HookManager<CowMemory<M>> + Clone> TraceRunner<'
         }
     }
 
-    pub fn run(mut self) -> Result<TraceResult<CowMemory<M>>> {
+    pub fn run(mut self) -> Result<TraceResult<CowMemory<M>, H>> {
         // Find the optimal starting point using snapshot selection logic
         let (mut engine, config, snapshot_start) = self.find_optimal_start();
 
@@ -360,6 +374,7 @@ impl<M: MemoryTrait + Clone, H: HookManager<CowMemory<M>> + Clone> TraceRunner<'
             memory_snapshot: capturing_tracer.memory_snapshot.or(Some(engine.memory)),
             error_message,
             trace_duration,
+            hooks: capturing_tracer.config.hooks,
         })
     }
 }

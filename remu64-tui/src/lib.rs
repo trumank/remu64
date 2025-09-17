@@ -1,19 +1,23 @@
 use anyhow::Result;
 use rdex::symbolizer::Symbolizer;
-use remu64::{CowMemory, hooks::HookManager, memory::MemoryTrait};
+use remu64::{CowMemory, memory::MemoryTrait};
 
 mod app;
+mod config;
+mod minidump_provider;
 mod tracer;
 mod ui;
 
 pub use app::Snapshot;
-pub use tracer::{InstructionAction, InstructionActions};
+pub use config::{Config, ConfigLoader, StackConfig};
+pub use minidump_provider::MinidumpSetupProvider;
+pub use tracer::{InstructionAction, InstructionActions, TracerHook};
 
 /// User-provided trait for VM initialization and per-frame setup
 pub trait VmSetupProvider {
     type Memory: MemoryTrait + Clone;
     type Symbolizer: Symbolizer;
-    type Hooks: HookManager<CowMemory<Self::Memory>> + Clone;
+    type Hooks: TracerHook<Self::Memory>;
 
     /// Create the memory and symbolizer instances (called once)
     fn create_backend(&self) -> Result<(Self::Memory, Self::Symbolizer)>;

@@ -1,9 +1,11 @@
+use std::path::Path;
+
+use crate::{VmConfig, VmSetupProvider};
 use anyhow::Result;
 use rdex::{
     DumpExec, MinidumpLoader, ProcessTrait, pe_symbolizer::PeSymbolizer, process_trait::VmMemory,
 };
 use remu64::{CowMemory, Engine, Register, hooks::NoHooks, memory::MemoryTrait as _};
-use remu64_tui::{VmConfig, VmSetupProvider};
 
 use crate::config::ConfigLoader;
 
@@ -13,7 +15,7 @@ pub struct MinidumpSetupProvider {
 }
 
 impl MinidumpSetupProvider {
-    pub fn new(config_path: &std::path::Path) -> Result<Self> {
+    pub fn new(config_path: impl AsRef<Path>) -> Result<Self> {
         let config_loader = ConfigLoader::new(config_path)?;
         let minidump_loader = DumpExec::load_minidump(&config_loader.config.minidump_path)?;
 

@@ -9,16 +9,16 @@ use ratatui::{
     widgets::{Block, Borders, List, ListItem, Paragraph, Wrap},
 };
 use rdex::symbolizer::Symbolizer;
-use remu64::{Register, memory::MemoryTrait};
+use remu64::{CowMemory, Register, memory::MemoryTrait};
 
 use crate::app::{AppState, Panel, StatusMessage};
-use crate::tracer::TraceResult;
+use crate::tracer::{TraceResult, TracerHook};
 
-pub fn draw<M: MemoryTrait, S: Symbolizer>(
+pub fn draw<M: MemoryTrait, S: Symbolizer, H: TracerHook<M>>(
     f: &mut Frame,
     state: &mut AppState,
-    trace_result: &TraceResult<M>,
-    memory: &M,
+    trace_result: &TraceResult<CowMemory<M>, H>,
+    memory: &CowMemory<M>,
     symbolizer: &mut S,
     display_name: &str,
 ) {
@@ -53,6 +53,12 @@ pub fn draw<M: MemoryTrait, S: Symbolizer>(
         .constraints([Constraint::Length(12), Constraint::Min(0)])
         .split(main_chunks[1]);
 
+    // Split the lower right area between stack and log panes
+    let stack_log_chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Percentage(60), Constraint::Percentage(40)])
+        .split(right_chunks[1]);
+
     let right_top_chunks = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([Constraint::Length(51), Constraint::Min(0)])
@@ -62,7 +68,15 @@ pub fn draw<M: MemoryTrait, S: Symbolizer>(
     draw_instructions(f, main_chunks[0], state, memory, symbolizer, trace_result);
     draw_cpu_state(f, right_top_chunks[0], state, trace_result);
     draw_controls(f, right_top_chunks[1], state);
-    draw_stack(f, right_chunks[1], state, trace_result, memory, symbolizer);
+    draw_stack(
+        f,
+        stack_log_chunks[0],
+        state,
+        trace_result,
+        memory,
+        symbolizer,
+    );
+    draw_log(f, stack_log_chunks[1], state, trace_result);
 
     // Draw command bar if in command mode
     if state.command_input.is_some() {
@@ -70,11 +84,11 @@ pub fn draw<M: MemoryTrait, S: Symbolizer>(
     }
 }
 
-fn draw_header<M: MemoryTrait>(
+fn draw_header<M: MemoryTrait, H>(
     f: &mut Frame,
     area: Rect,
     display_name: &str,
-    trace_result: &TraceResult<M>,
+    trace_result: &TraceResult<CowMemory<M>, H>,
     state: &AppState,
 ) {
     let mut status_parts = Vec::new();
@@ -130,13 +144,13 @@ fn draw_header<M: MemoryTrait>(
     f.render_widget(header, area);
 }
 
-fn draw_instructions<M: MemoryTrait, S: Symbolizer>(
+fn draw_instructions<M: MemoryTrait, S: Symbolizer, H>(
     f: &mut Frame,
     area: Rect,
     state: &mut AppState,
-    memory: &M,
+    memory: &CowMemory<M>,
     symbolizer: &mut S,
-    trace_result: &TraceResult<M>,
+    trace_result: &TraceResult<CowMemory<M>, H>,
 ) {
     let selected = state.selected_panel == Panel::Instructions;
     let border_style = if selected {
@@ -327,12 +341,12 @@ fn draw_instructions<M: MemoryTrait, S: Symbolizer>(
     f.render_stateful_widget(list, area, &mut local_list_state);
 }
 
-fn draw_stack<M: MemoryTrait, S: Symbolizer>(
+fn draw_stack<M: MemoryTrait, S: Symbolizer, H>(
     f: &mut Frame,
     area: Rect,
     state: &mut AppState,
-    trace_result: &TraceResult<M>,
-    memory: &M,
+    trace_result: &TraceResult<CowMemory<M>, H>,
+    memory: &CowMemory<M>,
     symbolizer: &mut S,
 ) {
     let selected = state.selected_panel == Panel::Stack;
@@ -483,11 +497,11 @@ fn draw_stack<M: MemoryTrait, S: Symbolizer>(
     f.render_widget(paragraph, area);
 }
 
-fn draw_cpu_state<M: MemoryTrait>(
+fn draw_cpu_state<M: MemoryTrait, H>(
     f: &mut Frame,
     area: Rect,
     state: &AppState,
-    trace_result: &TraceResult<M>,
+    trace_result: &TraceResult<CowMemory<M>, H>,
 ) {
     let selected = state.selected_panel == Panel::CpuState;
     let border_style = if selected {
@@ -739,4 +753,56 @@ impl FormatterOutput for ColoredFormatterOutput {
 
         self.spans.push(Span::styled(text.to_owned(), style));
     }
+}
+
+fn draw_log<M: MemoryTrait, H: TracerHook<M>>(
+    f: &mut Frame,
+    area: Rect,
+    state: &AppState,
+    trace_result: &TraceResult<CowMemory<M>, H>,
+) {
+    let selected = state.selected_panel == Panel::Log;
+    let border_style = if selected {
+        Style::default().fg(Color::Yellow)
+    } else {
+        Style::default()
+    };
+
+    let current_index = state.current_trace_index();
+    let log_messages = trace_result.hooks.get_log_messages();
+
+    // Filter log messages to show only those up to the current instruction
+    let relevant_logs: Vec<&(usize, String)> = log_messages
+        .iter()
+        .filter(|(instruction_idx, _)| *instruction_idx <= current_index)
+        .collect();
+
+    let available_height = area.height.saturating_sub(2) as usize; // Account for borders
+    let start_idx = relevant_logs.len().saturating_sub(available_height);
+    let visible_logs = &relevant_logs[start_idx..];
+
+    let log_lines: Vec<Line> = visible_logs
+        .iter()
+        .map(|(instruction_idx, message)| {
+            let line_spans = vec![
+                Span::styled(
+                    format!("{:4}: ", instruction_idx),
+                    Style::default().fg(Color::Gray),
+                ),
+                Span::styled(message.clone(), Style::default().fg(Color::White)),
+            ];
+            Line::from(line_spans)
+        })
+        .collect();
+
+    let paragraph = Paragraph::new(log_lines)
+        .block(
+            Block::default()
+                .title("Log")
+                .borders(Borders::ALL)
+                .border_style(border_style),
+        )
+        .wrap(Wrap { trim: false });
+
+    f.render_widget(paragraph, area);
 }

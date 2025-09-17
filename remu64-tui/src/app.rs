@@ -22,6 +22,7 @@ pub enum Panel {
     CpuState,
     Stack,
     Controls,
+    Log,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -463,7 +464,8 @@ impl App {
         self.state.selected_panel = match self.state.selected_panel {
             Panel::Instructions => Panel::CpuState,
             Panel::CpuState => Panel::Stack,
-            Panel::Stack => Panel::Controls,
+            Panel::Stack => Panel::Log,
+            Panel::Log => Panel::Controls,
             Panel::Controls => Panel::Instructions,
         };
     }
@@ -473,7 +475,8 @@ impl App {
             Panel::Instructions => Panel::Controls,
             Panel::CpuState => Panel::Instructions,
             Panel::Stack => Panel::CpuState,
-            Panel::Controls => Panel::Stack,
+            Panel::Log => Panel::Stack,
+            Panel::Controls => Panel::Log,
         };
     }
 

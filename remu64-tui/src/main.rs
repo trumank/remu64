@@ -1,14 +1,9 @@
 use anyhow::Result;
 use clap::Parser;
+use remu64_tui::{Config, MinidumpSetupProvider};
 use std::panic;
 use std::path::PathBuf;
 use tracing::{error, info};
-
-mod config;
-mod minidump_provider;
-
-use config::Config;
-use minidump_provider::MinidumpSetupProvider;
 
 #[derive(Parser)]
 #[command(name = "remu64-tui")]
