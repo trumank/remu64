@@ -5,9 +5,45 @@ use remu64::{
 use std::collections::{BTreeMap, HashMap};
 use tracing::{debug, info, warn};
 
+use crate::Snapshot;
+
 #[derive(Debug, Clone)]
 pub struct TuiContext {
     pub instruction_index: usize,
+}
+
+pub struct Snapshots<M: MemoryTrait + Clone, H: Clone> {
+    pub snapshots_map: BTreeMap<usize, crate::Snapshot<M, H>>,
+    pub most_recent: Option<crate::Snapshot<M, H>>,
+}
+
+impl<M: MemoryTrait + Clone, H: Clone> Snapshots<M, H> {
+    pub fn new() -> Self {
+        Self {
+            snapshots_map: BTreeMap::new(),
+            most_recent: None,
+        }
+    }
+
+    pub fn find_optimal_start(&self, range_start: usize) -> Option<Snapshot<M, H>> {
+        // Check most_recent first if it's available and suitable
+        if let Some(ref recent_snapshot) = self.most_recent
+            && recent_snapshot.instruction_index <= range_start {
+                return Some(recent_snapshot.clone());
+            }
+
+        // Fall back to searching the snapshots_map
+        self.snapshots_map
+            .range(..=range_start)
+            .next_back()
+            .map(|(_, snapshot)| snapshot)
+            .cloned()
+    }
+
+    pub fn clear(&mut self) {
+        self.snapshots_map.clear();
+        self.most_recent = None;
+    }
 }
 
 pub trait TracerHook<M: MemoryTrait>: Clone {
@@ -131,8 +167,8 @@ pub struct CapturingTracer<'a, M: MemoryTrait + Clone, H: TracerHook<M>> {
     pub memory_snapshot: Option<CowMemory<M>>,
     /// Snapshot interval for creating periodic snapshots
     pub snapshot_interval: usize,
-    /// Snapshots map for creating periodic snapshots
-    pub snapshots_map: &'a mut BTreeMap<usize, crate::Snapshot<M, H>>,
+    /// Snapshots container
+    pub snapshots: &'a mut Snapshots<M, H>,
     /// Config containing hooks and other settings
     pub config: crate::VmConfig<H>,
 }
@@ -144,7 +180,7 @@ impl<'a, M: MemoryTrait + Clone, H: TracerHook<M>> CapturingTracer<'a, M, H> {
         capture_inst_range: Option<(usize, usize)>,
         snapshot_interval: usize,
         snapshot_start: usize,
-        snapshots_map: &'a mut BTreeMap<usize, crate::Snapshot<M, H>>,
+        snapshots: &'a mut Snapshots<M, H>,
         config: crate::VmConfig<H>,
     ) -> Self {
         Self {
@@ -156,7 +192,7 @@ impl<'a, M: MemoryTrait + Clone, H: TracerHook<M>> CapturingTracer<'a, M, H> {
             capture_inst_range,
             memory_snapshot: None,
             snapshot_interval,
-            snapshots_map,
+            snapshots,
             config,
         }
     }
@@ -201,6 +237,7 @@ impl<'a, M: MemoryTrait + Clone, H: TracerHook<M>> HookManager<CowMemory<M>>
                 .current_instruction_index
                 .is_multiple_of(self.snapshot_interval)
             && !self
+                .snapshots
                 .snapshots_map
                 .contains_key(&self.current_instruction_index)
         {
@@ -209,7 +246,7 @@ impl<'a, M: MemoryTrait + Clone, H: TracerHook<M>> HookManager<CowMemory<M>>
                 self.current_instruction_index, address
             );
 
-            self.snapshots_map.insert(
+            self.snapshots.snapshots_map.insert(
                 self.current_instruction_index,
                 crate::Snapshot {
                     engine: engine.clone(),
@@ -336,48 +373,46 @@ impl<'a, M: MemoryTrait + Clone, H: TracerHook<M>> HookManager<CowMemory<M>>
 
 /// Runner for trace capturing with configurable parameters
 pub struct TraceRunner<'a, M: MemoryTrait + Clone, H: TracerHook<M>> {
-    pub base_engine: remu64::Engine<CowMemory<M>>,
-    pub base_config: crate::VmConfig<H>,
+    pub start_point: Snapshot<M, H>,
     pub capture_idx_memory: Option<usize>,
     pub capture_inst_range: Option<(usize, usize)>,
-    pub snapshots: &'a mut BTreeMap<usize, crate::Snapshot<M, H>>,
+    pub snapshots: &'a mut Snapshots<M, H>,
     pub snapshot_interval: usize,
     pub max_instructions: usize,
 }
 
 impl<M: MemoryTrait + Clone, H: TracerHook<M>> TraceRunner<'_, M, H> {
     /// Find the optimal starting point (engine, config, start_idx) based on available snapshots
-    fn find_optimal_start(&mut self) -> (remu64::Engine<CowMemory<M>>, crate::VmConfig<H>, usize) {
+    fn find_optimal_start(&mut self) -> Snapshot<M, H> {
         // Determine the range start for snapshot selection
         let range_start = if let Some((start, _)) = self.capture_inst_range {
             start
         } else {
-            // No capture range specified, try to use the latest snapshot for efficiency
-            if let Some((&snap_idx, _)) = self.snapshots.iter().next_back() {
-                snap_idx
-            } else {
-                0
-            }
+            usize::MAX
         };
 
-        if let Some((&snap_idx, snapshot)) = self.snapshots.range(..=range_start).next_back() {
+        if let Some(snapshot) = self.snapshots.find_optimal_start(range_start) {
             debug!(
                 "Found snapshot at instruction {} for range start {}, using snapshot",
-                snap_idx, range_start
+                snapshot.instruction_index, range_start
             );
-            (snapshot.engine.clone(), snapshot.config.clone(), snap_idx)
+            snapshot
         } else {
             debug!(
                 "No snapshot found for range start {}, using base engine",
                 range_start
             );
-            (self.base_engine.clone(), self.base_config.clone(), 0)
+            self.start_point.clone()
         }
     }
 
     pub fn run(mut self) -> Result<TraceResult<M, H>> {
         // Find the optimal starting point using snapshot selection logic
-        let (mut engine, config, snapshot_start) = self.find_optimal_start();
+        let Snapshot {
+            mut engine,
+            config,
+            instruction_index: snapshot_start,
+        } = self.find_optimal_start();
 
         let TraceRunner {
             capture_idx_memory,

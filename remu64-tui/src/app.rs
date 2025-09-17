@@ -9,12 +9,11 @@ use std::io;
 use std::time::{Duration, Instant};
 use tracing::{debug, info};
 
-use crate::VmSetupProvider;
 use crate::tracer;
 use crate::ui;
+use crate::{VmSetupProvider, tracer::Snapshots};
 use remu64::memory::MemoryTrait;
 use remu64::{CowMemory, Engine};
-use std::collections::BTreeMap;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Panel {
@@ -137,36 +136,48 @@ impl App {
         terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
         mut setup_provider: P,
     ) -> Result<()> {
-        // Snapshots are stored per instruction index for fast seeking
-        let mut snapshots: BTreeMap<usize, Snapshot<P::Memory, P::Hooks>> = BTreeMap::new();
         info!("Starting TUI main loop");
 
         // Create backend and hooks once
         let (vm_memory, mut symbolizer) = setup_provider.create_backend()?;
         let memory = CowMemory::new(vm_memory);
 
+        // Snapshots at regular intervals for fast seeking
+        let mut snapshots = Snapshots::new();
+
         loop {
             let mut current_idx = self.state.current_trace_index();
 
             // Create fresh engine and setup for each frame - only time we call setup_engine
-            let mut base_engine = Engine::new_memory(remu64::EngineMode::Mode64, memory.clone());
-            let base_config = setup_provider.setup_engine(&mut base_engine)?;
+            let mut engine = Engine::new_memory(remu64::EngineMode::Mode64, memory.clone());
+            let config = setup_provider.setup_engine(&mut engine)?;
+
+            let start_point = Snapshot {
+                engine,
+                config,
+                instruction_index: 0,
+            };
 
             // Handle goto operations: advance by snapshot_interval each frame for responsive UI
             if let Some(ref goto_target) = self.state.goto_target {
                 let target_max = match goto_target {
-                    Goto::End => base_config.max_instructions,
-                    Goto::Line(target_line) => (*target_line + 1).min(base_config.max_instructions),
+                    Goto::End => start_point.config.max_instructions,
+                    Goto::Line(target_line) => {
+                        (*target_line + 1).min(start_point.config.max_instructions)
+                    }
                 };
 
                 // Clamp max_instructions to last snapshot + snapshot_interval for incremental progress
-                let incremental_max = snapshots.last_key_value().map(|(i, _)| *i).unwrap_or(0)
+                let incremental_max = snapshots
+                    .snapshots_map
+                    .last_key_value()
+                    .map(|(i, _)| *i)
+                    .unwrap_or(0)
                     + self.state.snapshot_interval;
                 let max_instructions = target_max.min(incremental_max);
 
                 let pre_pass_result = tracer::TraceRunner {
-                    base_engine: base_engine.clone(),
-                    base_config: base_config.clone(),
+                    start_point: start_point.clone(),
                     capture_idx_memory: None,
                     capture_inst_range: None,
                     snapshots: &mut snapshots,
@@ -183,7 +194,7 @@ impl App {
 
                 // Check completion conditions
                 let mut is_complete = total_instructions < max_instructions
-                    || total_instructions >= base_config.max_instructions;
+                    || total_instructions >= start_point.config.max_instructions;
 
                 if let Goto::Line(_) = goto_target {
                     is_complete |= total_instructions >= target_max;
@@ -224,10 +235,9 @@ impl App {
             let start = current_idx.saturating_sub(buffer);
             let end = current_idx + visible_instructions + buffer;
 
-            let max_instructions = base_config.max_instructions.min(end);
+            let max_instructions = start_point.config.max_instructions.min(end);
             let trace_result = tracer::TraceRunner {
-                base_engine,
-                base_config,
+                start_point,
                 capture_idx_memory: Some(current_idx),
                 capture_inst_range: Some((start, end)),
                 snapshots: &mut snapshots,
@@ -260,6 +270,9 @@ impl App {
                     setup_provider.display_name(),
                 )
             })?;
+
+            // Set the most recent snapshot from the trace result
+            // snapshots.most_recent = Some(trace_result.snapshot);
 
             let mut event = None;
             loop {
