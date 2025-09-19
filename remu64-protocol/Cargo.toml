@@ -1,0 +1,9 @@
+[package]
+name = "remu64-protocol"
+version.workspace = true
+edition.workspace = true
+description = "Binary protocol for remote memory access in remu64"
+license.workspace = true
+
+[dependencies]
+byteorder = "1.4"

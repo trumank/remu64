@@ -15,6 +15,10 @@ struct Args {
     /// Generate a sample configuration file at the specified path and exit
     #[arg(long, value_name = "PATH")]
     generate_sample: Option<PathBuf>,
+
+    /// TCP port for remote debugger protocol (optional)
+    #[arg(long, value_name = "PORT")]
+    tcp_port: Option<u16>,
 }
 
 fn setup_logging() -> Result<()> {
@@ -67,7 +71,13 @@ fn main() -> Result<()> {
     let setup_provider = MinidumpSetupProvider::new(&args.config_file)?;
     info!("Loaded minidump configuration from: {:?}", args.config_file);
 
-    run_app_with_error_handling(setup_provider, TuiConfig::default())
+    run_app_with_error_handling(
+        setup_provider,
+        TuiConfig {
+            tcp_port: args.tcp_port,
+            ..Default::default()
+        },
+    )
 }
 
 fn run_app_with_error_handling(

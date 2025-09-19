@@ -5,6 +5,7 @@ use remu64::{CowMemory, memory::MemoryTrait};
 mod app;
 mod config;
 mod minidump_provider;
+mod protocol_server;
 mod tracer;
 mod ui;
 

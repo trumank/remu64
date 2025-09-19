@@ -104,6 +104,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "46c5e41b57b8bba42a04676d81cb89e9ee8e859a1a66f80a5a72e1cb76b34d43"
 
 [[package]]
+name = "byteorder"
+version = "1.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1fd0f2584146f6f2ef48085050886acf353beff7305ebd1ae69500e27c67f64b"
+
+[[package]]
 name = "cassowary"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -834,6 +840,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "remu64-protocol"
+version = "0.1.0"
+dependencies = [
+ "byteorder",
+]
+
+[[package]]
 name = "remu64-tui"
 version = "0.1.0"
 dependencies = [
@@ -845,6 +858,7 @@ dependencies = [
  "ratatui",
  "rdex",
  "remu64",
+ "remu64-protocol",
  "serde",
  "toml",
  "tracing",

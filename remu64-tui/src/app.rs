@@ -9,6 +9,7 @@ use std::io;
 use std::time::{Duration, Instant};
 use tracing::{debug, info};
 
+use crate::protocol_server::ProtocolServer;
 use crate::tracer;
 use crate::ui;
 use crate::{VmSetupProvider, tracer::Snapshots};
@@ -88,6 +89,7 @@ impl AppState {
 pub struct App {
     state: AppState,
     config: crate::TuiConfig,
+    protocol_server: Option<ProtocolServer>,
 }
 
 impl App {
@@ -106,7 +108,17 @@ impl App {
             command_input: None,
         };
 
-        Ok(App { state, config })
+        let protocol_server = if let Some(port) = config.tcp_port {
+            Some(ProtocolServer::new(port)?)
+        } else {
+            None
+        };
+
+        Ok(App {
+            state,
+            config,
+            protocol_server,
+        })
     }
 
     pub fn run_with_provider<P: VmSetupProvider>(&mut self, setup_provider: P) -> Result<()> {
@@ -275,7 +287,9 @@ impl App {
                 let timeout = if self.state.goto_target.is_some() {
                     std::time::Duration::ZERO
                 } else {
-                    std::time::Duration::from_millis(10)
+                    // TODO handle refresh if new TCP packets OR delay 10 millis
+                    std::time::Duration::ZERO
+                    // std::time::Duration::from_millis(10)
                 };
                 if event::poll(timeout)? {
                     while event::poll(std::time::Duration::ZERO)? {
@@ -295,6 +309,11 @@ impl App {
                     if self.state.update_status_message() {
                         break;
                     }
+                    // Process protocol server requests
+                    if let Some(ref mut server) = self.protocol_server {
+                        server.process_requests(trace_result.memory_snapshot.as_ref().unwrap());
+                    }
+                    // debug!("frame");
 
                     // Continue to next frame if goto operation is still active
                     if self.state.goto_target.is_some() {

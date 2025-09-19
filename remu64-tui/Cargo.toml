@@ -9,6 +9,7 @@ license.workspace = true
 [dependencies]
 # Core library dependencies
 remu64 = { path = "../remu64" }
+remu64-protocol = { path = "../remu64-protocol" }
 ratatui = "0.29"
 crossterm = "0.28"
 anyhow = "1.0"

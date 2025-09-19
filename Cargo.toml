@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["remu64", "rdex", "remu64-tui"]
+members = ["remu64", "rdex", "remu64-tui", "remu64-protocol"]
 
 [profile.release]
 debug = true
