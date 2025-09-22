@@ -55,9 +55,6 @@ pub struct AppState {
     pub status_message: Option<StatusMessage>,
     pub status_message_expires: Option<Instant>,
 
-    // Snapshot system
-    pub snapshot_interval: usize,
-
     // Command mode
     pub command_input: Option<String>,
 }
@@ -90,10 +87,11 @@ impl AppState {
 
 pub struct App {
     state: AppState,
+    config: crate::TuiConfig,
 }
 
 impl App {
-    pub fn new() -> Result<Self> {
+    pub fn new(config: crate::TuiConfig) -> Result<Self> {
         let mut instruction_list_state = ListState::default();
         instruction_list_state.select(Some(0));
 
@@ -105,11 +103,10 @@ impl App {
             goto_target: None,
             status_message: None,
             status_message_expires: None,
-            snapshot_interval: 100000,
             command_input: None,
         };
 
-        Ok(App { state })
+        Ok(App { state, config })
     }
 
     pub fn run_with_provider<P: VmSetupProvider>(&mut self, setup_provider: P) -> Result<()> {
@@ -163,10 +160,8 @@ impl App {
             // Handle goto operations: advance by snapshot_interval each frame for responsive UI
             if let Some(ref goto_target) = self.state.goto_target {
                 let target_max = match goto_target {
-                    Goto::End => start_point.config.max_instructions,
-                    Goto::Line(target_line) => {
-                        (*target_line + 1).min(start_point.config.max_instructions)
-                    }
+                    Goto::End => self.config.max_instructions,
+                    Goto::Line(target_line) => (*target_line + 1).min(self.config.max_instructions),
                 };
 
                 // Clamp max_instructions to last snapshot + snapshot_interval for incremental progress
@@ -175,7 +170,7 @@ impl App {
                     .last_key_value()
                     .map(|(i, _)| *i)
                     .unwrap_or(0)
-                    + self.state.snapshot_interval;
+                    + self.config.snapshot_interval;
                 let max_instructions = target_max.min(incremental_max);
 
                 let pre_pass_result = tracer::TraceRunner {
@@ -183,7 +178,7 @@ impl App {
                     capture_idx_memory: None,
                     capture_inst_range: None,
                     snapshots: &mut snapshots,
-                    snapshot_interval: self.state.snapshot_interval,
+                    snapshot_interval: self.config.snapshot_interval,
                     max_instructions,
                 }
                 .run()?;
@@ -196,7 +191,7 @@ impl App {
 
                 // Check completion conditions
                 let mut is_complete = total_instructions < max_instructions
-                    || total_instructions >= start_point.config.max_instructions;
+                    || total_instructions >= self.config.max_instructions;
 
                 if let Goto::Line(_) = goto_target {
                     is_complete |= total_instructions >= target_max;
@@ -237,13 +232,13 @@ impl App {
             let start = current_idx.saturating_sub(buffer);
             let end = current_idx + visible_instructions + buffer;
 
-            let max_instructions = start_point.config.max_instructions.min(end);
+            let max_instructions = self.config.max_instructions.min(end);
             let trace_result = tracer::TraceRunner {
                 start_point,
                 capture_idx_memory: Some(current_idx),
                 capture_inst_range: Some((start, end)),
                 snapshots: &mut snapshots,
-                snapshot_interval: self.state.snapshot_interval,
+                snapshot_interval: self.config.snapshot_interval,
                 max_instructions,
             }
             .run()?;

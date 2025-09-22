@@ -3,7 +3,7 @@ use rdex::{
     MinidumpLoader, ProcessTrait as _, pe_symbolizer::PeSymbolizer, process_trait::VmMemory,
 };
 use remu64::{CowMemory, Engine, HookAction, Register, memory::MemoryTrait};
-use remu64_tui::{TracerHook, TuiContext, VmConfig, VmSetupProvider, run_tui};
+use remu64_tui::{TracerHook, TuiConfig, TuiContext, VmConfig, VmSetupProvider, run_tui};
 
 fn main() -> Result<()> {
     // fname CTor
@@ -14,7 +14,7 @@ fn main() -> Result<()> {
         minidump: MinidumpLoader::load(path)?,
     };
 
-    run_tui(setup)?;
+    run_tui(setup, TuiConfig::default())?;
 
     Ok(())
 }
@@ -84,7 +84,6 @@ impl VmSetupProvider for FNameSetupProvider {
 
         Ok(VmConfig {
             until_address: return_address,
-            max_instructions: 0x10000,
             instruction_actions: Default::default(),
             hooks: FNameHooks::new(rcx, (rdx, bytes.len())),
         })

@@ -1,6 +1,6 @@
 use anyhow::Result;
 use clap::Parser;
-use remu64_tui::{Config, MinidumpSetupProvider};
+use remu64_tui::{Config, MinidumpSetupProvider, TuiConfig};
 use std::panic;
 use std::path::PathBuf;
 use tracing::{error, info};
@@ -67,15 +67,18 @@ fn main() -> Result<()> {
     let setup_provider = MinidumpSetupProvider::new(&args.config_file)?;
     info!("Loaded minidump configuration from: {:?}", args.config_file);
 
-    run_app_with_error_handling(setup_provider)
+    run_app_with_error_handling(setup_provider, TuiConfig::default())
 }
 
-fn run_app_with_error_handling(setup_provider: MinidumpSetupProvider) -> Result<()> {
+fn run_app_with_error_handling(
+    setup_provider: MinidumpSetupProvider,
+    tui_config: TuiConfig,
+) -> Result<()> {
     info!("Starting TUI with library API");
 
     // Catch panics during TUI operation
     let result = panic::catch_unwind(panic::AssertUnwindSafe(|| {
-        remu64_tui::run_tui(setup_provider)
+        remu64_tui::run_tui(setup_provider, tui_config)
     }));
 
     match result {

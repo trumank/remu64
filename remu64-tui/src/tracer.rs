@@ -420,7 +420,7 @@ impl<M: MemoryTrait + Clone, H: TracerHook<M>> TraceRunner<'_, M, H> {
 
         debug!(
             "run_trace called: max={}, range={:?}",
-            config.max_instructions, capture_inst_range
+            max_instructions, capture_inst_range
         );
 
         let mut capturing_tracer = CapturingTracer {
