@@ -189,13 +189,17 @@ where
         self.user_hooks.on_mem_read(engine, address, size)
     }
 
+    fn on_mem_post_read(&mut self, engine: &mut Engine<M, PS>, address: u64, data: &[u8]) -> Result<()> {
+        self.user_hooks.on_mem_post_read(engine, address, data)
+    }
+
     fn on_mem_write(
         &mut self,
         engine: &mut Engine<M, PS>,
         address: u64,
-        size: usize,
+        data: &[u8],
     ) -> Result<()> {
-        self.user_hooks.on_mem_write(engine, address, size)
+        self.user_hooks.on_mem_write(engine, address, data)
     }
 
     fn on_mem_fault(
@@ -325,7 +329,7 @@ impl<H: HookManager<M, PS>, M: MemoryTrait<PS>, const PS: u64> ExecutionContext<
         self.hooks.on_mem_read(self.engine, address, buf.len())?;
 
         // Try to read memory, handle faults with hooks
-        match self.engine.memory.read(address, buf) {
+        let result = match self.engine.memory.read(address, buf) {
             Ok(()) => Ok(()),
             Err(EmulatorError::UnmappedMemory(_)) => {
                 // Try to handle the fault with memory fault hooks
@@ -338,11 +342,18 @@ impl<H: HookManager<M, PS>, M: MemoryTrait<PS>, const PS: u64> ExecutionContext<
                 }
             }
             Err(e) => Err(e),
+        };
+
+        // Call post-read hook if read was successful
+        if result.is_ok() {
+            self.hooks.on_mem_post_read(self.engine, address, buf)?;
         }
+
+        result
     }
 
     fn mem_write_with_hooks(&mut self, address: u64, buf: &[u8]) -> Result<()> {
-        self.hooks.on_mem_write(self.engine, address, buf.len())?;
+        self.hooks.on_mem_write(self.engine, address, buf)?;
 
         // Try to write memory, handle faults with hooks
         match self.engine.memory.write(address, buf) {

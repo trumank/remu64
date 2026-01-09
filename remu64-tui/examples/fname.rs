@@ -143,9 +143,9 @@ impl<M: MemoryTrait> TracerHook<M> for FNameHooks {
         mut ctx: TuiContext,
         engine: &mut Engine<CowMemory<M>>,
         address: u64,
-        size: usize,
+        data: &[u8],
     ) -> remu64::Result<()> {
-        if overlaps(self.fname_addr, 8, address, size) {
+        if overlaps(self.fname_addr, 8, address, data.len()) {
             let fname = engine.memory.read_u64(self.fname_addr)?;
             ctx.log(format!(
                 "write FName = {:08x} {:x} {:x}",

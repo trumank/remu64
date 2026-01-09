@@ -133,10 +133,14 @@ impl<M: MemoryTrait> TracerHook<M> for FsdHooks {
         mut ctx: TuiContext,
         _engine: &mut Engine<CowMemory<M>>,
         address: u64,
-        size: usize,
+        data: &[u8],
     ) -> remu64::Result<()> {
         // Log memory writes for debugging
-        ctx.log(format!("Memory write: 0x{:x} ({} bytes)", address, size));
+        ctx.log(format!(
+            "Memory write: 0x{:x} ({} bytes)",
+            address,
+            data.len()
+        ));
         Ok(())
     }
 }

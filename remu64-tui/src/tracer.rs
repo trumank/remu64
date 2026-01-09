@@ -55,6 +55,15 @@ impl<M: MemoryTrait + Clone, H: Clone> Snapshots<M, H> {
 }
 
 pub trait TracerHook<M: MemoryTrait>: Clone {
+    fn on_pre_code(
+        &mut self,
+        _tui_context: TuiContext,
+        _engine: &mut Engine<CowMemory<M>>,
+        _address: u64,
+    ) -> remu64::Result<HookAction> {
+        Ok(HookAction::Continue)
+    }
+
     fn on_code(
         &mut self,
         _tui_context: TuiContext,
@@ -75,12 +84,22 @@ pub trait TracerHook<M: MemoryTrait>: Clone {
         Ok(())
     }
 
+    fn on_mem_post_read(
+        &mut self,
+        _tui_context: TuiContext,
+        _engine: &mut Engine<CowMemory<M>>,
+        _address: u64,
+        _data: &[u8],
+    ) -> remu64::Result<()> {
+        Ok(())
+    }
+
     fn on_mem_write(
         &mut self,
         _tui_context: TuiContext,
         _engine: &mut Engine<CowMemory<M>>,
         _address: u64,
-        _size: usize,
+        _data: &[u8],
     ) -> remu64::Result<()> {
         Ok(())
     }
@@ -178,34 +197,11 @@ pub struct CapturingTracer<'a, M: MemoryTrait + Clone, H: TracerHook<M>> {
 impl<'a, M: MemoryTrait + Clone, H: TracerHook<M>> HookManager<CowMemory<M>>
     for CapturingTracer<'a, M, H>
 {
-    fn on_code(
+    fn on_pre_code(
         &mut self,
         engine: &mut Engine<CowMemory<M>>,
         address: u64,
-        size: usize,
     ) -> remu64::Result<HookAction> {
-        // Call user hooks first
-        let tui_context = TuiContext {
-            instruction_index: self.instruction_index,
-            logs: self.logs,
-        };
-        let user_action = self
-            .config
-            .hooks
-            .on_code(tui_context, engine, address, size)?;
-
-        // If user hooks want to stop or skip, respect that
-        match user_action {
-            HookAction::Stop => return Ok(HookAction::Stop),
-            HookAction::Skip => return Ok(HookAction::Skip),
-            HookAction::Continue => {}
-        }
-
-        // Check if we've reached the maximum number of instructions
-        if self.instruction_index >= self.max_instructions {
-            return Ok(HookAction::Stop);
-        }
-
         // Create snapshot at interval boundaries
         if self.instruction_index > 0
             && self
@@ -230,6 +226,41 @@ impl<'a, M: MemoryTrait + Clone, H: TracerHook<M>> HookManager<CowMemory<M>>
                     logs: self.logs.clone(),
                 },
             );
+        }
+
+        // Check if we've reached the maximum number of instructions
+        if self.instruction_index >= self.max_instructions {
+            return Ok(HookAction::Stop);
+        }
+
+        let tui_context = TuiContext {
+            instruction_index: self.instruction_index,
+            logs: self.logs,
+        };
+        self.config.hooks.on_pre_code(tui_context, engine, address)
+    }
+
+    fn on_code(
+        &mut self,
+        engine: &mut Engine<CowMemory<M>>,
+        address: u64,
+        size: usize,
+    ) -> remu64::Result<HookAction> {
+        // Call user hooks first
+        let tui_context = TuiContext {
+            instruction_index: self.instruction_index,
+            logs: self.logs,
+        };
+        let user_action = self
+            .config
+            .hooks
+            .on_code(tui_context, engine, address, size)?;
+
+        // If user hooks want to stop or skip, respect that
+        match user_action {
+            HookAction::Stop => return Ok(HookAction::Stop),
+            HookAction::Skip => return Ok(HookAction::Skip),
+            HookAction::Continue => {}
         }
 
         // Check for actions on this instruction index
@@ -302,11 +333,11 @@ impl<'a, M: MemoryTrait + Clone, H: TracerHook<M>> HookManager<CowMemory<M>>
             .on_mem_read(tui_context, engine, address, size)
     }
 
-    fn on_mem_write(
+    fn on_mem_post_read(
         &mut self,
         engine: &mut Engine<CowMemory<M>>,
         address: u64,
-        size: usize,
+        data: &[u8],
     ) -> remu64::Result<()> {
         let tui_context = TuiContext {
             instruction_index: self.instruction_index,
@@ -314,7 +345,22 @@ impl<'a, M: MemoryTrait + Clone, H: TracerHook<M>> HookManager<CowMemory<M>>
         };
         self.config
             .hooks
-            .on_mem_write(tui_context, engine, address, size)
+            .on_mem_post_read(tui_context, engine, address, data)
+    }
+
+    fn on_mem_write(
+        &mut self,
+        engine: &mut Engine<CowMemory<M>>,
+        address: u64,
+        data: &[u8],
+    ) -> remu64::Result<()> {
+        let tui_context = TuiContext {
+            instruction_index: self.instruction_index,
+            logs: self.logs,
+        };
+        self.config
+            .hooks
+            .on_mem_write(tui_context, engine, address, data)
     }
 
     fn on_mem_fault(

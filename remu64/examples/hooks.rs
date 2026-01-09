@@ -53,10 +53,11 @@ impl<M: MemoryTrait> HookManager<M> for CustomHooks {
         &mut self,
         _engine: &mut Engine<M>,
         address: u64,
-        size: usize,
+        data: &[u8],
     ) -> remu64::Result<()> {
         // Only log writes in the 0x2000 range
         if (0x2000..0x3000).contains(&address) {
+            let size = data.len();
             self.mem_write_count.push((address, size));
             println!("[MEM WRITE] Writing {} bytes to {:#x}", size, address);
         }

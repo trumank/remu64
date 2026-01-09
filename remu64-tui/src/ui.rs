@@ -56,7 +56,7 @@ pub fn draw<M: MemoryTrait + Clone, S: Symbolizer, H: TracerHook<M> + Clone>(
     // Split the lower right area between stack and log panes
     let stack_log_chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Percentage(60), Constraint::Percentage(40)])
+        .constraints([Constraint::Percentage(30), Constraint::Percentage(70)])
         .split(right_chunks[1]);
 
     let right_top_chunks = Layout::default()
