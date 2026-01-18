@@ -14,7 +14,7 @@ impl<H: HookManager<M, PS>, M: MemoryTrait<PS>, const PS: u64> ExecutionContext<
     pub(crate) fn execute_push(&mut self, inst: &Instruction) -> Result<()> {
         let value = self.read_operand(inst, 0)?;
         let stack_size = match inst.code() {
-            Code::Push_r64 | Code::Push_rm64 | Code::Pushd_imm32 | Code::Pushq_imm32 => 8,
+            Code::Push_r64 | Code::Push_rm64 | Code::Pushd_imm32 | Code::Pushq_imm32 | Code::Pushq_imm8 => 8,
             Code::Push_r32 | Code::Push_rm32 => 4,
             Code::Push_r16 | Code::Push_rm16 | Code::Pushw_imm8 => 2,
             _ => {

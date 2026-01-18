@@ -229,15 +229,34 @@ impl<H: HookManager<M, PS>, M: MemoryTrait<PS>, const PS: u64> ExecutionContext<
         let dst_value = self.read_operand(inst, 0)?;
         let src_value = self.read_operand(inst, 1)?;
         let carry = if self.engine.cpu.rflags.contains(Flags::CF) {
-            1
+            1u64
         } else {
-            0
+            0u64
         };
 
         let result = dst_value.wrapping_sub(src_value).wrapping_sub(carry);
 
-        // Update flags - SBB is like SUB but includes carry
-        self.update_flags_arithmetic_iced(dst_value, src_value + carry, result, true, inst)?;
+        // Update flags for ZF, SF, OF, PF using src_value (not src+carry to avoid overflow)
+        self.update_flags_arithmetic_iced(dst_value, src_value, result, true, inst)?;
+
+        // Fix CF for SBB: borrow occurs if dst < src OR (dst == src AND carry != 0)
+        // This avoids the overflow issue with src_value + carry
+        let size = self.get_operand_size_from_instruction(inst, 0)?;
+        let mask = match size {
+            1 => 0xFF,
+            2 => 0xFFFF,
+            4 => 0xFFFFFFFF,
+            8 => 0xFFFFFFFFFFFFFFFF,
+            _ => 0xFFFFFFFFFFFFFFFF,
+        };
+        let masked_dst = dst_value & mask;
+        let masked_src = src_value & mask;
+
+        if masked_dst < masked_src || (masked_dst == masked_src && carry != 0) {
+            self.engine.cpu.rflags.insert(Flags::CF);
+        } else {
+            self.engine.cpu.rflags.remove(Flags::CF);
+        }
 
         // Write result back to destination
         self.write_operand(inst, 0, result)?;

@@ -46,7 +46,7 @@ impl<H: HookManager<M, PS>, M: MemoryTrait<PS>, const PS: u64> ExecutionContext<
 
     pub(crate) fn execute_sar(&mut self, inst: &Instruction) -> Result<()> {
         let dst_value = self.read_operand(inst, 0)?;
-        let shift_count = self.read_operand(inst, 1)? & 0x1F; // Only use bottom 5 bits for 32-bit, 6 for 64-bit
+        let shift_count = self.read_operand(inst, 1)? & 0x3F; // Only use bottom 6 bits for 64-bit
 
         let size = self.get_operand_size_from_instruction(inst, 0)?;
         let result = match size {
@@ -74,8 +74,18 @@ impl<H: HookManager<M, PS>, M: MemoryTrait<PS>, const PS: u64> ExecutionContext<
             }
         };
 
-        // Update flags
+        // Update flags (this clears CF, we'll set it properly below)
         self.update_flags_logical_iced(result, inst)?;
+
+        // CF = last bit shifted out (bit shift_count-1 of original value)
+        if shift_count > 0 {
+            let cf = ((dst_value >> (shift_count - 1)) & 1) != 0;
+            if cf {
+                self.engine.cpu.rflags.insert(Flags::CF);
+            }
+            // OF is only defined for 1-bit shifts, and is always 0 for SAR
+            // (since the MSB doesn't change for arithmetic right shift)
+        }
 
         // Write result back to destination
         self.write_operand(inst, 0, result)?;
@@ -100,8 +110,30 @@ impl<H: HookManager<M, PS>, M: MemoryTrait<PS>, const PS: u64> ExecutionContext<
             }
         };
 
-        // Update flags
+        // Update flags (this clears CF, we'll set it properly below)
         self.update_flags_logical_iced(result, inst)?;
+
+        // CF = last bit shifted out (bit shift_count-1 of original value)
+        if shift_count > 0 {
+            let cf = ((dst_value >> (shift_count - 1)) & 1) != 0;
+            if cf {
+                self.engine.cpu.rflags.insert(Flags::CF);
+            }
+            // OF is only defined for 1-bit shifts
+            if shift_count == 1 {
+                // For SHR by 1, OF = MSB of original value
+                let msb = match size {
+                    1 => (dst_value >> 7) & 1,
+                    2 => (dst_value >> 15) & 1,
+                    4 => (dst_value >> 31) & 1,
+                    8 => (dst_value >> 63) & 1,
+                    _ => 0,
+                };
+                if msb != 0 {
+                    self.engine.cpu.rflags.insert(Flags::OF);
+                }
+            }
+        }
 
         // Write result back to destination
         self.write_operand(inst, 0, result)?;
@@ -126,8 +158,27 @@ impl<H: HookManager<M, PS>, M: MemoryTrait<PS>, const PS: u64> ExecutionContext<
             }
         };
 
-        // Update flags
+        // Update flags (this clears CF, we'll set it properly below)
         self.update_flags_logical_iced(result, inst)?;
+
+        // CF = last bit shifted out (MSB that got shifted out)
+        if shift_count > 0 {
+            let bit_size = size * 8;
+            let cf_bit = bit_size as u64 - shift_count;
+            let cf = ((dst_value >> cf_bit) & 1) != 0;
+            if cf {
+                self.engine.cpu.rflags.insert(Flags::CF);
+            }
+            // OF is only defined for 1-bit shifts
+            if shift_count == 1 {
+                // For SHL by 1, OF = 1 if two MSBs of original are different
+                let msb = (result >> (bit_size - 1)) & 1;
+                let cf_val = if cf { 1 } else { 0 };
+                if msb != cf_val {
+                    self.engine.cpu.rflags.insert(Flags::OF);
+                }
+            }
+        }
 
         // Write result back to destination
         self.write_operand(inst, 0, result)?;
@@ -169,14 +220,14 @@ impl<H: HookManager<M, PS>, M: MemoryTrait<PS>, const PS: u64> ExecutionContext<
             }
         };
 
-        // Update flags: CF = MSB of result, OF = MSB ^ (MSB-1) if count is 1
-        let msb_mask = 1u64 << (bit_count - 1);
-        let cf = (result & msb_mask) != 0;
+        // Update flags: CF = LSB of result (the bit that rotated from MSB to LSB)
+        // OF = MSB XOR CF (only defined for count=1)
+        let cf = (result & 1) != 0;
         self.engine.cpu.rflags.set(Flags::CF, cf);
 
         if count == 1 {
-            let msb_minus_1_mask = 1u64 << (bit_count - 2);
-            let of = ((result & msb_mask) != 0) ^ ((result & msb_minus_1_mask) != 0);
+            let msb_mask = 1u64 << (bit_count - 1);
+            let of = ((result & msb_mask) != 0) ^ cf;
             self.engine.cpu.rflags.set(Flags::OF, of);
         }
 
@@ -229,27 +280,16 @@ impl<H: HookManager<M, PS>, M: MemoryTrait<PS>, const PS: u64> ExecutionContext<
             | (masked_value << (bit_count - effective_count)))
             & mask;
 
-        // Update flags
-        if effective_count == 1 {
-            // CF = LSB of original operand
-            if (dst_value & 1) != 0 {
-                self.engine.cpu.rflags.insert(Flags::CF);
-            } else {
-                self.engine.cpu.rflags.remove(Flags::CF);
-            }
+        // Update flags: CF = MSB of result (the bit that rotated from LSB to MSB)
+        // OF = MSB XOR (MSB-1) of result (only defined for count=1)
+        let msb = (result >> (bit_count - 1)) & 1;
+        let cf = msb != 0;
+        self.engine.cpu.rflags.set(Flags::CF, cf);
 
-            // OF = MSB of result XOR CF
-            let msb = (result >> (bit_count - 1)) & 1;
-            let cf = if self.engine.cpu.rflags.contains(Flags::CF) {
-                1
-            } else {
-                0
-            };
-            if (msb ^ cf) != 0 {
-                self.engine.cpu.rflags.insert(Flags::OF);
-            } else {
-                self.engine.cpu.rflags.remove(Flags::OF);
-            }
+        if effective_count == 1 {
+            let msb_minus_1 = (result >> (bit_count - 2)) & 1;
+            let of = (msb ^ msb_minus_1) != 0;
+            self.engine.cpu.rflags.set(Flags::OF, of);
         }
 
         self.write_operand(inst, 0, result)?;
