@@ -14,7 +14,11 @@ impl<H: HookManager<M, PS>, M: MemoryTrait<PS>, const PS: u64> ExecutionContext<
     pub(crate) fn execute_push(&mut self, inst: &Instruction) -> Result<()> {
         let value = self.read_operand(inst, 0)?;
         let stack_size = match inst.code() {
-            Code::Push_r64 | Code::Push_rm64 | Code::Pushd_imm32 | Code::Pushq_imm32 | Code::Pushq_imm8 => 8,
+            Code::Push_r64
+            | Code::Push_rm64
+            | Code::Pushd_imm32
+            | Code::Pushq_imm32
+            | Code::Pushq_imm8 => 8,
             Code::Push_r32 | Code::Push_rm32 => 4,
             Code::Push_r16 | Code::Push_rm16 | Code::Pushw_imm8 => 2,
             _ => {
@@ -391,8 +395,12 @@ impl<H: HookManager<M, PS>, M: MemoryTrait<PS>, const PS: u64> ExecutionContext<
                 let dst_reg = self.convert_register(inst.op_register(0))?;
                 let src_reg = self.convert_register(inst.op_register(1))?;
 
-                // Check if destination is XMM and source is general-purpose
-                if dst_reg.is_xmm() {
+                // Handle all combinations of XMM and general-purpose registers
+                if dst_reg.is_xmm() && src_reg.is_xmm() {
+                    // XMM to XMM move - copy lower 64 bits
+                    let src_value = self.engine.cpu.read_xmm(src_reg) as u64;
+                    self.engine.cpu.write_xmm(dst_reg, src_value as u128);
+                } else if dst_reg.is_xmm() {
                     // Moving from general-purpose register to XMM
                     let src_value = self.engine.cpu.read_reg(src_reg); // Take full 64 bits
                     // Zero out the XMM register and set the lower 64 bits
@@ -403,7 +411,7 @@ impl<H: HookManager<M, PS>, M: MemoryTrait<PS>, const PS: u64> ExecutionContext<
                     self.engine.cpu.write_reg(dst_reg, src_value);
                 } else {
                     return Err(EmulatorError::UnsupportedInstruction(
-                        "MOVQ requires one XMM and one general-purpose register".to_string(),
+                        "MOVQ requires at least one XMM register".to_string(),
                     ));
                 }
                 Ok(())

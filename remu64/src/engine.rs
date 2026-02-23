@@ -189,7 +189,12 @@ where
         self.user_hooks.on_mem_read(engine, address, size)
     }
 
-    fn on_mem_post_read(&mut self, engine: &mut Engine<M, PS>, address: u64, data: &[u8]) -> Result<()> {
+    fn on_mem_post_read(
+        &mut self,
+        engine: &mut Engine<M, PS>,
+        address: u64,
+        data: &[u8],
+    ) -> Result<()> {
         self.user_hooks.on_mem_post_read(engine, address, data)
     }
 
@@ -693,6 +698,7 @@ impl<H: HookManager<M, PS>, M: MemoryTrait<PS>, const PS: u64> ExecutionContext<
             Mnemonic::Lfence => self.execute_lfence(inst),
             Mnemonic::Clflush => self.execute_clflush(inst),
             Mnemonic::Fnstcw => self.execute_fnstcw(inst),
+            Mnemonic::Fidivr => self.execute_fidivr(inst),
             Mnemonic::Stmxcsr => self.execute_stmxcsr(inst),
             Mnemonic::Fxrstor => self.execute_fxrstor(inst),
             Mnemonic::Rdsspq => self.execute_rdsspq(inst),
@@ -783,6 +789,8 @@ impl<H: HookManager<M, PS>, M: MemoryTrait<PS>, const PS: u64> ExecutionContext<
             Mnemonic::Cmpxchg16b => self.execute_cmpxchg16b(inst),
             Mnemonic::Endbr64 => self.execute_endbr64(inst),
             Mnemonic::Kmovd => self.execute_kmovd(inst),
+            Mnemonic::Xsavec64 => self.execute_xsavec64(inst),
+            Mnemonic::Xrstor64 => self.execute_xrstor64(inst),
             _ => Err(EmulatorError::UnsupportedInstruction(format!(
                 "{:?}",
                 inst.mnemonic()
@@ -1108,7 +1116,14 @@ impl<H: HookManager<M, PS>, M: MemoryTrait<PS>, const PS: u64> ExecutionContext<
             OpKind::Register => {
                 let iced_reg = inst.op_register(operand_idx);
                 let our_reg = self.convert_register(iced_reg)?;
-                Ok(self.engine.cpu.read_reg(our_reg))
+                // Handle XMM/YMM registers specially - return low 64 bits
+                if our_reg.is_xmm() {
+                    Ok(self.engine.cpu.read_xmm(our_reg) as u64)
+                } else if our_reg.is_ymm() {
+                    Ok(self.engine.cpu.read_ymm(our_reg)[0] as u64)
+                } else {
+                    Ok(self.engine.cpu.read_reg(our_reg))
+                }
             }
             OpKind::Immediate8 => Ok(inst.immediate8() as u64),
             OpKind::Immediate8to16 => Ok(inst.immediate8to16() as u64),
@@ -1167,7 +1182,14 @@ impl<H: HookManager<M, PS>, M: MemoryTrait<PS>, const PS: u64> ExecutionContext<
             OpKind::Register => {
                 let iced_reg = inst.op_register(operand_idx);
                 let our_reg = self.convert_register(iced_reg)?;
-                self.engine.cpu.write_reg(our_reg, value);
+                // Handle XMM/YMM registers specially - write to low 64 bits
+                if our_reg.is_xmm() {
+                    self.engine.cpu.write_xmm(our_reg, value as u128);
+                } else if our_reg.is_ymm() {
+                    self.engine.cpu.write_ymm(our_reg, [value as u128, 0]);
+                } else {
+                    self.engine.cpu.write_reg(our_reg, value);
+                }
                 Ok(())
             }
             OpKind::Memory => {

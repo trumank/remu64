@@ -315,6 +315,62 @@ impl<H: HookManager<M, PS>, M: MemoryTrait<PS>, const PS: u64> ExecutionContext<
         }
     }
 
+    pub(crate) fn execute_fidivr(&mut self, inst: &Instruction) -> Result<()> {
+        // FIDIVR: Reverse Divide Integer
+        // Divides the source integer operand by ST(0) and stores the result in ST(0)
+        // ST(0) = m16int / ST(0)  or  ST(0) = m32int / ST(0)
+        // Format: FIDIVR m16int or FIDIVR m32int
+
+        if inst.op_count() < 1 {
+            return Err(EmulatorError::UnsupportedInstruction(
+                "FIDIVR requires at least 1 operand".to_string(),
+            ));
+        }
+
+        match inst.op_kind(0) {
+            OpKind::Memory => {
+                let addr = self.calculate_memory_address(inst, 0)?;
+                let mem_size = inst.memory_size().size();
+
+                // Read integer from memory and convert to f64
+                let int_value: f64 = match mem_size {
+                    2 => {
+                        // 16-bit signed integer (word)
+                        let mut buf = [0u8; 2];
+                        self.mem_read_with_hooks(addr, &mut buf)?;
+                        i16::from_le_bytes(buf) as f64
+                    }
+                    4 => {
+                        // 32-bit signed integer (dword)
+                        let mut buf = [0u8; 4];
+                        self.mem_read_with_hooks(addr, &mut buf)?;
+                        i32::from_le_bytes(buf) as f64
+                    }
+                    _ => {
+                        return Err(EmulatorError::UnsupportedInstruction(format!(
+                            "FIDIVR unsupported memory size: {}",
+                            mem_size
+                        )));
+                    }
+                };
+
+                // Read ST(0)
+                let st0 = self.engine.cpu.fpu.read_st(0);
+
+                // Compute: int_value / ST(0)
+                let result = int_value / st0;
+
+                // Store result back to ST(0)
+                self.engine.cpu.fpu.write_st(0, result);
+
+                Ok(())
+            }
+            _ => Err(EmulatorError::UnsupportedInstruction(
+                "FIDIVR requires memory operand".to_string(),
+            )),
+        }
+    }
+
     pub(crate) fn execute_stmxcsr(&mut self, inst: &Instruction) -> Result<()> {
         // STMXCSR: Store SSE Control and Status Register (MXCSR)
         // Stores the current value of the MXCSR register to the specified memory location
@@ -572,5 +628,191 @@ impl<H: HookManager<M, PS>, M: MemoryTrait<PS>, const PS: u64> ExecutionContext<
         }
 
         Ok(())
+    }
+
+    pub(crate) fn execute_xsavec64(&mut self, inst: &Instruction) -> Result<()> {
+        // XSAVEC64: Save Processor Extended States with Compaction (64-bit)
+        // Saves the state components specified by EDX:EAX to memory in compacted format
+        // Format: XSAVEC64 mem
+
+        match inst.op_kind(0) {
+            OpKind::Memory => {
+                let addr = self.calculate_memory_address(inst, 0)?;
+
+                // Read the request mask from EDX:EAX
+                let eax = self.engine.cpu.read_reg(Register::RAX) as u32;
+                let edx = self.engine.cpu.read_reg(Register::RDX) as u32;
+                let requested_features = ((edx as u64) << 32) | (eax as u64);
+
+                // XSAVE area layout:
+                // Bytes 0-1: FCW (FPU Control Word)
+                // Bytes 2-3: FSW (FPU Status Word)
+                // Byte 4: FTW (FPU Tag Word - abridged)
+                // Byte 5: Reserved
+                // Bytes 6-7: FOP (FPU Opcode)
+                // Bytes 8-15: FPU IP (Instruction Pointer)
+                // Bytes 16-23: FPU DP (Data Pointer)
+                // Bytes 24-27: MXCSR
+                // Bytes 28-31: MXCSR_MASK
+                // Bytes 32-159: ST0-ST7 / MM0-MM7 (x87/MMX registers, 16 bytes each)
+                // Bytes 160-415: XMM0-XMM15 (16 bytes each)
+                // Bytes 416-511: Reserved
+                // Bytes 512-519: XSTATE_BV (which state components are present)
+                // Bytes 520-527: XCOMP_BV (compaction vector, bit 63 = compaction mode)
+                // Bytes 528-575: Reserved header space
+
+                // For XSAVEC, the compaction bit (bit 63 of XCOMP_BV) is always set
+                // State components requested via EDX:EAX are saved
+
+                // Track which components we actually save
+                let mut xstate_bv: u64 = 0;
+
+                // Component 0: x87 FPU state (bits 0-159)
+                if requested_features & 1 != 0 {
+                    // Save x87 FPU control word at offset 0
+                    let fpu_control_word: u16 = 0x037F; // Default value
+                    self.write_memory_sized(addr, fpu_control_word as u64, 2)?;
+
+                    // Save FPU status word at offset 2
+                    self.write_memory_sized(addr + 2, 0, 2)?;
+
+                    // Save FPU tag word (abridged) at offset 4
+                    self.write_memory_sized(addr + 4, 0xFF, 1)?; // All registers empty
+
+                    // FOP at offset 6
+                    self.write_memory_sized(addr + 6, 0, 2)?;
+
+                    // FPU IP at offset 8 (8 bytes)
+                    self.write_memory_sized(addr + 8, 0, 8)?;
+
+                    // FPU DP at offset 16 (8 bytes)
+                    self.write_memory_sized(addr + 16, 0, 8)?;
+
+                    // Note: ST0-ST7 at offset 32-159 are left at their current memory values
+                    // In a full implementation, we would save the x87 register stack here
+
+                    xstate_bv |= 1;
+                }
+
+                // Component 1: SSE state (MXCSR and XMM registers)
+                if requested_features & 2 != 0 {
+                    // Save MXCSR at offset 24
+                    let mxcsr: u32 = 0x1F80; // Default value (all exceptions masked)
+                    self.write_memory_sized(addr + 24, mxcsr as u64, 4)?;
+
+                    // Save MXCSR_MASK at offset 28
+                    self.write_memory_sized(addr + 28, 0xFFFF, 4)?;
+
+                    // Save XMM0-XMM15 at offsets 160-415 (16 bytes each)
+                    let xmm_registers = [
+                        Register::XMM0,
+                        Register::XMM1,
+                        Register::XMM2,
+                        Register::XMM3,
+                        Register::XMM4,
+                        Register::XMM5,
+                        Register::XMM6,
+                        Register::XMM7,
+                        Register::XMM8,
+                        Register::XMM9,
+                        Register::XMM10,
+                        Register::XMM11,
+                        Register::XMM12,
+                        Register::XMM13,
+                        Register::XMM14,
+                        Register::XMM15,
+                    ];
+
+                    for (i, &xmm_reg) in xmm_registers.iter().enumerate() {
+                        let xmm_value = self.engine.cpu.read_xmm(xmm_reg);
+                        let xmm_addr = addr + 160 + (i as u64 * 16);
+                        self.write_memory_128(xmm_addr, xmm_value)?;
+                    }
+
+                    xstate_bv |= 2;
+                }
+
+                // Write XSAVE header (bytes 512-575)
+                // XSTATE_BV at offset 512 (8 bytes) - indicates which components are present
+                self.write_memory_sized(addr + 512, xstate_bv, 8)?;
+
+                // XCOMP_BV at offset 520 (8 bytes) - compaction vector
+                // Bit 63 = 1 indicates compacted format (XSAVEC)
+                // Lower bits indicate which components are in the compacted area
+                let xcomp_bv: u64 = (1u64 << 63) | xstate_bv;
+                self.write_memory_sized(addr + 520, xcomp_bv, 8)?;
+
+                // Reserved bytes 528-575 should be cleared
+                for i in 0..6 {
+                    self.write_memory_sized(addr + 528 + (i * 8), 0, 8)?;
+                }
+
+                Ok(())
+            }
+            _ => Err(EmulatorError::UnsupportedInstruction(
+                "XSAVEC64 requires memory operand".to_string(),
+            )),
+        }
+    }
+
+    pub(crate) fn execute_xrstor64(&mut self, inst: &Instruction) -> Result<()> {
+        // XRSTOR64: Restore Processor Extended States (64-bit)
+        // Restores state components specified by EDX:EAX from memory
+        // Format: XRSTOR64 mem
+
+        match inst.op_kind(0) {
+            OpKind::Memory => {
+                let addr = self.calculate_memory_address(inst, 0)?;
+
+                // Read the request mask from EDX:EAX
+                let eax = self.engine.cpu.read_reg(Register::RAX) as u32;
+                let edx = self.engine.cpu.read_reg(Register::RDX) as u32;
+                let requested_features = ((edx as u64) << 32) | (eax as u64);
+
+                // Read XSTATE_BV from header to see which components are actually present
+                let xstate_bv = self.read_memory_64(addr + 512)?;
+
+                // Component 0: x87 FPU state
+                if requested_features & 1 != 0 && xstate_bv & 1 != 0 {
+                    // x87 state is present and requested - restore it
+                    // For emulation, we don't track full x87 state, so this is mostly a no-op
+                    // A full implementation would restore FCW, FSW, FTW, FOP, FIP, FDP, ST0-ST7
+                }
+
+                // Component 1: SSE state (MXCSR and XMM registers)
+                if requested_features & 2 != 0 && xstate_bv & 2 != 0 {
+                    // Restore XMM0-XMM15 from offsets 160-415 (16 bytes each)
+                    let xmm_registers = [
+                        Register::XMM0,
+                        Register::XMM1,
+                        Register::XMM2,
+                        Register::XMM3,
+                        Register::XMM4,
+                        Register::XMM5,
+                        Register::XMM6,
+                        Register::XMM7,
+                        Register::XMM8,
+                        Register::XMM9,
+                        Register::XMM10,
+                        Register::XMM11,
+                        Register::XMM12,
+                        Register::XMM13,
+                        Register::XMM14,
+                        Register::XMM15,
+                    ];
+
+                    for (i, &xmm_reg) in xmm_registers.iter().enumerate() {
+                        let xmm_addr = addr + 160 + (i as u64 * 16);
+                        let xmm_value = self.read_memory_128(xmm_addr)?;
+                        self.engine.cpu.write_xmm(xmm_reg, xmm_value);
+                    }
+                }
+
+                Ok(())
+            }
+            _ => Err(EmulatorError::UnsupportedInstruction(
+                "XRSTOR64 requires memory operand".to_string(),
+            )),
+        }
     }
 }

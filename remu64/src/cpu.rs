@@ -308,6 +308,76 @@ pub struct CpuState {
     pub rip: u64,
     pub rflags: Flags,
     pub segments: SegmentRegisters,
+    pub fpu: FpuState, // x87 FPU state
+}
+
+/// x87 FPU state
+#[derive(Debug, Clone)]
+pub struct FpuState {
+    /// FPU register stack (ST0-ST7), stored as 64-bit doubles
+    /// The actual x87 uses 80-bit extended precision, but f64 is sufficient for most emulation
+    pub st_regs: [f64; 8],
+    /// Top of stack pointer (0-7), ST(0) = st_regs[top]
+    pub top: u8,
+    /// FPU control word
+    pub control_word: u16,
+    /// FPU status word
+    pub status_word: u16,
+    /// FPU tag word (2 bits per register: 00=valid, 01=zero, 10=special, 11=empty)
+    pub tag_word: u16,
+}
+
+impl Default for FpuState {
+    fn default() -> Self {
+        Self {
+            st_regs: [0.0; 8],
+            top: 0,
+            control_word: 0x037F, // Default: all exceptions masked, round to nearest, 64-bit precision
+            status_word: 0,
+            tag_word: 0xFFFF, // All registers empty (11 for each)
+        }
+    }
+}
+
+impl FpuState {
+    /// Get the physical register index for ST(i)
+    #[inline]
+    pub fn st_index(&self, i: u8) -> usize {
+        ((self.top + i) & 7) as usize
+    }
+
+    /// Read ST(i)
+    #[inline]
+    pub fn read_st(&self, i: u8) -> f64 {
+        self.st_regs[self.st_index(i)]
+    }
+
+    /// Write ST(i)
+    #[inline]
+    pub fn write_st(&mut self, i: u8, value: f64) {
+        let idx = self.st_index(i);
+        self.st_regs[idx] = value;
+        // Mark register as valid (00) in tag word
+        let tag_shift = idx * 2;
+        self.tag_word &= !(0b11 << tag_shift);
+    }
+
+    /// Push a value onto the FPU stack (decrements TOP and writes to new ST(0))
+    pub fn push(&mut self, value: f64) {
+        self.top = (self.top.wrapping_sub(1)) & 7;
+        self.st_regs[self.top as usize] = value;
+        // Mark new ST(0) as valid
+        let tag_shift = (self.top as usize) * 2;
+        self.tag_word &= !(0b11 << tag_shift);
+    }
+
+    /// Pop the FPU stack (increments TOP, marks old ST(0) as empty)
+    pub fn pop(&mut self) {
+        // Mark current ST(0) as empty (11)
+        let tag_shift = (self.top as usize) * 2;
+        self.tag_word |= 0b11 << tag_shift;
+        self.top = (self.top + 1) & 7;
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -370,6 +440,7 @@ impl CpuState {
             rip: 0,
             rflags: Flags::empty(),
             segments: SegmentRegisters::default(),
+            fpu: FpuState::default(),
         }
     }
 
